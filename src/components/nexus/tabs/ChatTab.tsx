@@ -27,6 +27,7 @@ export function ChatTab() {
   const access = useNexus((s) => s.access);
   const messages = useNexus((s) => s.messages);
   const addMessage = useNexus((s) => s.addMessage);
+  const setMessages = useNexus((s) => s.setMessages);
   const reload = useReloadProject();
   const isLeader = access?.role === "leader";
 

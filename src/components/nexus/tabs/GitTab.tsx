@@ -203,7 +203,7 @@ export function GitTab() {
               </button>
             </div>
             <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap">
-              {esc(r.gitCommands)}
+              {esc((r.gitCommands || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
             </pre>
           </div>
         </div>
@@ -236,7 +236,7 @@ export function GitTab() {
               </button>
             </div>
             <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap">
-              {esc(r.issueTemplate)}
+              {esc((r.issueTemplate || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
             </pre>
           </div>
         </div>

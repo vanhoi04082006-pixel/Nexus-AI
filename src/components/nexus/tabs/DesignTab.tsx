@@ -146,10 +146,10 @@ export function DesignTab() {
           </h3>
           <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden">
             <div className="flex justify-between items-center px-4 py-2 bg-[#0c1322] border-b border-border">
-              <span className="text-xs text-muted-foreground font-mono">project-structure.txt</span>
+              <span className="text-xs text-muted-foreground font-mono">📁 project-structure</span>
             </div>
             <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed text-foreground/90 whitespace-pre">
-              {esc(r.folderStructure)}
+              {esc((r.folderStructure || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
             </pre>
           </div>
         </div>
