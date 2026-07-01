@@ -1,5 +1,0 @@
-# Current public URL (auto-updated by scripts/run-local.sh)
-# This file is read by the server to generate correct email links.
-# Format: just the URL on one line, e.g. https://xxx.trycloudflare.com
-
-http://localhost:3000
