@@ -3,8 +3,6 @@
 // Also stores every email in the EmailLog table (Mailbox UI) regardless of SMTP success.
 // If SMTP fails, the email is still logged so the team can see what would have been sent.
 
-import fs from "fs";
-import path from "path";
 import { db } from "./db";
 
 // Type for nodemailer transporter (avoid static import — Turbopack crash)
@@ -19,7 +17,7 @@ type SmtpTransporter = {
 
 /**
  * Read the current public URL from .public-url file.
- * This file is updated by scripts/run-local.sh when Cloudflare Tunnel starts,
+ * This file is updated by scripts/run-local.sh/.bat when Cloudflare Tunnel starts,
  * so email links always point to the accessible URL (not localhost).
  * Falls back to env var or localhost.
  */
@@ -31,9 +29,13 @@ function baseUrl(): string {
   }
   // Try reading from .public-url file (updated by tunnel script)
   try {
-    const urlPath = path.join(process.cwd(), ".public-url");
-    const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
-    if (fileContent && fileContent.startsWith("http")) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fsMod = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pathMod = require("path") as typeof import("path");
+    const urlPath = pathMod.join(process.cwd(), ".public-url");
+    const fileContent = fsMod.readFileSync(urlPath, "utf-8").trim();
+    if (fileContent && fileContent.startsWith("http") && !fileContent.includes("localhost")) {
       return fileContent;
     }
   } catch {

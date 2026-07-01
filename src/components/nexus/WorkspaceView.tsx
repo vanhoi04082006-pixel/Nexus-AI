@@ -82,6 +82,7 @@ export function WorkspaceView() {
   const [initializing, setInitializing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [initProgress, setInitProgress] = useState<string>("");
 
   // Fetch public URL (for share link in emails)
   useEffect(() => {
@@ -126,8 +127,8 @@ export function WorkspaceView() {
   async function handleInitialize() {
     if (!projectId || !token) return;
     setInitializing(true);
+    setInitProgress("Đang gửi yêu cầu sinh todolist...");
     try {
-      // Start task generation in the background
       const resp = await fetch(`/api/projects/${projectId}/initialize?token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,28 +138,39 @@ export function WorkspaceView() {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
+      setInitProgress("AI đang đọc phân tích dự án + nhân sự + sprint...");
 
-      // Poll for completion
+      // Poll for completion with progress messages
       await new Promise<void>((resolve, reject) => {
         let attempts = 0;
-        const maxAttempts = 120; // 5 min at 2.5s intervals
+        const maxAttempts = 120;
+        const messages = [
+          "AI đang đọc phân tích dự án + nhân sự + sprint...",
+          "AI đang phân chia công việc cho từng thành viên...",
+          "AI đang viết quy ước code để các thành viên đồng bộ...",
+          "AI đang gán deadline + độ ưu tiên cho từng task...",
+          "AI đang kiểm tra tiêu chí hoàn thành + dependencies...",
+          "Đang lưu todolist vào database...",
+          "Đang gửi email thông báo task cho thành viên...",
+        ];
         const poll = async () => {
           attempts++;
+          // Update progress message every ~10s
+          const msgIdx = Math.min(Math.floor(attempts / 4), messages.length - 1);
+          setInitProgress(messages[msgIdx]);
           try {
             const pr = await fetch(`/api/projects/${projectId}/initialize/progress`);
             if (!pr.ok) {
               if (pr.status === 404) {
-                // Progress expired or server restarted — check if tasks exist
                 const projResp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
                 if (projResp.ok) {
                   const projData = await projResp.json();
                   if (projData.tasks && projData.tasks.length > 0) {
-                    // Tasks were saved before crash — success
+                    setInitProgress(`Hoàn thành! ${projData.tasks.length} tasks đã tạo.`);
                     resolve();
                     return;
                   }
                 }
-                // No tasks yet — if we've polled enough, give up
                 if (attempts > 5) {
                   reject(new Error("Khong the khoi tao todolist — server bi crash. Thu lai."));
                   return;
@@ -168,8 +180,9 @@ export function WorkspaceView() {
               }
               throw new Error(`HTTP ${pr.status}`);
             }
-            const prog = (await pr.json()) as { status: string; error?: string };
+            const prog = (await pr.json()) as { status: string; error?: string; taskCount?: number };
             if (prog.status === "done") {
+              setInitProgress(`Hoàn thành! ${prog.taskCount || ""} tasks đã tạo.`);
               resolve();
             } else if (prog.status === "error") {
               reject(new Error(prog.error || "Task generation that bai"));
@@ -365,8 +378,14 @@ export function WorkspaceView() {
               ) : (
                 <Rocket className="w-4 h-4" />
               )}
-              {initializing ? "Dang sinh Todolist..." : "Khoi tao Du An"}
+              {initializing ? "Đang sinh Todolist..." : "Khởi tạo Dự Án"}
             </Button>
+          )}
+          {/* Progress message during todolist generation */}
+          {initializing && initProgress && (
+            <div className="px-3 py-2 rounded-lg bg-primary/[0.06] border border-primary/20">
+              <p className="text-[11px] text-primary nexus-pulse">{initProgress}</p>
+            </div>
           )}
           <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-secondary/30">
             <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">

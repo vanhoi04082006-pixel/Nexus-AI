@@ -623,7 +623,19 @@ function fallback(
     case "design":
       return { architectureDesc: "N/A", dbTables: [], apiEndpoints: [], folderStructure: "N/A" };
     case "uml":
-      return { useCase: "", classDiagram: "", erd: "", sequence: "" };
+      // Generate basic ERD + Sequence from analysis data as fallback
+      const tables = (results.design?.dbTables || []).map((t) => t.name);
+      const actors = (results.analysis?.actors || []).map((a) => a.name);
+      return {
+        useCase: results.uml?.useCase || "",
+        classDiagram: results.uml?.classDiagram || "",
+        erd: results.uml?.erd || (tables.length > 0
+          ? `erDiagram\n${tables.map((t) => `    ${t} {\n        int id PK\n    }`).join("\n")}\n${tables.length > 1 ? `    ${tables[0]} ||--o{ ${tables[1]} : "has"` : ""}`
+          : ""),
+        sequence: results.uml?.sequence || (actors.length > 0
+          ? `sequenceDiagram\n    participant U as ${actors[0]}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response`
+          : ""),
+      };
     case "docs":
       return {
         readme: `# ${input.topic}\n\nTai lieu chua duoc tao tu dong.`,
