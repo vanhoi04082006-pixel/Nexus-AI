@@ -2,7 +2,8 @@
 // Redirects the user to GitHub's OAuth authorize page.
 // Query params: ?projectId=X&token=X (leader token, to verify access)
 
-import { db } from "@/lib/db";
+import fs from "fs";
+import path from "path";
 import { resolveAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -38,11 +39,8 @@ export async function GET(req: Request) {
   let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "";
   if (!appUrl || appUrl.includes("localhost")) {
     try {
-      const fs = require("fs");
-      const path = require("path");
-      const fileContent = fs
-        .readFileSync(path.join(process.cwd(), ".public-url"), "utf-8")
-        .trim();
+      const urlPath = path.join(process.cwd(), ".public-url");
+      const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
       if (fileContent && fileContent.startsWith("http")) {
         appUrl = fileContent;
       }

@@ -130,6 +130,9 @@ cloudflared tunnel --url http://localhost:3000 2>&1 | while read line; do
   if echo "$line" | grep -q "trycloudflare.com"; then
     URL=$(echo "$line" | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
     if [ -n "$URL" ]; then
+      # Cập nhật file .public-url để email dùng URL đúng
+      echo "$URL" > "$PROJECT_DIR/.public-url"
+
       echo ""
       echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
       echo -e "${GREEN}║   ✅ NEXUS AI ĐANG CHẠY!                             ║${NC}"
@@ -138,13 +141,17 @@ cloudflared tunnel --url http://localhost:3000 2>&1 | while read line; do
       echo -e "🌐 Local:  ${BLUE}http://localhost:3000${NC}"
       echo -e "🌐 Public: ${BLUE}${URL}${NC}"
       echo ""
+      echo -e "${GREEN}✓ Đã cập nhật .public-url — email sẽ dùng URL này${NC}"
+      echo ""
       echo -e "${YELLOW}📋 Chia sẻ URL public cho thành viên:${NC}"
       echo -e "   ${BLUE}${URL}${NC}"
+      echo -e "   (URL này cũng sẽ nằm trong email lời mời)"
       echo ""
       echo -e "${YELLOW}⚠ Lưu ý:${NC}"
       echo -e "   - Máy phải BẬT để URL hoạt động"
       echo -e "   - URL đổi mỗi lần chạy lại script"
       echo -e "   - Chat dùng polling (3s) — không cần chat service"
+      echo -e "   - Email gửi cho thành viên sẽ dùng URL tunnel này"
       echo -e "   - Nhấn Ctrl+C để dừng"
       echo ""
     fi

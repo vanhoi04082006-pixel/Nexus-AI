@@ -325,6 +325,33 @@ export function WorkspaceView() {
 
         {/* Footer: role + actions */}
         <div className="px-3 py-4 border-t border-border space-y-2">
+          {/* Public URL share box (leader only) */}
+          {isLeader && publicUrl && !publicUrl.includes("localhost") && (
+            <div className="px-2 py-2 rounded-lg bg-primary/[0.06] border border-primary/20">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Globe className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-semibold text-primary">URL Public</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <code className="flex-1 text-[10px] text-muted-foreground truncate font-mono">
+                  {publicUrl}
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(publicUrl);
+                    toast.success("Da copy URL!");
+                  }}
+                  className="text-muted-foreground hover:text-primary p-1 rounded transition-colors flex-shrink-0"
+                  title="Copy URL"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+              </div>
+              <p className="text-[9px] text-muted-foreground/70 mt-1">
+                Chia se URL nay cho thanh vien (link email se dung URL nay)
+              </p>
+            </div>
+          )}
           {isLeader && !hasTasks && (
             <Button
               onClick={handleInitialize}

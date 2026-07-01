@@ -3,6 +3,8 @@
 // Also stores every email in the EmailLog table (Mailbox UI) regardless of SMTP success.
 // If SMTP fails, the email is still logged so the team can see what would have been sent.
 
+import fs from "fs";
+import path from "path";
 import { db } from "./db";
 
 // Type for nodemailer transporter (avoid static import — Turbopack crash)
@@ -29,8 +31,6 @@ function baseUrl(): string {
   }
   // Try reading from .public-url file (updated by tunnel script)
   try {
-    const fs = require("fs");
-    const path = require("path");
     const urlPath = path.join(process.cwd(), ".public-url");
     const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
     if (fileContent && fileContent.startsWith("http")) {

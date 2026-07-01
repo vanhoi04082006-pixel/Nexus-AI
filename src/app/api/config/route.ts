@@ -2,6 +2,9 @@
 // Returns the current public URL so the frontend can display it
 // and users can copy-share it with team members.
 
+import fs from "fs";
+import path from "path";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -11,11 +14,8 @@ export async function GET() {
   // Try reading from .public-url file (updated by tunnel script)
   if (!publicUrl || publicUrl.includes("localhost")) {
     try {
-      const fs = require("fs");
-      const path = require("path");
-      const fileContent = fs
-        .readFileSync(path.join(process.cwd(), ".public-url"), "utf-8")
-        .trim();
+      const urlPath = path.join(process.cwd(), ".public-url");
+      const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
       if (fileContent && fileContent.startsWith("http")) {
         publicUrl = fileContent;
       }
