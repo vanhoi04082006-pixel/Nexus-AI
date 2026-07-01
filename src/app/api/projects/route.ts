@@ -97,82 +97,67 @@ export async function POST(req: Request) {
   // ===== Initialize progress tracker =====
   initProgress(project.id);
 
-  // ===== Run pipeline IN THE BACKGROUND (fire-and-forget) =====
-  // Do NOT await — return the response immediately so the gateway doesn't timeout.
-  (async () => {
-    try {
-      console.log(`>> [PIPELINE] Background pipeline started for project ${project.id} (${input.topic})`);
-
-      const result = await runPipeline(input, (ev) => {
-        // Update the in-memory progress tracker
-        if (ev.type === "agent_start") {
-          updateAgent(project.id, ev.id, "running");
-        } else if (ev.type === "agent_done") {
-          updateAgent(project.id, ev.id, "done");
-        } else if (ev.type === "agent_fail") {
-          updateAgent(project.id, ev.id, "failed", ev.error);
-        }
-      });
-
-      // ===== Persist all sections =====
-      try {
-        for (const key of SECTION_KEYS) {
-          const content = (result as unknown as Record<string, unknown>)[key];
-          if (content === undefined || content === null) continue;
-          const existing = await db.analysis.findUnique({
-            where: { projectId_type: { projectId: project.id, type: key } },
-          });
-          if (existing) {
-            await db.analysis.update({
-              where: { id: existing.id },
-              data: {
-                content: JSON.stringify(content),
-                version: { increment: 1 },
-              },
+  // ===== Run pipeline IN THE BACKGROUND =====
+  // Use process.nextTick so the response returns first, then pipeline runs.
+  // .catch() ensures any crash is handled without killing the server.
+  process.nextTick(() => {
+    console.log(`>> [PIPELINE] Background pipeline started for project ${project.id} (${input.topic})`);
+    runPipeline(input, (ev) => {
+      if (ev.type === "agent_start") {
+        updateAgent(project.id, ev.id, "running");
+      } else if (ev.type === "agent_done") {
+        updateAgent(project.id, ev.id, "done");
+      } else if (ev.type === "agent_fail") {
+        updateAgent(project.id, ev.id, "failed", ev.error);
+      }
+    })
+      .then(async (result) => {
+        // Persist all sections
+        try {
+          for (const key of SECTION_KEYS) {
+            const content = (result as unknown as Record<string, unknown>)[key];
+            if (content === undefined || content === null) continue;
+            const existing = await db.analysis.findUnique({
+              where: { projectId_type: { projectId: project.id, type: key } },
             });
-          } else {
-            await db.analysis.create({
-              data: {
-                projectId: project.id,
-                type: key,
-                content: JSON.stringify(content),
-              },
-            });
+            if (existing) {
+              await db.analysis.update({
+                where: { id: existing.id },
+                data: { content: JSON.stringify(content), version: { increment: 1 } },
+              });
+            } else {
+              await db.analysis.create({
+                data: { projectId: project.id, type: key, content: JSON.stringify(content) },
+              });
+            }
           }
+        } catch (err) {
+          console.error(`>> [PIPELINE] Failed to save sections:`, err);
         }
-      } catch (err) {
-        console.error(`>> [PIPELINE] Failed to save sections:`, err);
-      }
 
-      // ===== Update project status =====
-      try {
-        await db.project.update({
-          where: { id: project.id },
-          data: { status: "WORKSPACE" },
-        });
-      } catch {
-        /* non-fatal */
-      }
+        // Update project status
+        try {
+          await db.project.update({ where: { id: project.id }, data: { status: "WORKSPACE" } });
+        } catch {
+          /* non-fatal */
+        }
 
-      // ===== Send invitation emails =====
-      try {
-        await sendInvitationEmails(project.id, input.topic, input.leaderName, memberRows);
-      } catch (err) {
-        console.error(`>> [PIPELINE] Failed to send invitations:`, err);
-      }
+        // Send invitation emails
+        try {
+          await sendInvitationEmails(project.id, input.topic, input.leaderName, memberRows);
+        } catch (err) {
+          console.error(`>> [PIPELINE] Failed to send invitations:`, err);
+        }
 
-      // ===== Mark progress done =====
-      finishProgress(project.id, {
-        projectId: project.id,
-        leaderToken: project.leaderToken,
+        finishProgress(project.id, { projectId: project.id, leaderToken: project.leaderToken });
+        console.log(`>> [PIPELINE] Background pipeline COMPLETED for project ${project.id}`);
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Pipeline failed";
+        console.error(`>> [PIPELINE] Background pipeline FAILED:`, msg);
+        failProgress(project.id, msg);
       });
-      console.log(`>> [PIPELINE] Background pipeline COMPLETED for project ${project.id}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Pipeline failed";
-      console.error(`>> [PIPELINE] Background pipeline FAILED:`, msg);
-      failProgress(project.id, msg);
-    }
-  })();
+  });
 
   // ===== Return immediately so the client can start polling =====
   return Response.json({
