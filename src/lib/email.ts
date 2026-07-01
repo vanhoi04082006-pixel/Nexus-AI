@@ -3,8 +3,17 @@
 // Also stores every email in the EmailLog table (Mailbox UI) regardless of SMTP success.
 // If SMTP fails, the email is still logged so the team can see what would have been sent.
 
-import nodemailer from "nodemailer";
 import { db } from "./db";
+
+// Type for nodemailer transporter (avoid static import — Turbopack crash)
+type SmtpTransporter = {
+  sendMail: (opts: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+  }) => Promise<{ messageId: string }>;
+};
 
 function baseUrl(): string {
   return "";
@@ -38,10 +47,11 @@ async function logEmail(args: SendArgs): Promise<void> {
 /**
  * Get an SMTP transporter for the project's leader credentials.
  * Returns null if no SMTP password is configured (mock mode).
+ * Uses dynamic import so nodemailer (Node native deps) doesn't crash Turbopack.
  */
 async function getTransporter(
   projectId: string
-): Promise<nodemailer.Transporter | null> {
+): Promise<SmtpTransporter | null> {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: { leaderEmail: true, leaderSmtpPassword: true },
@@ -50,7 +60,9 @@ async function getTransporter(
     return null;
   }
 
-  // Detect host by email domain. Default to Gmail.
+  // Dynamic import — avoids loading nodemailer at module init
+  const nodemailer = await import("nodemailer");
+
   const domain = project.leaderEmail.split("@")[1]?.toLowerCase() || "";
   let host = "smtp.gmail.com";
   let port = 587;
@@ -65,7 +77,7 @@ async function getTransporter(
     port = 587;
   }
 
-  return nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
@@ -74,6 +86,8 @@ async function getTransporter(
       pass: project.leaderSmtpPassword,
     },
   });
+
+  return transport as unknown as SmtpTransporter;
 }
 
 /**
