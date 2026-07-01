@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,15 @@ export function InputView() {
 
   const [showOptional, setShowOptional] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Warm up the /api/projects route on page load so Turbopack compiles it
+  // before the user submits. Without this, the first POST can crash the server
+  // because route compilation + Prisma + OpenRouter fetch happens simultaneously.
+  useEffect(() => {
+    fetch("/api/projects", { method: "HEAD" }).catch(() => {
+      /* HEAD returns 405 but forces route compilation — that's the point */
+    });
+  }, []);
 
   function validate(): boolean {
     if (!input.topic.trim()) {
