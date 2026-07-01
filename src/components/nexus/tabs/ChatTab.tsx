@@ -105,6 +105,34 @@ export function ChatTab() {
     };
   }, [projectId, access?.name, access?.role, token]);
 
+  // Polling fallback: fetch new messages every 3s (works without Socket.io)
+  // This enables running the app with ONLY the Next.js server (no chat service needed)
+  useEffect(() => {
+    if (!projectId || !token) return;
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const resp = await fetch(`/api/projects/${projectId}/chat?token=${encodeURIComponent(token)}`);
+        if (!resp.ok || !active) return;
+        const data = (await resp.json()) as { messages?: ChatMessageView[] };
+        if (data.messages && active) {
+          // Replace all messages from server (source of truth)
+          setMessages(data.messages);
+        }
+      } catch {
+        /* network error — retry next cycle */
+      }
+    };
+
+    const interval = setInterval(poll, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [projectId, token, setMessages]);
+
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
