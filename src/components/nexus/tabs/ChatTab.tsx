@@ -55,13 +55,22 @@ export function ChatTab() {
     });
 
     socket.on("message", (msg: { name: string; role: string; message: string; timestamp: string }) => {
-      addMessage({
-        id: `sock-${Date.now()}-${Math.random()}`,
-        authorName: msg.name,
-        authorRole: msg.role,
-        message: msg.message,
-        createdAt: msg.timestamp,
-      });
+      // Deduplicate: skip if this message was already added (optimistic or from DB)
+      const exists = messages.some(
+        (m) =>
+          m.authorName === msg.name &&
+          m.message === msg.message &&
+          Math.abs(new Date(m.createdAt).getTime() - new Date(msg.timestamp).getTime()) < 5000
+      );
+      if (!exists) {
+        addMessage({
+          id: `sock-${Date.now()}-${Math.random()}`,
+          authorName: msg.name,
+          authorRole: msg.role,
+          message: msg.message,
+          createdAt: msg.timestamp,
+        });
+      }
     });
 
     socket.on("user_joined", (u: { name: string }) => {

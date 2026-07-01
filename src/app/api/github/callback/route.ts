@@ -19,17 +19,17 @@ export async function GET(req: Request) {
 
   // User denied access
   if (error) {
-    return Response.redirect(`${url.origin}/?github_error=denied`);
+    return Response.redirect(`/?github_error=denied`);
   }
 
   if (!code || !state) {
-    return Response.redirect(`${url.origin}/?github_error=missing_params`);
+    return Response.redirect(`/?github_error=missing_params`);
   }
 
   // state = projectId|leaderToken
   const [projectId, leaderToken] = state.split("|");
   if (!projectId || !leaderToken) {
-    return Response.redirect(`${url.origin}/?github_error=invalid_state`);
+    return Response.redirect(`/?github_error=invalid_state`);
   }
 
   // ===== Exchange code for access token =====
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error("[GitHub callback] Token exchange error:", err);
     return Response.redirect(
-      `${url.origin}/?p=${projectId}&token=${leaderToken}&github_error=token_exchange`
+      `/?p=${projectId}&token=${leaderToken}&github_error=token_exchange`
     );
   }
 
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error("[GitHub callback] User fetch error:", err);
     return Response.redirect(
-      `${url.origin}/?p=${projectId}&token=${leaderToken}&github_error=user_fetch`
+      `/?p=${projectId}&token=${leaderToken}&github_error=user_fetch`
     );
   }
 
@@ -107,12 +107,12 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error("[GitHub callback] DB save error:", err);
     return Response.redirect(
-      `${url.origin}/?p=${projectId}&token=${leaderToken}&github_error=db_save`
+      `/?p=${projectId}&token=${leaderToken}&github_error=db_save`
     );
   }
 
   // ===== Redirect back to workspace with success flag =====
   return Response.redirect(
-    `${url.origin}/?p=${projectId}&token=${leaderToken}&github_connected=1`
+    `/?p=${projectId}&token=${leaderToken}&github_connected=1`
   );
 }

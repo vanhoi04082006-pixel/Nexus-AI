@@ -369,17 +369,17 @@ async function callAndParse(
 const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). Tuyet doi KHONG dung markdown code block (\`\`\`json), KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong, khong dung newline that. Neu khong biet gia tri thi dung "" hoac [].`;
 
 function analystPrompt(): string {
-  return `Ban la Senior Requirement Analyst & Tech Lead. Phan tich du an va de xuat tech stack, features, actors, modules.
+  return `Ban la Senior Requirement Analyst & Tech Lead. Phan tich du an KY LUONG, CHI TIET va DAY DU.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "desc" (string): mo ta du an 3-4 cau, ro rang cho nguoi moi hieu
-- "techStack" (object): { "frontend": {name, ver, reason}, "backend": {name, ver, reason}, "database": {name, ver, reason}, "cache": {name, ver, reason}, "tools": [string] }
+- "desc" (string): mo ta du an 5-7 cau, ro rang chi tiet cho nguoi moi hieu. Ghi ro: muc dich chinh, nguoi dung cuoi, van de giai quyet, quy mo du kien, cac tinh nang noi bat.
+- "techStack" (object): { "frontend": {name, ver, reason}, "backend": {name, ver, reason}, "database": {name, ver, reason}, "cache": {name, ver, reason}, "tools": [string] }. Reason phai giai thich tai sao chon, it nhat 2-3 ly do.
 - "teamSize" (number)
-- "estimatedDuration" (string): vi du "4-6 tuan"
+- "estimatedDuration" (string): vi du "6-8 tuan"
 - "complexity" (string): vi du "Trung binh - Cao"
-- "features" (array): moi phan tu { "name", "module", "pri" } voi pri la "P0" | "P1" | "P2". P0 = bat buoc, P1 = quan trong, P2 = nice-to-have. It nhat 8 features.
-- "actors" (array): moi phan tu { "name", "desc" }
-- "modules" (array string): danh sach ten module`;
+- "features" (array): moi phan tu { "name", "module", "pri" } voi pri la "P0" | "P1" | "P2". P0 = bat buoc, P1 = quan trong, P2 = nice-to-have. It nhat 12 features, phu cover tat ca module.
+- "actors" (array): moi phan tu { "name", "desc" } - desc phai mo ta chi tiet vai tro, quyen han, cac thao tac co the lam. It nhat 4 actors.
+- "modules" (array string): danh sach ten module, it nhat 6 modules. Moi module phai ro rang, khong trung lap.`;
 }
 
 function hrPrompt(): string {
@@ -402,13 +402,13 @@ Tra object voi cac key BAT BUOC:
 }
 
 function architectPrompt(): string {
-  return `Ban la Software Architect. Thiet ke database schema, API endpoints, va folder structure chi tiet de developer co the code ngay.
+  return `Ban la Senior Software Architect. Thiet ke database schema, API endpoints, va folder structure CHI TIET va DAY DU de developer co the code ngay KHONG can hoi them.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "architectureDesc" (string): 4-5 cau mo ta kien truc he thong (frontend-backend-db-cache, luong du lieu)
-- "dbTables" (array): moi phan tu { "name" (vi du "users"), "columns" (array string, moi cot kem kieu du lieu vd "id: INT PK", "email: VARCHAR(255) UNIQUE"), "relations" (array string vd "has_many: tasks") }. It nhat 5 bang.
-- "apiEndpoints" (array): moi phan tu { "method" ("GET"|"POST"|"PUT"|"DELETE"), "path" (vd "/api/users"), "desc" }. It nhat 10 endpoints.
-- "folderStructure" (string): text tree cua cau truc thu muc, dung \\n cho xuong dong`;
+- "architectureDesc" (string): 6-8 cau mo ta kien truc he thong chi tiet. Ghi ro: cac layer (frontend-backend-db-cache), luong du lieu chinh, cach cac module giao tiep, security, scalability.
+- "dbTables" (array): moi phan tu { "name" (vi du "users"), "columns" (array string, moi cot kem kieu du lieu va constraint vd "id: INT PRIMARY KEY AUTO_INCREMENT", "email: VARCHAR(255) UNIQUE NOT NULL", "created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP"), "relations" (array string vd "has_many: tasks", "belongs_to: department") }. It nhat 8 bang, moi bang it nhat 5 cot.
+- "apiEndpoints" (array): moi phan tu { "method" ("GET"|"POST"|"PUT"|"DELETE"), "path" (vd "/api/users"), "desc" (mo ta chi tiet: input, output, auth required) }. It nhat 15 endpoints, phu cover tat ca CRUD operations.
+- "folderStructure" (string): text tree cua cau truc thu muc CHI TIET, dung \\n cho xuong dong. Moi thu muc phu hop voi tech stack, bao gom: src/, tests/, docs/, config/`;
 }
 
 function umlPrompt(): string {

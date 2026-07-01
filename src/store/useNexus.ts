@@ -254,7 +254,20 @@ export const useNexus = create<NexusState>((set) => ({
   setResult: (r) => set({ result: r }),
   setMembers: (m) => set({ members: m }),
   setMessages: (m) => set({ messages: m }),
-  addMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
+  addMessage: (m) =>
+    set((s) => {
+      // Deduplicate: skip if same author + message + within 5s
+      const exists = s.messages.some(
+        (existing) =>
+          existing.authorName === m.authorName &&
+          existing.message === m.message &&
+          Math.abs(
+            new Date(existing.createdAt).getTime() - new Date(m.createdAt).getTime()
+          ) < 5000
+      );
+      if (exists) return s;
+      return { messages: [...s.messages, m] };
+    }),
   setTasks: (t) => set({ tasks: t }),
   setEmails: (e) => set({ emails: e }),
   setProposals: (p) => set({ proposals: p }),

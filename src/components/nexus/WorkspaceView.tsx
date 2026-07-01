@@ -96,7 +96,7 @@ export function WorkspaceView() {
       setProject(data.project);
       setResult(data.result);
       setMembers(data.members || []);
-      setMessages(data.messages || []);
+      setMessages(data.chatMessages || data.messages || []);
       setTasks(data.tasks || []);
       setProposals(data.proposals || []);
     } catch (err) {
@@ -127,12 +127,30 @@ export function WorkspaceView() {
 
       // Poll for completion
       await new Promise<void>((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 120; // 5 min at 2.5s intervals
         const poll = async () => {
+          attempts++;
           try {
             const pr = await fetch(`/api/projects/${projectId}/initialize/progress`);
             if (!pr.ok) {
               if (pr.status === 404) {
-                resolve();
+                // Progress expired or server restarted — check if tasks exist
+                const projResp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
+                if (projResp.ok) {
+                  const projData = await projResp.json();
+                  if (projData.tasks && projData.tasks.length > 0) {
+                    // Tasks were saved before crash — success
+                    resolve();
+                    return;
+                  }
+                }
+                // No tasks yet — if we've polled enough, give up
+                if (attempts > 5) {
+                  reject(new Error("Khong the khoi tao todolist — server bi crash. Thu lai."));
+                  return;
+                }
+                setTimeout(poll, 2500);
                 return;
               }
               throw new Error(`HTTP ${pr.status}`);
@@ -142,11 +160,18 @@ export function WorkspaceView() {
               resolve();
             } else if (prog.status === "error") {
               reject(new Error(prog.error || "Task generation that bai"));
+            } else if (attempts >= maxAttempts) {
+              reject(new Error("Timeout — task generation qua lau"));
             } else {
               setTimeout(poll, 2500);
             }
           } catch (err) {
-            reject(err instanceof Error ? err : new Error("Loi poll"));
+            // Network error (server crashed) — retry
+            if (attempts < 10) {
+              setTimeout(poll, 3000);
+            } else {
+              reject(err instanceof Error ? err : new Error("Loi poll"));
+            }
           }
         };
         setTimeout(poll, 1500);
