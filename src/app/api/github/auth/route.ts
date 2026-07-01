@@ -32,8 +32,10 @@ export async function GET(req: Request) {
   // Build the GitHub authorize URL
   // state = projectId|token so the callback knows which project to save the token to
   const state = `${projectId}|${token}`;
-  // Hardcode redirect_uri to localhost:3000 — must match the GitHub OAuth App config
-  const redirectUri = `http://localhost:3000/api/github/callback`;
+  // Use APP_URL env var (production) or localhost:3000 (dev)
+  // Must match the GitHub OAuth App's Authorization callback URL
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || `http://localhost:3000`;
+  const redirectUri = `${appUrl}/api/github/callback`;
   const scope = "repo";
   const githubAuthUrl =
     `https://github.com/login/oauth/authorize` +

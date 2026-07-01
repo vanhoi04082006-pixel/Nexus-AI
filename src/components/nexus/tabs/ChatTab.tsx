@@ -42,9 +42,12 @@ export function ChatTab() {
   // Socket.io connection
   useEffect(() => {
     if (!projectId || !access) return;
-    const socket = ioFn("/?XTransformPort=3001", {
-      transports: ["websocket", "polling"],
-    });
+    // In production (Fly.io), connect to chat service domain directly.
+    // In dev (sandbox), use XTransformPort=3001 for Caddy gateway.
+    const chatServiceUrl = process.env.NEXT_PUBLIC_CHAT_URL;
+    const socket = chatServiceUrl
+      ? ioFn(chatServiceUrl, { transports: ["websocket", "polling"] })
+      : ioFn("/?XTransformPort=3001", { transports: ["websocket", "polling"] });
     socketRef.current = socket;
 
     socket.on("connect", () => {

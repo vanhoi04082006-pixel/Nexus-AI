@@ -16,9 +16,8 @@ type SmtpTransporter = {
 };
 
 function baseUrl(): string {
-  // Use NEXT_PUBLIC_APP_URL if set, otherwise default to localhost:3000
-  // (the gateway forwards port 81 → 3000 so relative links work in preview)
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  // Use NEXT_PUBLIC_APP_URL if set (production), otherwise default to localhost:3000
+  return process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
 }
 
 export interface SendArgs {

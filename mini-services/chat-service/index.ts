@@ -2,7 +2,8 @@ import { createServer } from 'http'
 import { Server, Socket } from 'socket.io'
 
 // Hardcoded port (per gateway contract). Do NOT use env PORT.
-const PORT = 3001
+// Use PORT env var (Fly.io sets this) or default to 3001
+const PORT = parseInt(process.env.PORT || '3001', 10)
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
@@ -83,8 +84,10 @@ io.on('connection', (socket: Socket) => {
     }
 
     // Verify token against Next.js API
+    // Use NEXT_APP_URL env var (set in fly.toml for production) or localhost for dev
+    const appUrl = process.env.NEXT_APP_URL || 'http://localhost:3000'
     try {
-      const verifyResp = await fetch(`http://localhost:3000/api/projects/${projectId}?token=${encodeURIComponent(token)}`, {
+      const verifyResp = await fetch(`${appUrl}/api/projects/${projectId}?token=${encodeURIComponent(token)}`, {
         method: 'GET',
         headers: { 'User-Agent': 'NEXUS-ChatService' },
         signal: AbortSignal.timeout(5000),

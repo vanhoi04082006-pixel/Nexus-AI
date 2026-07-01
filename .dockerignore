@@ -1,0 +1,47 @@
+# ====== NEXUS AI — .dockerignore ======
+# Giúp build nhanh hơn + image nhỏ hơn
+
+node_modules
+.next
+.git
+.gitignore
+
+# Logs
+*.log
+dev.log
+server.log
+chat-service.log
+auto-restart.log
+
+# Environment (sẽ set qua Fly secrets)
+.env
+.env.local
+.env.production
+
+# Database (sẽ tạo trong volume /data)
+db/
+
+# Upload folder (code cũ, không cần deploy)
+upload/
+
+# Scripts sandbox
+scripts/
+.zscripts/
+
+# Documentation (không cần trong image)
+agent-ctx/
+tool-results/
+worklog.md
+download/
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+tsconfig.tsbuildinfo
