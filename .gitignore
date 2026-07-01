@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+dev.log
+chat-service.log
+agent-ctx/
+tool-results/
+*.log
+.DS_Store
+worklog.md
+upload/

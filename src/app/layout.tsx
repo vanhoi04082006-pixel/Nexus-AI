@@ -1,0 +1,90 @@
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "NEXUS AI - Multi-Agent Project Architect",
+  description: "8 AI Agents phan tich, thiet ke va quan ly du an. Lap ke hoach, phan nhan su, sinh todolist chi tiet cho tung thanh vien.",
+  keywords: ["NEXUS AI", "Multi-Agent", "Project Planning", "UML", "Sprint", "Todolist"],
+  authors: [{ name: "NEXUS AI" }],
+  icons: {
+    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Mermaid.js via CDN for reliable UML rendering */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('DOMContentLoaded', function() {
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+                s.onload = function() {
+                  if (window.mermaid) {
+                    window.mermaid.initialize({
+                      startOnLoad: false,
+                      theme: 'dark',
+                      themeVariables: {
+                        primaryColor: '#131d2e',
+                        primaryTextColor: '#e2e8f0',
+                        primaryBorderColor: '#00d4aa',
+                        lineColor: '#00d4aa',
+                        secondaryColor: '#1e2d42',
+                        tertiaryColor: '#0c1322',
+                        background: '#0c1322',
+                        mainBkg: '#131d2e',
+                        nodeBorder: '#00d4aa',
+                        clusterBkg: '#0c1322',
+                        titleColor: '#00d4aa',
+                        edgeLabelBackground: '#131d2e',
+                        actorBkg: '#131d2e',
+                        actorBorder: '#00d4aa',
+                        actorTextColor: '#e2e8f0',
+                        signalColor: '#e2e8f0',
+                        noteBkgColor: '#1e2d42',
+                        noteBorderColor: '#00d4aa',
+                        noteTextColor: '#e2e8f0',
+                        classText: '#e2e8f0'
+                      },
+                      flowchart: { curve: 'basis', padding: 20 },
+                      sequence: { mirrorActors: false }
+                    });
+                    window.__mermaidReady = true;
+                    window.dispatchEvent(new Event('mermaid-ready'));
+                  }
+                };
+                document.head.appendChild(s);
+              });
+            `,
+          }}
+        />
+      </head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        suppressHydrationWarning
+      >
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+}

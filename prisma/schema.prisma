@@ -1,0 +1,144 @@
+// NEXUS AI - Multi-Agent Project Architect
+// Database schema for project planning, collaboration, and task management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  topic       String
+  description String   @default("")
+  purpose     String   @default("")
+  extraInfo   String   @default("{}") // JSON: requirements, specialReqs, techPrefs, langPrefs
+  status      String   @default("DRAFT") // DRAFT | ANALYZING | WORKSPACE | INITIALIZED
+  leaderName  String
+  leaderEmail String   @default("")
+  leaderToken String   @default(cuid()) // leader session token
+  // GitHub OAuth integration
+  githubToken     String?  // OAuth access token (gho_...)
+  githubUsername  String?  // GitHub username
+  githubRepoName  String?  // repo name that was pushed
+  githubPushedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members       Member[]
+  analyses      Analysis[]
+  chatMessages  ChatMessage[]
+  tasks         Task[]
+  emails        EmailLog[]
+  editProposals EditProposal[]
+}
+
+model Member {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  email       String
+  strengths   String   @default("")
+  weaknesses  String   @default("")
+  role        String   @default("") // assigned role from HR analysis
+  inviteToken String   @default(cuid()) // for member access via link
+  joinedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  tasks         Task[]
+  chatMessages  ChatMessage[]
+  editProposals EditProposal[]
+
+  @@index([projectId])
+  @@index([inviteToken])
+}
+
+// A versioned analysis section. type: ANALYSIS | HR | SPRINT | DESIGN | UML | DOCS | GIT
+model Analysis {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String
+  content   String   @default("{}") // JSON content of the section
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, type])
+  @@index([projectId])
+}
+
+// Edit proposals raised during chat discussions; leader approves -> applied via AI refine
+model EditProposal {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memberId        String?
+  member          Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  section         String   // ANALYSIS | HR | SPRINT | DESIGN | UML | DOCS | GIT
+  requestedChange String   // human-readable description of the requested change
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED | APPLIED
+  createdAt       DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memberId  String?
+  member    Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  authorName String
+  authorRole String  @default("member") // leader | member | ai
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+// Detailed task in the todolist, generated after project initialization
+model Task {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memberId        String?
+  member          Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  assigneeName    String   @default("")
+  title           String
+  description     String   @default("")
+  role            String   @default("") // e.g. "Backend Developer"
+  responsibilities String  @default("") // newline-separated list
+  codeConventions String   @default("") // e.g. "Function validateUser() must return boolean"
+  dependencies    String   @default("") // depends on which other tasks / members
+  acceptanceCriteria String @default("")
+  deadline        DateTime?
+  sprintName      String   @default("")
+  status          String   @default("todo") // todo | in_progress | review | done
+  hours           Int      @default(8)
+  priority        String   @default("P1") // P0 | P1 | P2
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([memberId])
+}
+
+// Mock mailbox: stores emails that would be sent to members
+model EmailLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  toEmail   String
+  toName    String   @default("")
+  subject   String
+  body      String
+  type      String   // INVITATION | REMINDER | TASK_ASSIGNED
+  sentAt    DateTime @default(now())
+
+  @@index([projectId])
+}
