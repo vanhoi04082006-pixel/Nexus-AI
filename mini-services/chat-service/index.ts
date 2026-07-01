@@ -24,6 +24,7 @@ interface JoinPayload {
   projectId: string
   name: string
   role: string
+  token?: string // leader or member invite token
 }
 
 interface SendMessagePayload {
@@ -66,13 +67,36 @@ io.on('connection', (socket: Socket) => {
   sessions.set(socket.id, { name: '', role: '', rooms: new Set() })
 
   // -----------------------------------------------------------------------
-  // join: client emits { projectId, name, role }
+  // join: client emits { projectId, name, role, token }
+  // Verifies token against Next.js API before allowing join.
   // -----------------------------------------------------------------------
-  socket.on('join', (payload: JoinPayload) => {
-    const { projectId, name, role } = payload ?? {}
+  socket.on('join', async (payload: JoinPayload) => {
+    const { projectId, name, role, token } = payload ?? {}
     if (!projectId || !name) {
       socket.emit('error', { message: 'join requires { projectId, name }' })
       return
+    }
+    if (!token) {
+      socket.emit('error', { message: 'Token required for chat access' })
+      socket.disconnect()
+      return
+    }
+
+    // Verify token against Next.js API
+    try {
+      const verifyResp = await fetch(`http://localhost:3000/api/projects/${projectId}?token=${encodeURIComponent(token)}`, {
+        method: 'GET',
+        headers: { 'User-Agent': 'NEXUS-ChatService' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!verifyResp.ok) {
+        socket.emit('error', { message: 'Token khong hop le — access denied' })
+        socket.disconnect()
+        return
+      }
+    } catch (err) {
+      // If Next.js API is down, allow join (fail-open to avoid blocking all chat)
+      console.log(`[${ts()}] [join] Token verify failed (API down?), allowing: ${err instanceof Error ? err.message : 'unknown'}`)
     }
 
     const room = roomName(projectId)

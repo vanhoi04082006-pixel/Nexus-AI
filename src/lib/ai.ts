@@ -188,7 +188,9 @@ class JFix {
     if (s.startsWith("```json")) s = s.substring(7);
     else if (s.startsWith("```")) s = s.substring(3);
     if (s.endsWith("```")) s = s.substring(0, s.length - 3);
-    s = s.replace(/\/\/.*$/gm, "");
+    // NOTE: do NOT strip // globally — it breaks URLs (https://) inside strings.
+    // Comment stripping + trailing comma + newline fixing all happen in the
+    // string-aware char loop below so string contents are preserved.
     s = s.replace(/,\s*([\]}])/g, "$1");
     let r = "";
     let inS = false;
@@ -215,6 +217,12 @@ class JFix {
         continue;
       }
       if (!inS && (c === "\n" || c === "\r" || c === "\t")) continue;
+      // Strip // comments ONLY outside strings (preserves https:// in URLs)
+      if (!inS && c === "/" && s[i + 1] === "/") {
+        // skip to end of line
+        while (i < s.length && s[i] !== "\n") i++;
+        continue;
+      }
       r += c;
     }
     return r;
@@ -355,7 +363,16 @@ async function callAndParse(
           continue;
         }
 
-        // 4xx (non-429): invalid model / bad request — skip to next model
+        // 401/403: invalid API key or forbidden — FATAL, don't try other models
+        if (st === 401 || st === 403) {
+          throw new Error(
+            st === 401
+              ? "OPENROUTER_API_KEY khong hop le. Kiem tra file .env"
+              : "OpenRouter access forbidden (403). Kiem tra API key hoac credit."
+          );
+        }
+
+        // 4xx (non-429, non-401/403): invalid model / bad request — skip to next model
         break;
       }
     }
@@ -559,24 +576,25 @@ function fallback(
   results: Partial<ProjectResult>
 ): unknown {
   const d = new Date().toISOString().split("T")[0];
+  const dEnd = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]; // +14 days
   const members = input.members;
   switch (key) {
     case "analysis":
       return {
-        desc: `Du an: ${input.topic}`,
+        desc: `Du an: ${input.topic}. Mo ta mac dinh do Agent fail.`,
         techStack: {
-          frontend: { name: "N/A", ver: "", reason: "" },
-          backend: { name: "N/A", ver: "", reason: "" },
-          database: { name: "N/A", ver: "", reason: "" },
-          cache: { name: "N/A", ver: "", reason: "" },
+          frontend: { name: "React", ver: "18", reason: "Pho bien, de hoc" },
+          backend: { name: "Node.js", ver: "20", reason: "JavaScript runtime" },
+          database: { name: "PostgreSQL", ver: "15", reason: "Relational DB" },
+          cache: { name: "Redis", ver: "7", reason: "In-memory cache" },
           tools: [],
         },
         teamSize: members.length,
-        estimatedDuration: "2-4 tuan",
-        complexity: "N/A",
-        features: [],
-        actors: [],
-        modules: (results.design?.dbTables || []).map((t) => t.name),
+        estimatedDuration: "4-6 tuan",
+        complexity: "Trung binh",
+        features: input.extraInfo.requirements.map((r) => ({ name: r, module: "Core", pri: "P1" })),
+        actors: [{ name: "User", desc: "Nguoi dung cuoi" }],
+        modules: ["Auth", "Core", "Dashboard"], // sensible defaults instead of cross-section
       };
     case "hr":
       return {
@@ -597,9 +615,10 @@ function fallback(
         totalSprints: 2,
         sprintDuration: "2 tuan",
         sprints: [
-          { name: "Sprint 1", start: d, end: "", goals: ["Core features"], tasks: [], color: "#00d4aa" },
+          { name: "Sprint 1", start: d, end: dEnd, goals: ["Core features"], tasks: [], color: "#00d4aa" },
+          { name: "Sprint 2", start: dEnd, end: new Date(Date.now() + 28 * 86400000).toISOString().split("T")[0], goals: ["Polish & Test"], tasks: [], color: "#38bdf8" },
         ],
-        milestones: [],
+        milestones: [{ date: dEnd, event: "Sprint 1 demo" }],
       };
     case "design":
       return { architectureDesc: "N/A", dbTables: [], apiEndpoints: [], folderStructure: "N/A" };
@@ -780,11 +799,13 @@ export async function runPipeline(
   console.log("\n>> [AGENT-08] Quality Reviewer");
 
   try {
-    const summary = buildReviewSummary(results as ProjectResult, input.topic);
+    // Send FULL results (not just summary) so reviewer can actually fix content.
+    // Truncate to ~12000 chars to stay within token limits.
+    const fullResults = JSON.stringify(results).substring(0, 12000);
     const res = await callAndParse(
       REVIEWER_MODELS,
       reviewerPrompt(),
-      `Du an: ${input.topic}\n\nSUMMARY:\n${JSON.stringify(summary)}`,
+      `Du an: ${input.topic}\n\nKET QA DAY DU CUA 7 AGENT (JSON):\n${fullResults}`,
       0.1
     );
 
@@ -922,9 +943,10 @@ export async function chatAssistant(
   result: ProjectResult,
   recentMessages: string
 ): Promise<string> {
-  try {
-    const sys = `Ban la NEXUS AI Assistant trong phong chat cua du an "${input.topic}". Ban giup nhom ra quyet dinh, tong hop y kien, va de xuat chinh sua. Tra loi ngan gon, bang tieng Viet. Neu ai do de xuat chinh sua, ban goi y nhom truong them vao danh sach yeu cau chinh sua.`;
-    const usr = `Thong tin du an:
+  // Chat replies are plain text, NOT JSON. Use callModel directly (not callAndParse)
+  // to avoid wasting OpenRouter calls on failed JSON parsing + AI self-fix.
+  const sys = `Ban la NEXUS AI Assistant trong phong chat cua du an "${input.topic}". Ban giup nhom ra quyet dinh, tong hop y kien, va de xuat chinh sua. Tra loi ngan gon, bang tieng Viet. Neu ai do de xuat chinh sua, ban goi y nhom truong them vao danh sach yeu cau chinh sua.`;
+  const usr = `Thong tin du an:
 - Tech: ${result.analysis.techStack.frontend.name} + ${result.analysis.techStack.backend.name} + ${result.analysis.techStack.database.name}
 - Modules: ${result.analysis.modules.join(", ")}
 - Thanh vien: ${input.members.map((m) => m.name).join(", ")}
@@ -933,15 +955,16 @@ TIN NHAN GAN DAY:
 ${recentMessages}
 
 Hay phan hoi / tong hop / goi y.`;
-    const res = await callAndParse(CHAT_MODELS, sys, usr, 0.5);
-    if (res && typeof res.data === "string") return res.data;
-    // callAndParse returns parsed JSON; for chat we want raw text — call directly
-    return await callModel(CHAT_MODELS[0], sys, usr, 0.5);
-  } catch {
+
+  // Try each chat model until one succeeds
+  for (const model of CHAT_MODELS) {
     try {
-      return await callModel(CHAT_MODELS[0], `Ban la NEXUS AI Assistant. Tra loi ngan gon bang tieng Viet.`, recentMessages, 0.5);
-    } catch {
-      return "Xin loi, toi khong the phan hoi luc nay.";
+      return await callModel(model, sys, usr, 0.5);
+    } catch (err) {
+      const e = err as OpenRouterError;
+      // 429/5xx: try next model. 4xx (non-429): try next model too.
+      console.log(`  [CHAT] ${model} failed: ${e.status || e.code} — trying next`);
     }
   }
+  return "Xin loi, toi khong the phan hoi luc nay.";
 }

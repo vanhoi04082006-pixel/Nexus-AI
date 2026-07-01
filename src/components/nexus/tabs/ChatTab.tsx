@@ -51,6 +51,7 @@ export function ChatTab() {
         projectId,
         name: access.name,
         role: access.role,
+        token, // include token for chat service auth verification
       });
     });
 
@@ -84,7 +85,7 @@ export function ChatTab() {
     return () => {
       socket.disconnect();
     };
-  }, [projectId, access, addMessage]);
+  }, [projectId, access?.name, access?.role, token]);
 
   // Auto-scroll
   useEffect(() => {

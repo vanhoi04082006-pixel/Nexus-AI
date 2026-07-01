@@ -71,14 +71,14 @@ export async function GET(
         purpose: project.purpose,
         status: project.status,
         leaderName: project.leaderName,
-        leaderEmail: project.leaderEmail,
+        leaderEmail: isLeader ? project.leaderEmail : null,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
-        // GitHub integration (only leader sees token existence)
+        // GitHub integration (only leader sees token existence + repo details)
         githubConnected: isLeader ? !!project.githubToken : false,
         githubUsername: isLeader ? project.githubUsername : null,
-        githubRepoName: project.githubRepoName || null,
-        githubPushedAt: project.githubPushedAt?.toISOString() || null,
+        githubRepoName: isLeader ? project.githubRepoName : null,
+        githubPushedAt: isLeader ? project.githubPushedAt?.toISOString() || null : null,
       },
       result,
       members,

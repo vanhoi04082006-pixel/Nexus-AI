@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type {
   ProjectResult,
   SectionType,
@@ -172,7 +173,9 @@ const defaultInput = {
   ],
 };
 
-export const useNexus = create<NexusState>((set) => ({
+export const useNexus = create<NexusState>()(
+  persist(
+    (set) => ({
   view: "input",
   projectId: null,
   token: null,
@@ -279,4 +282,16 @@ export const useNexus = create<NexusState>((set) => ({
   setRefining: (b) => set({ refining: b }),
   setRefineSection: (section, done) =>
     set((s) => ({ refineSectionDone: { ...s.refineSectionDone, [section]: done } })),
-}));
+}),
+    {
+      name: "nexus-storage",
+      // Only persist input form + route info (not transient state like pipelineRunning)
+      partialize: (s) => ({
+        input: s.input,
+        projectId: s.projectId,
+        token: s.token,
+        activeTab: s.activeTab,
+      }),
+    }
+  )
+);

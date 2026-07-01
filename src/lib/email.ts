@@ -16,7 +16,9 @@ type SmtpTransporter = {
 };
 
 function baseUrl(): string {
-  return "";
+  // Use NEXT_PUBLIC_APP_URL if set, otherwise default to localhost:3000
+  // (the gateway forwards port 81 → 3000 so relative links work in preview)
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
 export interface SendArgs {
@@ -27,6 +29,10 @@ export interface SendArgs {
   body: string;
   type: "INVITATION" | "REMINDER" | "TASK_ASSIGNED";
 }
+
+/** Track SMTP verification result per project to avoid re-verifying every email */
+const smtpVerified = new Map<string, boolean>();
+let smtpWarningLogged = false;
 
 /**
  * Store the email in the EmailLog table (always — for the Mailbox UI).
@@ -93,6 +99,7 @@ async function getTransporter(
 /**
  * Send an email via SMTP. If SMTP is not configured or fails, the email is
  * still logged to the EmailLog table (Mailbox UI) so the flow is unaffected.
+ * Verifies SMTP credentials on first use and logs a clear warning if invalid.
  */
 export async function sendEmail(args: SendArgs): Promise<void> {
   // Always log first
@@ -103,6 +110,27 @@ export async function sendEmail(args: SendArgs): Promise<void> {
     const transporter = await getTransporter(args.projectId);
     if (!transporter) {
       console.log(`  [EMAIL] No SMTP configured — logged to Mailbox only: ${args.toEmail}`);
+      return;
+    }
+
+    // Verify SMTP credentials on first use for this project
+    if (!smtpVerified.has(args.projectId)) {
+      try {
+        // nodemailer transporter has verify() — cast to access it
+        await (transporter as unknown as { verify: () => Promise<unknown> }).verify();
+        smtpVerified.set(args.projectId, true);
+        console.log(`  [EMAIL] SMTP verified OK for project ${args.projectId}`);
+      } catch (verifyErr) {
+        smtpVerified.set(args.projectId, false);
+        const msg = verifyErr instanceof Error ? verifyErr.message : "unknown";
+        if (!smtpWarningLogged) {
+          console.error(`  [EMAIL] ⚠ SMTP AUTH FAILED — emails will be logged but NOT sent: ${msg}`);
+          smtpWarningLogged = true;
+        }
+        return; // skip sending — credentials are wrong
+      }
+    } else if (smtpVerified.get(args.projectId) === false) {
+      // Already verified as failed — skip
       return;
     }
 

@@ -89,14 +89,23 @@ export function InputView() {
       toast.error("Can it nhat 1 thanh vien co ten");
       return false;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const m of validMembers) {
       if (!m.email.trim()) {
         toast.error(`Thanh vien "${m.name}" thieu email de gui loi moi`);
         return false;
       }
+      if (!emailRegex.test(m.email.trim())) {
+        toast.error(`Email cua "${m.name}" khong hop le: ${m.email}`);
+        return false;
+      }
     }
     if (!input.leaderEmail.trim()) {
       toast.error("Vui long nhap email nhom truong (de gui mail SMTP)");
+      return false;
+    }
+    if (!emailRegex.test(input.leaderEmail.trim())) {
+      toast.error("Email nhom truong khong hop le");
       return false;
     }
     if (!input.leaderSmtpPassword.trim()) {

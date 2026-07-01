@@ -101,6 +101,11 @@ export function TasksTab() {
   }
 
   async function updateStatus(taskId: string, status: string) {
+    // Capture previous status for rollback on error
+    const task = tasks.find((t) => t.id === taskId);
+    const prevStatus = task?.status || "todo";
+
+    // Optimistic update
     updateTaskStatus(taskId, status);
     try {
       const resp = await fetch(`/api/projects/${projectId}/tasks/${taskId}?token=${encodeURIComponent(token || "")}`, {
@@ -108,16 +113,22 @@ export function TasksTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!resp.ok) throw new Error("Loi cap nhat");
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        throw new Error(e.error || `HTTP ${resp.status}`);
+      }
       toast.success("Da cap nhat trang thai task");
-    } catch {
-      toast.error("Khong cap nhat duoc");
+    } catch (err) {
+      // Rollback to previous status
+      updateTaskStatus(taskId, prevStatus);
+      toast.error(err instanceof Error ? err.message : "Khong cap nhat duoc");
     }
   }
 
   function canUpdate(task: TaskItem): boolean {
     if (isLeader) return true;
-    return access?.name === task.assigneeName;
+    // Compare by memberId (more reliable than name)
+    return access?.memberId === task.memberId || access?.name === task.assigneeName;
   }
 
   function daysLeft(deadline: string): { text: string; urgent: boolean } {
