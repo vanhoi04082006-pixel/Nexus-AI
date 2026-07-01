@@ -23,6 +23,8 @@ import {
   Loader2,
   Crown,
   LogOut,
+  Globe,
+  Copy,
 } from "lucide-react";
 import { AnalysisTab } from "./tabs/AnalysisTab";
 import { HRTab } from "./tabs/HRTab";
@@ -79,6 +81,17 @@ export function WorkspaceView() {
 
   const [initializing, setInitializing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [publicUrl, setPublicUrl] = useState<string | null>(null);
+
+  // Fetch public URL (for share link in emails)
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.publicUrl) setPublicUrl(data.publicUrl);
+      })
+      .catch(() => {});
+  }, []);
 
   const isLeader = access?.role === "leader";
 

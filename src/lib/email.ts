@@ -15,9 +15,32 @@ type SmtpTransporter = {
   }) => Promise<{ messageId: string }>;
 };
 
+/**
+ * Read the current public URL from .public-url file.
+ * This file is updated by scripts/run-local.sh when Cloudflare Tunnel starts,
+ * so email links always point to the accessible URL (not localhost).
+ * Falls back to env var or localhost.
+ */
 function baseUrl(): string {
-  // Use NEXT_PUBLIC_APP_URL if set (production), otherwise default to localhost:3000
-  return process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000";
+  // In production with env var set, use that
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+  if (envUrl && !envUrl.includes("localhost")) {
+    return envUrl;
+  }
+  // Try reading from .public-url file (updated by tunnel script)
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const urlPath = path.join(process.cwd(), ".public-url");
+    const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
+    if (fileContent && fileContent.startsWith("http")) {
+      return fileContent;
+    }
+  } catch {
+    /* file not found — fall through */
+  }
+  // Default fallback
+  return envUrl || "http://localhost:3000";
 }
 
 export interface SendArgs {

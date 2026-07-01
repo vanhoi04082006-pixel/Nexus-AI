@@ -32,9 +32,26 @@ export async function GET(req: Request) {
   // Build the GitHub authorize URL
   // state = projectId|token so the callback knows which project to save the token to
   const state = `${projectId}|${token}`;
-  // Use APP_URL env var (production) or localhost:3000 (dev)
-  // Must match the GitHub OAuth App's Authorization callback URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || `http://localhost:3000`;
+
+  // Read current public URL (from .public-url file or env var)
+  // This ensures GitHub OAuth callback works through Cloudflare Tunnel
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "";
+  if (!appUrl || appUrl.includes("localhost")) {
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const fileContent = fs
+        .readFileSync(path.join(process.cwd(), ".public-url"), "utf-8")
+        .trim();
+      if (fileContent && fileContent.startsWith("http")) {
+        appUrl = fileContent;
+      }
+    } catch {
+      /* file not found */
+    }
+  }
+  if (!appUrl) appUrl = `http://localhost:${url.port || 3000}`;
+
   const redirectUri = `${appUrl}/api/github/callback`;
   const scope = "repo";
   const githubAuthUrl =
