@@ -70,56 +70,57 @@ export async function POST(
     // Initialize progress tracker
     initInitialize(id);
 
-    // Run task generation IN THE BACKGROUND
-    (async () => {
+    // Run task generation IN THE BACKGROUND using process.nextTick
+    // (same pattern as POST /api/projects — more stable than async IIFE)
+    process.nextTick(() => {
+      console.log(`>> [INIT] Background task generation started for project ${id}`);
       let savedCount = 0;
-      try {
-        console.log(`>> [INIT] Background task generation started for project ${id}`);
-        const tasks: TaskItem[] = await generateTasks(input, result, () => {
-          /* progress callback — not needed, polling covers it */
-        });
 
-        // ===== Persist tasks =====
-        const memberByName = new Map<string, string>();
-        for (const m of project.members) {
-          memberByName.set(m.name.toLowerCase(), m.id);
-        }
+      generateTasks(input, result, () => {
+        /* progress callback */
+      })
+        .then(async (tasks: TaskItem[]) => {
+          // ===== Persist tasks =====
+          const memberByName = new Map<string, string>();
+          for (const m of project.members) {
+            memberByName.set(m.name.toLowerCase(), m.id);
+          }
 
-        const tasksByMember = new Map<
-          string,
-          { member: { id: string; name: string; email: string; inviteToken: string }; tasks: { title: string; deadline: string | null }[] }
-        >();
+          const tasksByMember = new Map<
+            string,
+            { member: { id: string; name: string; email: string; inviteToken: string }; tasks: { title: string; deadline: string | null }[] }
+          >();
 
-        for (const t of tasks) {
-          const matchedMemberId = t.assigneeName
-            ? memberByName.get(t.assigneeName.toLowerCase().trim()) || null
-            : null;
+          for (const t of tasks) {
+            const matchedMemberId = t.assigneeName
+              ? memberByName.get(t.assigneeName.toLowerCase().trim()) || null
+              : null;
 
-          const responsibilities = parseArray(t.responsibilities).join("\n");
-          const codeConventions = parseArray(t.codeConventions).join("\n");
-          const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
-          const deadlineDate = parseDeadline(t.deadline);
+            const responsibilities = parseArray(t.responsibilities).join("\n");
+            const codeConventions = parseArray(t.codeConventions).join("\n");
+            const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
+            const deadlineDate = parseDeadline(t.deadline);
 
-          const created = await db.task.create({
-            data: {
-              projectId: id,
-              memberId: matchedMemberId,
-              assigneeName: t.assigneeName || "",
-              title: t.title || "Untitled task",
-              description: t.description || "",
-              role: t.role || "",
-              responsibilities,
-              codeConventions,
-              dependencies: t.dependencies || "",
-              acceptanceCriteria,
-              deadline: deadlineDate,
-              sprintName: t.sprintName || "",
-              status: t.status || "todo",
-              hours: typeof t.hours === "number" ? t.hours : 8,
-              priority: t.priority || "P1",
-            },
-          });
-          savedCount++;
+            const created = await db.task.create({
+              data: {
+                projectId: id,
+                memberId: matchedMemberId,
+                assigneeName: t.assigneeName || "",
+                title: t.title || "Untitled task",
+                description: t.description || "",
+                role: t.role || "",
+                responsibilities,
+                codeConventions,
+                dependencies: t.dependencies || "",
+                acceptanceCriteria,
+                deadline: deadlineDate,
+                sprintName: t.sprintName || "",
+                status: t.status || "todo",
+                hours: typeof t.hours === "number" ? t.hours : 8,
+                priority: t.priority || "P1",
+              },
+            });
+            savedCount++;
 
           if (matchedMemberId) {
             const member = project.members.find((m) => m.id === matchedMemberId);
@@ -143,33 +144,34 @@ export async function POST(
           }
         }
 
-        // ===== Send TASK_ASSIGNED emails =====
-        for (const [, group] of tasksByMember) {
+          // ===== Send TASK_ASSIGNED emails =====
+          for (const [, group] of tasksByMember) {
+            try {
+              await sendTaskAssignedEmail(id, project.topic, group.member, group.tasks);
+            } catch {
+              /* non-fatal */
+            }
+          }
+
+          // ===== Update project status =====
           try {
-            await sendTaskAssignedEmail(id, project.topic, group.member, group.tasks);
+            await db.project.update({
+              where: { id },
+              data: { status: "INITIALIZED" },
+            });
           } catch {
             /* non-fatal */
           }
-        }
 
-        // ===== Update project status =====
-        try {
-          await db.project.update({
-            where: { id },
-            data: { status: "INITIALIZED" },
-          });
-        } catch {
-          /* non-fatal */
-        }
-
-        finishInitialize(id, savedCount);
-        console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Task generation failed";
-        console.error(`>> [INIT] Background task generation FAILED:`, msg);
-        finishInitialize(id, undefined, msg);
-      }
-    })();
+          finishInitialize(id, savedCount);
+          console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "Task generation failed";
+          console.error(`>> [INIT] Background task generation FAILED:`, msg);
+          finishInitialize(id, undefined, msg);
+        });
+    });
 
     return Response.json({ started: true });
   } catch (err) {

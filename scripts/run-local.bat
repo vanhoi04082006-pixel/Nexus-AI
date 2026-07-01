@@ -98,10 +98,10 @@ echo.
 echo Server se chay o nen. Nhan Ctrl+C de dung.
 echo.
 
-REM Khởi động Next.js server trong background
+REM Khoi dong Next.js server trong background
 start /b bun run dev > dev.log 2>&1
 
-REM Đợi server sẵn sàng
+REM Doi server san sang
 echo Dang doi server san sang...
 set /a tries=0
 :wait_loop
@@ -120,25 +120,66 @@ if errorlevel 1 (
 echo ✓ Server san sang tai http://localhost:3000
 echo.
 
-REM Khởi động Cloudflare Tunnel
+REM Khoi dong Cloudflare Tunnel — output vao file de parse URL
 echo Dang tao URL public...
 echo.
-echo ══════════════════════════════════════════════════════
-echo.
-cloudflared.exe tunnel --url http://localhost:3000 2>&1 | findstr /C:"trycloudflare.com" /C:"https://"
-echo.
-echo ══════════════════════════════════════════════════════
-echo.
-echo ✅ NEXUS AI DANG CHAY!
-echo.
-echo    Local:  http://localhost:3000
-echo    Public: Xem URL trycloudflare.com o tren
-echo.
-echo    Chia se URL public cho thanh vien.
-echo    Link trong email se tu dong dung URL nay.
-echo.
-echo    Nhan Ctrl+C de dung.
-echo.
+
+REM Chay cloudflared va luu output vao tunnel.log
+start /b cloudflared.exe tunnel --url http://localhost:3000 > tunnel.log 2>&1
+
+REM Doi 10 giay de tunnel tao URL
+timeout /t 10 /nobreak >nul
+
+REM Tim URL trong tunnel.log
+set "TUNNEL_URL="
+for /f "tokens=*" %%a in ('findstr /C:"trycloudflare.com" tunnel.log 2^>nul') do (
+    set "line=%%a"
+    setlocal enabledelayedexpansion
+    for %%i in (!line!) do (
+        echo %%i | find "https://" >nul && set "TUNNEL_URL=%%i"
+    )
+    endlocal
+)
+
+REM Neu khong tim thay URL, thu cach khac
+if not defined TUNNEL_URL (
+    for /f "tokens=2 delims==" %%a in ('findstr /C:"https://" tunnel.log 2^>nul') do (
+        set "TUNNEL_URL=%%a"
+    )
+)
+
+if defined TUNNEL_URL (
+    REM Ghi URL vao file .public-url
+    echo %TUNNEL_URL%> .public-url
+    echo.
+    echo ══════════════════════════════════════════════════════
+    echo.
+    echo ✅ NEXUS AI DANG CHAY!
+    echo.
+    echo    Local:  http://localhost:3000
+    echo    Public: %TUNNEL_URL%
+    echo.
+    echo    ✓ Da cap nhat .public-url — email se dung URL nay
+    echo.
+    echo    Chia se URL public cho thanh vien:
+    echo    %TUNNEL_URL%
+    echo.
+    echo    Nhan Ctrl+C de dung.
+    echo.
+) else (
+    echo.
+    echo ══════════════════════════════════════════════════════
+    echo.
+    echo ✅ NEXUS AI DANG CHAY (localhost only)!
+    echo.
+    echo    Local: http://localhost:3000
+    echo.
+    echo    ⚠ Khong tao duoc URL tunnel.
+    echo       Kiem tra tunnel.log de biet chi tiet.
+    echo.
+    echo    Nhan Ctrl+C de dung.
+    echo.
+)
 goto :keep_alive
 
 :start_server_only
