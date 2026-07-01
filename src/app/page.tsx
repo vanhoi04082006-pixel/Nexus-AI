@@ -27,10 +27,14 @@ function NexusApp() {
       setView("workspace");
     } else {
       setRoute(null, null);
-      // Don't override "input" if user is filling the form
-      setView((prev) => (prev === "workspace" ? "home" : prev) as "input" | "workspace" | "home");
+      // If no project in URL, go to home (shows project history)
+      // But don't override if user is currently filling the input form
+      const currentView = useNexus.getState().view;
+      if (currentView === "workspace") {
+        setView("home");
+      }
     }
-  }, [projectId, token]);
+  }, [projectId, token, setRoute, setView]);
 
   // Show toast when returning from GitHub OAuth
   useEffect(() => {
