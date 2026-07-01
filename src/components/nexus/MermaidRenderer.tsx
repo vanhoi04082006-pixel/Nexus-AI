@@ -7,8 +7,6 @@ function fixMermaid(code: string): string {
   if (!code) return "";
   let s = code;
   // CRITICAL: AI often returns literal \n (backslash-n) instead of real newlines.
-  // Mermaid needs real newlines. Convert literal \n → actual newline.
-  // Handle double-escaped first (\\n = 2 backslashes + n), then single (\n = 1 backslash + n)
   s = s.replace(/\\\\n/g, "\n");
   s = s.replace(/\\n/g, "\n");
   // Fix [("text")] → ["text"] (common AI mistake in node labels)
@@ -17,14 +15,24 @@ function fixMermaid(code: string): string {
   s = s.replace(/\(\("([^"]*?)"\)\)/g, '("$1")');
   s = s.replace(/\[\[\(/g, "[").replace(/\)\]\]/g, "]");
 
+  // ===== ERD fixes =====
+  // Mermaid ERD doesn't support "PK FK" on the same line.
+  // Each attribute can only have ONE key type: PK, FK, or UK.
+  // Fix: "int role_id PK FK" → "int role_id PK" (keep first key type)
+  if (s.includes("erDiagram")) {
+    s = s.replace(/^(\s*\w+\s+\w+)\s+PK\s+FK\s*$/gm, "$1 PK");
+    s = s.replace(/^(\s*\w+\s+\w+)\s+FK\s+PK\s*$/gm, "$1 PK");
+    s = s.replace(/^(\s*\w+\s+\w+)\s+PK\s+UK\s*$/gm, "$1 PK");
+    s = s.replace(/^(\s*\w+\s+\w+)\s+UK\s+PK\s*$/gm, "$1 PK");
+    // Also fix "PK, FK" with comma
+    s = s.replace(/^(\s*\w+\s+\w+)\s+PK,?\s*FK\s*$/gmi, "$1 PK");
+    s = s.replace(/^(\s*\w+\s+\w+)\s+FK,?\s*PK\s*$/gmi, "$1 PK");
+  }
+
   // Wrap edge labels containing special chars in double quotes.
-  // Mermaid edge syntax: A -->|text| B  →  A -->|"text"| B
-  // Special chars that break parsing: ( ) [ ] { } | " '
   s = s.replace(/-->\|([^|]+)\|/g, (_m, label: string) => {
     const trimmed = label.trim();
-    // Already quoted? skip
     if (trimmed.startsWith('"') && trimmed.endsWith('"')) return `-->|${label}|`;
-    // Contains special chars? wrap in quotes
     if (/[(){}\[\]"']/.test(trimmed)) {
       return `-->|"${trimmed}"|`;
     }
@@ -32,12 +40,9 @@ function fixMermaid(code: string): string {
   });
 
   // Wrap node labels in [...] containing special chars in double quotes.
-  // Only apply to lines that look like node definitions (contain --> or --- or are simple A[text] lines).
-  // Skip subgraph, classDiagram, erDiagram, sequenceDiagram, etc. which use [] differently.
   const lines = s.split("\n");
   const fixedLines = lines.map((line) => {
     const trimmedLine = line.trim();
-    // Skip directive lines and diagram type declarations
     if (
       trimmedLine.startsWith("subgraph") ||
       trimmedLine.startsWith("classDiagram") ||
@@ -51,11 +56,9 @@ function fixMermaid(code: string): string {
     ) {
       return line;
     }
-    // Only fix [labels] on lines that have edge syntax (--> ---) or are pure node defs
     if (!trimmedLine.includes("-->") && !trimmedLine.includes("---") && !/^[A-Za-z_]\w*\[/.test(trimmedLine)) {
       return line;
     }
-    // Fix [label] → ["label"] only if label has special chars and isn't already quoted
     return line.replace(/\[([^\]]+)\]/g, (_m, label: string) => {
       const t = label.trim();
       if (t.startsWith('"') && t.endsWith('"')) return `[${label}]`;
