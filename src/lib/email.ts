@@ -34,6 +34,9 @@ export interface SendArgs {
 const smtpVerified = new Map<string, boolean>();
 let smtpWarningLogged = false;
 
+/** Cache transporters by projectId to avoid creating a new SMTP connection per email */
+const transporterCache = new Map<string, SmtpTransporter>();
+
 /**
  * Store the email in the EmailLog table (always — for the Mailbox UI).
  */
@@ -58,6 +61,10 @@ async function logEmail(args: SendArgs): Promise<void> {
 async function getTransporter(
   projectId: string
 ): Promise<SmtpTransporter | null> {
+  // Check cache first — avoids re-creating SMTP connection per email
+  const cached = transporterCache.get(projectId);
+  if (cached) return cached;
+
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: { leaderEmail: true, leaderSmtpPassword: true },
@@ -93,7 +100,10 @@ async function getTransporter(
     },
   });
 
-  return transport as unknown as SmtpTransporter;
+  const transporter = transport as unknown as SmtpTransporter;
+  // Cache for reuse (nodemailer pools connections)
+  transporterCache.set(projectId, transporter);
+  return transporter;
 }
 
 /**

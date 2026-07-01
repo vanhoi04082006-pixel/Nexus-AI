@@ -259,14 +259,14 @@ export const useNexus = create<NexusState>()(
   setMessages: (m) => set({ messages: m }),
   addMessage: (m) =>
     set((s) => {
-      // Deduplicate: skip if same author + message + within 5s
+      // Deduplicate: skip if same author + message + within 2s
       const exists = s.messages.some(
         (existing) =>
           existing.authorName === m.authorName &&
           existing.message === m.message &&
           Math.abs(
             new Date(existing.createdAt).getTime() - new Date(m.createdAt).getTime()
-          ) < 5000
+          ) < 2000
       );
       if (exists) return s;
       return { messages: [...s.messages, m] };
@@ -277,7 +277,13 @@ export const useNexus = create<NexusState>()(
   setActiveTab: (t) => set({ activeTab: t }),
   setLoadingProject: (b) => set({ loadingProject: b }),
   updateTaskStatus: (taskId, status) =>
-    set((s) => ({ tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status } : t)) })),
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        t.id === taskId
+          ? { ...t, status, updatedAt: new Date().toISOString() as unknown as Date }
+          : t
+      ),
+    })),
 
   setRefining: (b) => set({ refining: b }),
   setRefineSection: (section, done) =>

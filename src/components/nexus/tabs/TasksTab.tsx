@@ -62,6 +62,7 @@ export function TasksTab() {
 
   const [filterMember, setFilterMember] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [showMyTasksOnly, setShowMyTasksOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (tasks.length === 0) {
@@ -95,6 +96,10 @@ export function TasksTab() {
 
   // Apply filters
   let filtered = tasks;
+  // "My tasks only" filter for members
+  if (showMyTasksOnly && access?.name) {
+    filtered = filtered.filter((t) => t.assigneeName === access.name);
+  }
   if (filterMember !== "all") filtered = filtered.filter((t) => t.assigneeName === filterMember);
   if (filterStatus !== "all") filtered = filtered.filter((t) => t.status === filterStatus);
   // Members can only see their own tasks + all tasks if leader
@@ -193,6 +198,18 @@ export function TasksTab() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
+        {!isLeader && access?.name && (
+          <button
+            onClick={() => setShowMyTasksOnly((v) => !v)}
+            className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+              showMyTasksOnly
+                ? "bg-primary/15 border-primary text-primary"
+                : "bg-card border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Viec cua toi
+          </button>
+        )}
         <Select value={filterMember} onValueChange={setFilterMember}>
           <SelectTrigger className="w-44 bg-card border-border text-sm">
             <SelectValue placeholder="Thanh vien" />

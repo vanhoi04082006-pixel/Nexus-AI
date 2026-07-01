@@ -62,7 +62,7 @@ export function ChatTab() {
         (m) =>
           m.authorName === msg.name &&
           m.message === msg.message &&
-          Math.abs(new Date(m.createdAt).getTime() - new Date(msg.timestamp).getTime()) < 5000
+          Math.abs(new Date(m.createdAt).getTime() - new Date(msg.timestamp).getTime()) < 2000
       );
       if (!exists) {
         addMessage({

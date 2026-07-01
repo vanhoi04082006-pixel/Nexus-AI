@@ -185,6 +185,15 @@ function slugify(s: string): string {
     .substring(0, 40);
 }
 
+/** Escape user-controlled content for Markdown table cells (Issue 30) */
+function mdEscape(s: string): string {
+  if (!s) return "";
+  return String(s)
+    .replace(/\|/g, "\\|")
+    .replace(/\n/g, " ")
+    .replace(/\r/g, "");
+}
+
 function generateFiles(
   input: ProjectInput,
   result: ProjectResult,
@@ -328,11 +337,11 @@ npm-debug.log*
   teamContent += `**Phu hop:** ${hr.coverage || "N/A"}\n\n`;
   teamContent += `## Phan cong Vai tro\n\n`;
   for (const m of hr.assignments || []) {
-    teamContent += `### ${m.name} — ${m.role}\n`;
+    teamContent += `### ${mdEscape(m.name)} — ${mdEscape(m.role)}\n`;
     teamContent += `- **Workload:** ${m.workload}%\n`;
-    teamContent += `- **Ly do:** ${m.reason}\n`;
-    teamContent += `- **Uu diem:** ${m.strengths || "N/A"}\n`;
-    teamContent += `- **Nhuoc diem:** ${m.weaknesses || "N/A"}\n`;
+    teamContent += `- **Ly do:** ${mdEscape(m.reason)}\n`;
+    teamContent += `- **Uu diem:** ${mdEscape(m.strengths) || "N/A"}\n`;
+    teamContent += `- **Nhuoc diem:** ${mdEscape(m.weaknesses) || "N/A"}\n`;
     if (m.modules && m.modules.length) {
       teamContent += `- **Modules:** ${m.modules.join(", ")}\n`;
     }
@@ -360,9 +369,9 @@ npm-debug.log*
     for (const [memberName, memberTasks] of Object.entries(byMember)) {
       taskContent += `## ${memberName}\n\n`;
       for (const t of memberTasks) {
-        taskContent += `### [${t.priority}] ${t.title}\n`;
-        taskContent += `**Vai tro:** ${t.role} | **Sprint:** ${t.sprintName} | **Hours:** ${t.hours}h | **Deadline:** ${t.deadline || "N/A"}\n\n`;
-        taskContent += `**Mo ta:** ${t.description}\n\n`;
+        taskContent += `### [${t.priority}] ${mdEscape(t.title)}\n`;
+        taskContent += `**Vai tro:** ${mdEscape(t.role)} | **Sprint:** ${mdEscape(t.sprintName)} | **Hours:** ${t.hours}h | **Deadline:** ${t.deadline || "N/A"}\n\n`;
+        taskContent += `**Mo ta:** ${mdEscape(t.description)}\n\n`;
         if (t.responsibilities) {
           taskContent += `**Trach nhiem:**\n${t.responsibilities.split("\n").map((r) => `- ${r}`).join("\n")}\n\n`;
         }
