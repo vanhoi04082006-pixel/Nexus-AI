@@ -169,24 +169,37 @@ io.on('connection', (socket: Socket) => {
 
   // -----------------------------------------------------------------------
   // disconnect: notify every room this socket was in
+  // Only emit user_left if no other socket for the same user is still in the room.
   // -----------------------------------------------------------------------
   socket.on('disconnect', (reason: string) => {
     const session = sessions.get(socket.id)
 
     if (session) {
       for (const room of session.rooms) {
-        // Extract projectId from room name "project:<projectId>"
         const projectId = room.startsWith('project:')
           ? room.slice('project:'.length)
           : room
 
-        io.to(room).emit('user_left', {
-          projectId,
-          name: session.name,
-          role: session.role,
-          socketId: socket.id,
-          timestamp: ts(),
-        })
+        // Check if any OTHER socket in this room has the same name
+        let stillInRoom = false
+        for (const [otherId, otherSession] of sessions) {
+          if (otherId === socket.id) continue
+          if (otherSession.name === session.name && otherSession.rooms.has(room)) {
+            stillInRoom = true
+            break
+          }
+        }
+
+        // Only emit user_left if the user has no other tabs open
+        if (!stillInRoom) {
+          io.to(room).emit('user_left', {
+            projectId,
+            name: session.name,
+            role: session.role,
+            socketId: socket.id,
+            timestamp: ts(),
+          })
+        }
       }
 
       console.log(

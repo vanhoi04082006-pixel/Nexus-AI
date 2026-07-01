@@ -28,6 +28,7 @@ import {
   Hourglass,
 } from "lucide-react";
 import type { TaskItem } from "@/lib/types";
+import { useReloadProject } from "../useReload";
 
 const STATUS_META: Record<
   string,
@@ -56,6 +57,7 @@ export function TasksTab() {
   const projectId = useNexus((s) => s.projectId);
   const token = useNexus((s) => s.token);
   const updateTaskStatus = useNexus((s) => s.updateTaskStatus);
+  const reload = useReloadProject();
   const isLeader = access?.role === "leader";
 
   const [filterMember, setFilterMember] = useState<string>("all");
@@ -118,6 +120,8 @@ export function TasksTab() {
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
       toast.success("Da cap nhat trang thai task");
+      // Reload to sync with DB + other clients
+      reload();
     } catch (err) {
       // Rollback to previous status
       updateTaskStatus(taskId, prevStatus);

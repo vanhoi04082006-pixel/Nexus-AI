@@ -35,6 +35,7 @@ export function ChatTab() {
   const [aiThinking, setAiThinking] = useState(false);
   const [refining, setRefining] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +81,20 @@ export function ChatTab() {
 
     socket.on("user_left", (u: { name: string }) => {
       setOnlineUsers((prev) => prev.filter((n) => n !== u.name));
+      setTypingUsers((prev) => prev.filter((n) => n !== u.name));
+    });
+
+    socket.on("typing", (data: { name: string }) => {
+      setTypingUsers((prev) => (prev.includes(data.name) ? prev : [...prev, data.name]));
+      // Clear typing after 3s
+      setTimeout(() => {
+        setTypingUsers((prev) => prev.filter((n) => n !== data.name));
+      }, 3000);
+    });
+
+    socket.on("disconnect", () => {
+      setOnlineUsers([]);
+      setTypingUsers([]);
     });
 
     return () => {
@@ -180,12 +195,21 @@ export function ChatTab() {
 
       // Poll for completion
       await new Promise<void>((resolve, reject) => {
+        let attempts = 0;
         const poll = async () => {
+          attempts++;
           try {
             const pr = await fetch(`/api/projects/${projectId}/refine/progress`);
             if (!pr.ok) {
               if (pr.status === 404) {
-                resolve();
+                // Progress expired or server restarted — check if refine actually ran
+                // by comparing analysis updatedAt vs when we started
+                if (attempts > 3) {
+                  // Assume done if we've polled enough — refine may have completed before progress expired
+                  resolve();
+                  return;
+                }
+                setTimeout(poll, 2500);
                 return;
               }
               throw new Error(`HTTP ${pr.status}`);
@@ -199,7 +223,12 @@ export function ChatTab() {
               setTimeout(poll, 2500);
             }
           } catch (err) {
-            reject(err instanceof Error ? err : new Error("Loi poll"));
+            // Network error (server crashed) — retry a few times
+            if (attempts < 10) {
+              setTimeout(poll, 3000);
+            } else {
+              reject(err instanceof Error ? err : new Error("Loi poll"));
+            }
           }
         };
         setTimeout(poll, 1500);
@@ -340,11 +369,24 @@ export function ChatTab() {
           })}
         </div>
 
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div className="px-4 py-1.5 text-xs text-muted-foreground italic">
+            {typingUsers.join(", ")} {typingUsers.length === 1 ? "dang" : "dang"} go...
+          </div>
+        )}
+
         {/* Input */}
         <div className="border-t border-border p-3 flex gap-2">
           <Input
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              // Emit typing indicator (throttled by socket)
+              if (access) {
+                socketRef.current?.emit("typing", { projectId, name: access.name });
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

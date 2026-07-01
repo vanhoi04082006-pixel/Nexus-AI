@@ -32,17 +32,40 @@ function fixMermaid(code: string): string {
   });
 
   // Wrap node labels in [...] containing special chars in double quotes.
-  // Mermaid node syntax: A[text]  →  A["text"]
-  s = s.replace(/\[([^\]]+)\]/g, (_m, label: string) => {
-    const trimmed = label.trim();
-    // Already quoted? skip
-    if (trimmed.startsWith('"') && trimmed.endsWith('"')) return `[${label}]`;
-    // Contains parentheses or other special chars? wrap in quotes
-    if (/[(){}|"']/.test(trimmed)) {
-      return `["${trimmed}"]`;
+  // Only apply to lines that look like node definitions (contain --> or --- or are simple A[text] lines).
+  // Skip subgraph, classDiagram, erDiagram, sequenceDiagram, etc. which use [] differently.
+  const lines = s.split("\n");
+  const fixedLines = lines.map((line) => {
+    const trimmedLine = line.trim();
+    // Skip directive lines and diagram type declarations
+    if (
+      trimmedLine.startsWith("subgraph") ||
+      trimmedLine.startsWith("classDiagram") ||
+      trimmedLine.startsWith("erDiagram") ||
+      trimmedLine.startsWith("sequenceDiagram") ||
+      trimmedLine.startsWith("graph") ||
+      trimmedLine.startsWith("flowchart") ||
+      trimmedLine.startsWith("%%") ||
+      trimmedLine.startsWith("classDef") ||
+      trimmedLine.startsWith("style ")
+    ) {
+      return line;
     }
-    return `[${label}]`;
+    // Only fix [labels] on lines that have edge syntax (--> ---) or are pure node defs
+    if (!trimmedLine.includes("-->") && !trimmedLine.includes("---") && !/^[A-Za-z_]\w*\[/.test(trimmedLine)) {
+      return line;
+    }
+    // Fix [label] → ["label"] only if label has special chars and isn't already quoted
+    return line.replace(/\[([^\]]+)\]/g, (_m, label: string) => {
+      const t = label.trim();
+      if (t.startsWith('"') && t.endsWith('"')) return `[${label}]`;
+      if (/[(){}|"']/.test(t)) {
+        return `["${t}"]`;
+      }
+      return `[${label}]`;
+    });
   });
+  s = fixedLines.join("\n");
 
   // Trim trailing whitespace per line
   s = s
@@ -82,6 +105,7 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const renderToken = useRef(0);
 
   useEffect(() => {
@@ -89,6 +113,11 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
     let cancelled = false;
 
     async function render() {
+      // Reset state for this render cycle
+      setSvg(null);
+      setError(null);
+      setLoading(true);
+
       if (!code) {
         setError("Khong co du lieu");
         setLoading(false);
@@ -120,7 +149,7 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [code, id]);
+  }, [code, id, retryCount]);
 
   return (
     <div className="mermaid-container">
@@ -130,6 +159,14 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       {error && (
         <>
           <div className="text-destructive text-sm mb-3">Loi render Mermaid: {error}</div>
+          <button
+            onClick={() => {
+              setRetryCount((c) => c + 1);
+            }}
+            className="mb-3 px-3 py-1 text-xs border border-primary text-primary rounded hover:bg-primary/10 transition-colors"
+          >
+            ↻ Thu lai
+          </button>
           <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap max-h-64 overflow-auto nexus-scroll w-full">
             {code}
           </pre>
