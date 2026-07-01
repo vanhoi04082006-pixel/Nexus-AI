@@ -1,13 +1,12 @@
-// NEXUS AI - Mock Email Service
-// In this sandbox we cannot send real SMTP emails, so we store every email
-// in the database (EmailLog) and expose a "Mailbox" UI where members can read
-// what they would have received. This keeps the full flow functional end-to-end.
+// NEXUS AI - Email Service
+// Sends REAL emails via SMTP (Gmail app password) using nodemailer.
+// Also stores every email in the EmailLog table (Mailbox UI) regardless of SMTP success.
+// If SMTP fails, the email is still logged so the team can see what would have been sent.
 
+import nodemailer from "nodemailer";
 import { db } from "./db";
 
 function baseUrl(): string {
-  // The preview is served from the gateway; use a relative URL so it works
-  // in both the sandbox and the user's preview panel.
   return "";
 }
 
@@ -20,7 +19,10 @@ export interface SendArgs {
   type: "INVITATION" | "REMINDER" | "TASK_ASSIGNED";
 }
 
-export async function sendEmail(args: SendArgs): Promise<void> {
+/**
+ * Store the email in the EmailLog table (always — for the Mailbox UI).
+ */
+async function logEmail(args: SendArgs): Promise<void> {
   await db.emailLog.create({
     data: {
       projectId: args.projectId,
@@ -31,6 +33,85 @@ export async function sendEmail(args: SendArgs): Promise<void> {
       type: args.type,
     },
   });
+}
+
+/**
+ * Get an SMTP transporter for the project's leader credentials.
+ * Returns null if no SMTP password is configured (mock mode).
+ */
+async function getTransporter(
+  projectId: string
+): Promise<nodemailer.Transporter | null> {
+  const project = await db.project.findUnique({
+    where: { id: projectId },
+    select: { leaderEmail: true, leaderSmtpPassword: true },
+  });
+  if (!project || !project.leaderEmail || !project.leaderSmtpPassword) {
+    return null;
+  }
+
+  // Detect host by email domain. Default to Gmail.
+  const domain = project.leaderEmail.split("@")[1]?.toLowerCase() || "";
+  let host = "smtp.gmail.com";
+  let port = 587;
+  if (domain.includes("outlook") || domain.includes("hotmail") || domain.includes("live")) {
+    host = "smtp-mail.outlook.com";
+    port = 587;
+  } else if (domain.includes("yahoo")) {
+    host = "smtp.mail.yahoo.com";
+    port = 587;
+  } else if (domain.includes("zoho")) {
+    host = "smtp.zoho.com";
+    port = 587;
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user: project.leaderEmail,
+      pass: project.leaderSmtpPassword,
+    },
+  });
+}
+
+/**
+ * Send an email via SMTP. If SMTP is not configured or fails, the email is
+ * still logged to the EmailLog table (Mailbox UI) so the flow is unaffected.
+ */
+export async function sendEmail(args: SendArgs): Promise<void> {
+  // Always log first
+  await logEmail(args);
+
+  // Try real SMTP
+  try {
+    const transporter = await getTransporter(args.projectId);
+    if (!transporter) {
+      console.log(`  [EMAIL] No SMTP configured — logged to Mailbox only: ${args.toEmail}`);
+      return;
+    }
+
+    const project = await db.project.findUnique({
+      where: { id: args.projectId },
+      select: { leaderEmail: true, leaderName: true, topic: true },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"${project?.leaderName || "NEXUS AI"}" <${project?.leaderEmail}>`,
+      to: `${args.toName} <${args.toEmail}>`,
+      subject: args.subject,
+      text: args.body,
+    });
+
+    console.log(`  [EMAIL] SENT via SMTP to ${args.toEmail} — messageId: ${info.messageId}`);
+  } catch (err) {
+    // SMTP failed — but email is already logged. Don't break the flow.
+    console.error(
+      `  [EMAIL] SMTP send FAILED to ${args.toEmail}:`,
+      err instanceof Error ? err.message : "unknown"
+    );
+  }
 }
 
 export async function sendInvitationEmails(
@@ -53,8 +134,6 @@ ${leaderName} da moi ban tham gia du an "${topic}" tren NEXUS AI - Multi-Agent A
 
 Nhan vao link duoi day de truy cap khong gian lam viec:
 ${link}
-
-(Luu y: Day la email mo phong trong moi truong sandbox. Trong thuc te, link se duoc gui qua SMTP.)
 
 Tran trong,
 NEXUS AI`;

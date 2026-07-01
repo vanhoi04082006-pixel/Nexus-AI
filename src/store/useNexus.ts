@@ -97,6 +97,7 @@ interface NexusState {
     };
     leaderName: string;
     leaderEmail: string;
+    leaderSmtpPassword: string;
     members: MemberInput[];
   };
 
@@ -163,6 +164,7 @@ const defaultInput = {
   },
   leaderName: "",
   leaderEmail: "",
+  leaderSmtpPassword: "",
   members: [
     { name: "", email: "", strengths: "", weaknesses: "" },
     { name: "", email: "", strengths: "", weaknesses: "" },

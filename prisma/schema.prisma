@@ -20,6 +20,7 @@ model Project {
   leaderName  String
   leaderEmail String   @default("")
   leaderToken String   @default(cuid()) // leader session token
+  leaderSmtpPassword String? // Gmail app password (16 chars) for sending emails via SMTP
   // GitHub OAuth integration
   githubToken     String?  // OAuth access token (gho_...)
   githubUsername  String?  // GitHub username

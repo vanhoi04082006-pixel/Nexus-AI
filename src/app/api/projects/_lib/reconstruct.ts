@@ -57,6 +57,7 @@ export async function reconstructInput(
     })),
     leaderName: project.leaderName,
     leaderEmail: project.leaderEmail,
+    leaderSmtpPassword: project.leaderSmtpPassword || undefined,
   };
 }
 

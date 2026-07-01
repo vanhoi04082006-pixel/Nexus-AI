@@ -86,6 +86,14 @@ export function InputView() {
         return false;
       }
     }
+    if (!input.leaderEmail.trim()) {
+      toast.error("Vui long nhap email nhom truong (de gui mail SMTP)");
+      return false;
+    }
+    if (!input.leaderSmtpPassword.trim()) {
+      toast.error("Vui long nhap App Password SMTP de gui email loi moi");
+      return false;
+    }
     return true;
   }
 
@@ -120,6 +128,7 @@ export function InputView() {
       members: validMembers,
       leaderName: input.leaderName.trim(),
       leaderEmail: input.leaderEmail.trim(),
+      leaderSmtpPassword: input.leaderSmtpPassword.trim(),
     };
 
     try {
@@ -288,17 +297,47 @@ export function InputView() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-2">
-                    Email nhom truong (nhan thong bao)
-                  </label>
-                  <Input
-                    type="email"
-                    value={input.leaderEmail}
-                    onChange={(e) => setInput({ leaderEmail: e.target.value })}
-                    placeholder="leader@example.com"
-                    className="bg-[#0c1322] border-border"
-                  />
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">
+                      Email nhom truong (GUI MAIL SMTP) *
+                    </label>
+                    <Input
+                      type="email"
+                      value={input.leaderEmail}
+                      onChange={(e) => setInput({ leaderEmail: e.target.value })}
+                      placeholder="nhomtruong@gmail.com"
+                      className="bg-[#0c1322] border-border"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Email nay se dung de GUI email loi moi den thanh vien qua SMTP.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">
+                      App Password (SMTP) *
+                    </label>
+                    <Input
+                      type="password"
+                      value={input.leaderSmtpPassword}
+                      onChange={(e) => setInput({ leaderSmtpPassword: e.target.value })}
+                      placeholder="16 ky tu app password"
+                      className="bg-[#0c1322] border-border font-mono"
+                      maxLength={32}
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Gmail App Password — lay tai{" "}
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        myaccount.google.com/apppasswords
+                      </a>{" "}
+                      (bat 2FA truoc).
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

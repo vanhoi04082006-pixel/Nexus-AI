@@ -38,6 +38,12 @@ export async function POST(req: Request) {
   if (!input.leaderName || !input.leaderName.trim()) {
     return Response.json({ error: "Leader name is required" }, { status: 400 });
   }
+  if (!input.leaderEmail || !input.leaderEmail.trim()) {
+    return Response.json({ error: "Leader email is required (for SMTP)" }, { status: 400 });
+  }
+  if (!input.leaderSmtpPassword || !input.leaderSmtpPassword.trim()) {
+    return Response.json({ error: "Leader SMTP app password is required" }, { status: 400 });
+  }
 
   // ===== Create project =====
   let project;
@@ -49,7 +55,8 @@ export async function POST(req: Request) {
         purpose: input.purpose || "",
         extraInfo: JSON.stringify(input.extraInfo || {}),
         leaderName: input.leaderName.trim(),
-        leaderEmail: input.leaderEmail || "",
+        leaderEmail: input.leaderEmail.trim(),
+        leaderSmtpPassword: input.leaderSmtpPassword.trim(),
         status: "ANALYZING",
       },
     });

@@ -20,6 +20,7 @@ export interface ProjectInput {
   members: MemberInput[];
   leaderName: string;
   leaderEmail: string;
+  leaderSmtpPassword?: string; // Gmail app password for SMTP
 }
 
 export type SectionType =
