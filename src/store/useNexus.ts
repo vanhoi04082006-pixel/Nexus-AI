@@ -80,7 +80,7 @@ export interface AgentProgress {
 =========================================================== */
 interface NexusState {
   // routing
-  view: "input" | "workspace";
+  view: "input" | "workspace" | "home";
   projectId: string | null;
   token: string | null;
   access: AccessInfo | null;
@@ -123,7 +123,7 @@ interface NexusState {
   refineSectionDone: Record<string, boolean>;
 
   // actions
-  setView: (v: "input" | "workspace") => void;
+  setView: (v: "input" | "workspace" | "home") => void;
   setRoute: (projectId: string | null, token: string | null) => void;
   setInput: (patch: Partial<NexusState["input"]>) => void;
   setMember: (index: number, patch: Partial<MemberInput>) => void;
@@ -176,7 +176,7 @@ const defaultInput = {
 export const useNexus = create<NexusState>()(
   persist(
     (set) => ({
-  view: "input",
+  view: "home",
   projectId: null,
   token: null,
   access: null,

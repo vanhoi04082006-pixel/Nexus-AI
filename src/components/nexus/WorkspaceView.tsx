@@ -201,7 +201,9 @@ export function WorkspaceView() {
   }
 
   function handleLogout() {
-    window.location.href = "/";
+    setView("home");
+    setRoute(null, null);
+    window.history.pushState({}, "", "/");
   }
 
   if (loadingProject || !project || !result) {

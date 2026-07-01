@@ -241,6 +241,14 @@ export function InputView() {
             </div>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/20">Buoc 1/8 · Nhap Du Lieu</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => useNexus.getState().setView("home")}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            ← Lịch sử
+          </Button>
         </div>
       </header>
 

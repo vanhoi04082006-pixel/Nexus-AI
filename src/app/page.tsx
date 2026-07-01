@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useNexus } from "@/store/useNexus";
 import { toast } from "sonner";
 import { InputView } from "@/components/nexus/InputView";
 import { ProcessingOverlay } from "@/components/nexus/ProcessingOverlay";
 import { WorkspaceView } from "@/components/nexus/WorkspaceView";
+import { HomeView } from "@/components/nexus/HomeView";
 
 function NexusApp() {
   const params = useSearchParams();
-  const router = useRouter();
   const projectId = params.get("p");
   const token = params.get("token");
   const githubConnected = params.get("github_connected");
@@ -27,15 +27,15 @@ function NexusApp() {
       setView("workspace");
     } else {
       setRoute(null, null);
-      setView("input");
+      // Don't override "input" if user is filling the form
+      setView((prev) => (prev === "workspace" ? "home" : prev) as "input" | "workspace" | "home");
     }
-  }, [projectId, token, setRoute, setView]);
+  }, [projectId, token]);
 
   // Show toast when returning from GitHub OAuth
   useEffect(() => {
     if (githubConnected === "1") {
       toast.success("Da ket noi GitHub thanh cong! Ban co the push project len GitHub.");
-      // Clean the URL
       const url = new URL(window.location.href);
       url.searchParams.delete("github_connected");
       window.history.replaceState({}, "", url.toString());
@@ -57,7 +57,9 @@ function NexusApp() {
 
   return (
     <div className="min-h-screen flex flex-col nexus-grid-bg">
-      {view === "input" ? <InputView /> : <WorkspaceView />}
+      {view === "home" && <HomeView />}
+      {view === "input" && <InputView />}
+      {view === "workspace" && <WorkspaceView />}
       {pipelineRunning && <ProcessingOverlay />}
     </div>
   );

@@ -15,16 +15,15 @@ model Project {
   topic       String
   description String   @default("")
   purpose     String   @default("")
-  extraInfo   String   @default("{}") // JSON: requirements, specialReqs, techPrefs, langPrefs
-  status      String   @default("DRAFT") // DRAFT | ANALYZING | WORKSPACE | INITIALIZED
+  extraInfo   String   @default("{}")
+  status      String   @default("DRAFT")
   leaderName  String
   leaderEmail String   @default("")
-  leaderToken String   @default(cuid()) // leader session token
-  leaderSmtpPassword String? // Gmail app password (16 chars) for sending emails via SMTP
-  // GitHub OAuth integration
-  githubToken     String?  // OAuth access token (gho_...)
-  githubUsername  String?  // GitHub username
-  githubRepoName  String?  // repo name that was pushed
+  leaderToken String   @default(cuid())
+  leaderSmtpPassword String?
+  githubToken     String?
+  githubUsername  String?
+  githubRepoName  String?
   githubPushedAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -35,6 +34,28 @@ model Project {
   tasks         Task[]
   emails        EmailLog[]
   editProposals EditProposal[]
+  context       ProjectContext?
+}
+
+/// Long-term memory cache for a project.
+/// After the first pipeline run, we store a compressed context here.
+/// On subsequent runs (retry/refine), AI loads this context instead of
+/// re-reading everything from scratch — saves tokens + time.
+model ProjectContext {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Compressed JSON: { topic, modules, techStack, actors, members, assignments, sprints }
+  /// This is the "long memory" — AI reads this instead of full results.
+  summary     String
+  /// Full results JSON (all 7 sections) — cached for instant reload
+  fullResults String?
+  /// Token count estimate of the last pipeline run
+  tokensUsed  Int      @default(0)
+  /// How many times this project has been analyzed
+  runCount    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Member {

@@ -1,8 +1,6 @@
-// NEXUS AI - POST /api/projects
-// Creates a new project, kicks off the multi-agent pipeline IN THE BACKGROUND,
-// and returns immediately with { projectId, leaderToken }.
-// The frontend polls GET /api/projects/[id]/progress for live status.
-// This replaces SSE streaming — polling is robust through proxies/gateways.
+// NEXUS AI - GET + POST /api/projects
+// GET: List all projects (Home page / project history)
+// POST: Create new project + run AI pipeline in background
 
 import { db } from "@/lib/db";
 import { runPipeline } from "@/lib/ai";
@@ -20,6 +18,55 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 600;
 
+// ===== GET: List all projects =====
+export async function GET() {
+  try {
+    const projects = await db.project.findMany({
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        topic: true,
+        description: true,
+        status: true,
+        leaderName: true,
+        leaderToken: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            members: true,
+            tasks: true,
+            analyses: true,
+          },
+        },
+      },
+      take: 50,
+    });
+
+    return Response.json({
+      projects: projects.map((p) => ({
+        id: p.id,
+        topic: p.topic,
+        description: p.description,
+        status: p.status,
+        leaderName: p.leaderName,
+        leaderToken: p.leaderToken,
+        memberCount: p._count.members,
+        taskCount: p._count.tasks,
+        hasAnalysis: p._count.analyses > 0,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    return Response.json(
+      { error: "Failed to fetch projects", details: err instanceof Error ? err.message : "unknown" },
+      { status: 500 }
+    );
+  }
+}
+
+// ===== POST: Create project + run pipeline =====
 export async function POST(req: Request) {
   let input: ProjectInput;
   try {
@@ -98,8 +145,6 @@ export async function POST(req: Request) {
   initProgress(project.id);
 
   // ===== Run pipeline IN THE BACKGROUND =====
-  // Use process.nextTick so the response returns first, then pipeline runs.
-  // .catch() ensures any crash is handled without killing the server.
   process.nextTick(() => {
     console.log(`>> [PIPELINE] Background pipeline started for project ${project.id} (${input.topic})`);
     runPipeline(input, (ev) => {
@@ -131,8 +176,44 @@ export async function POST(req: Request) {
               });
             }
           }
+
+          // ===== Save long-term memory (ProjectContext) =====
+          // Store compressed summary so AI can "remember" this project
+          const summary = {
+            topic: input.topic,
+            modules: result.analysis?.modules || [],
+            techStack: {
+              fe: result.analysis?.techStack?.frontend?.name,
+              be: result.analysis?.techStack?.backend?.name,
+              db: result.analysis?.techStack?.database?.name,
+            },
+            actors: (result.analysis?.actors || []).map((a) => a.name),
+            features: (result.analysis?.features || []).map((f) => f.name),
+            members: input.members.map((m) => ({ name: m.name, email: m.email })),
+            assignments: (result.hr?.assignments || []).map((a) => ({
+              name: a.name,
+              role: a.role,
+            })),
+            sprints: (result.sprint?.sprints || []).map((s) => s.name),
+          };
+
+          await db.projectContext.upsert({
+            where: { projectId: project.id },
+            create: {
+              projectId: project.id,
+              summary: JSON.stringify(summary),
+              fullResults: JSON.stringify(result).substring(0, 50000),
+              runCount: 1,
+            },
+            update: {
+              summary: JSON.stringify(summary),
+              fullResults: JSON.stringify(result).substring(0, 50000),
+              runCount: { increment: 1 },
+            },
+          });
+          console.log(`>> [PIPELINE] Long-term memory saved for project ${project.id}`);
         } catch (err) {
-          console.error(`>> [PIPELINE] Failed to save sections:`, err);
+          console.error(`>> [PIPELINE] Failed to save sections/context:`, err);
         }
 
         // Update project status
