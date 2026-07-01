@@ -35,15 +35,16 @@ export interface OpenRouterError {
    Multi-API key management
 =========================================================== */
 
-/** Collect all API keys from environment variables */
+/** Collect all API keys from environment variables — unlimited count */
 function getAllApiKeys(): string[] {
   const keys: string[] = [];
   // Primary key
   if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY);
-  // Additional keys: OPENROUTER_API_KEY_2, _3, _4, ...
-  for (let i = 2; i <= 10; i++) {
+  // Additional keys: OPENROUTER_API_KEY_2, _3, _4, ... up to _100 (unlimited)
+  for (let i = 2; i <= 100; i++) {
     const key = process.env[`OPENROUTER_API_KEY_${i}`];
     if (key) keys.push(key);
+    else break; // stop at first missing key (keys must be sequential)
   }
   return keys.filter((k) => k && k.startsWith("sk-or-"));
 }
