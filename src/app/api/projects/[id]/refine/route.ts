@@ -14,6 +14,8 @@ import {
   initRefine,
   updateRefineSection,
   finishRefine,
+  appendLog,
+  runWithRefineLog,
 } from "@/lib/pipeline-progress";
 import type { SectionType } from "@/lib/types";
 
@@ -52,55 +54,83 @@ export async function POST(
 
     // Initialize progress tracker
     initRefine(id);
+    appendLog({
+      level: "info",
+      agentId: "REFINE",
+      provider: "pipeline",
+      message: `▶ REFINE STARTED — ${body.editRequests.length} edit request(s)`,
+    });
 
-    // Run refine IN THE BACKGROUND
-    (async () => {
-      try {
-        console.log(`>> [REFINE] Background refine started for project ${id}`);
-        const refined = await refineSections(
-          input,
-          current,
-          body.editRequests,
-          body.chatDiscussion || "",
-          (section: SectionType, done: boolean) => {
-            updateRefineSection(id, section, done);
-          }
-        );
+    // Run refine IN THE BACKGROUND, wrapped in runWithRefineLog so all
+    // log calls land in refineMap.
+    runWithRefineLog(id, () => {
+      (async () => {
+        try {
+          console.log(`>> [REFINE] Background refine started for project ${id}`);
+          const refined = await refineSections(
+            input,
+            current,
+            body.editRequests,
+            body.chatDiscussion || "",
+            (section: SectionType, done: boolean) => {
+              updateRefineSection(id, section, done);
+            }
+          );
 
-        // Persist all refined sections (bump version)
-        for (const key of SECTION_KEYS) {
-          const content = (refined as unknown as Record<string, unknown>)[key];
-          if (content === undefined || content === null) continue;
-          const existing = await db.analysis.findUnique({
-            where: { projectId_type: { projectId: id, type: key } },
+          appendLog({
+            level: "info",
+            agentId: "REFINE",
+            provider: "pipeline",
+            message: `💾 Đang lưu ${SECTION_KEYS.length} section vào database...`,
           });
-          if (existing) {
-            await db.analysis.update({
-              where: { id: existing.id },
-              data: {
-                content: JSON.stringify(content),
-                version: { increment: 1 },
-              },
-            });
-          } else {
-            await db.analysis.create({
-              data: {
-                projectId: id,
-                type: key,
-                content: JSON.stringify(content),
-              },
-            });
-          }
-        }
 
-        finishRefine(id);
-        console.log(`>> [REFINE] Background refine COMPLETED for project ${id}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Refine failed";
-        console.error(`>> [REFINE] Background refine FAILED:`, msg);
-        finishRefine(id, msg);
-      }
-    })();
+          // Persist all refined sections (bump version)
+          for (const key of SECTION_KEYS) {
+            const content = (refined as unknown as Record<string, unknown>)[key];
+            if (content === undefined || content === null) continue;
+            const existing = await db.analysis.findUnique({
+              where: { projectId_type: { projectId: id, type: key } },
+            });
+            if (existing) {
+              await db.analysis.update({
+                where: { id: existing.id },
+                data: {
+                  content: JSON.stringify(content),
+                  version: { increment: 1 },
+                },
+              });
+            } else {
+              await db.analysis.create({
+                data: {
+                  projectId: id,
+                  type: key,
+                  content: JSON.stringify(content),
+                },
+              });
+            }
+          }
+
+          finishRefine(id);
+          console.log(`>> [REFINE] Background refine COMPLETED for project ${id}`);
+          appendLog({
+            level: "success",
+            agentId: "REFINE",
+            provider: "pipeline",
+            message: `✅ REFINE COMPLETED — tất cả section đã lưu (version bumped)`,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Refine failed";
+          console.error(`>> [REFINE] Background refine FAILED:`, msg);
+          appendLog({
+            level: "error",
+            agentId: "REFINE",
+            provider: "pipeline",
+            message: `❌ REFINE FAILED — ${msg}`,
+          });
+          finishRefine(id, msg);
+        }
+      })();
+    });
 
     return Response.json({ started: true });
   } catch (err) {

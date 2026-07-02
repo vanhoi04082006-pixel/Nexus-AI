@@ -121,6 +121,16 @@ interface NexusState {
   pipelineError: string | null;
   logs: LogEntry[];
 
+  // init (task generation)
+  initRunning: boolean;
+  initLogs: LogEntry[];
+  initError: string | null;
+
+  // refine
+  refineRunning: boolean;
+  refineLogs: LogEntry[];
+  refineError: string | null;
+
   // workspace
   project: ProjectView | null;
   result: ProjectResult | null;
@@ -150,6 +160,14 @@ interface NexusState {
   setPipelineError: (msg: string | null) => void;
   setLogs: (logs: LogEntry[]) => void;
   finishPipeline: (projectId: string, token: string) => void;
+
+  setInitRunning: (b: boolean) => void;
+  setInitLogs: (logs: LogEntry[]) => void;
+  setInitError: (msg: string | null) => void;
+
+  setRefineRunning: (b: boolean) => void;
+  setRefineLogs: (logs: LogEntry[]) => void;
+  setRefineError: (msg: string | null) => void;
 
   setAccess: (a: AccessInfo | null) => void;
   setProject: (p: ProjectView | null) => void;
@@ -202,6 +220,14 @@ export const useNexus = create<NexusState>()(
   agents: [],
   pipelineError: null,
   logs: [],
+
+  initRunning: false,
+  initLogs: [],
+  initError: null,
+
+  refineRunning: false,
+  refineLogs: [],
+  refineError: null,
 
   project: null,
   result: null,
@@ -269,6 +295,14 @@ export const useNexus = create<NexusState>()(
       token,
       view: "workspace",
     }),
+
+  setInitRunning: (b) => set({ initRunning: b }),
+  setInitLogs: (logs) => set({ initLogs: logs }),
+  setInitError: (msg) => set({ initError: msg }),
+
+  setRefineRunning: (b) => set({ refineRunning: b }),
+  setRefineLogs: (logs) => set({ refineLogs: logs }),
+  setRefineError: (msg) => set({ refineError: msg }),
 
   setAccess: (a) => set({ access: a }),
   setProject: (p) => set({ project: p }),

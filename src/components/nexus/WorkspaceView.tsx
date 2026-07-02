@@ -38,6 +38,7 @@ import { ChatTab } from "./tabs/ChatTab";
 import { MembersTab } from "./tabs/MembersTab";
 import { TasksTab } from "./tabs/TasksTab";
 import { MailboxTab } from "./tabs/MailboxTab";
+import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 
 interface NavItem {
   id: string;
@@ -81,6 +82,14 @@ export function WorkspaceView() {
   const setLoadingProject = useNexus((s) => s.setLoadingProject);
   const setView = useNexus((s) => s.setView);
   const setRoute = useNexus((s) => s.setRoute);
+
+  // Init overlay state (live log console during todolist generation)
+  const initRunning = useNexus((s) => s.initRunning);
+  const initLogs = useNexus((s) => s.initLogs);
+  const initError = useNexus((s) => s.initError);
+  const setInitRunning = useNexus((s) => s.setInitRunning);
+  const setInitLogs = useNexus((s) => s.setInitLogs);
+  const setInitError = useNexus((s) => s.setInitError);
 
   const [initializing, setInitializing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -133,6 +142,9 @@ export function WorkspaceView() {
   async function handleInitialize() {
     if (!projectId || !token) return;
     setInitializing(true);
+    setInitRunning(true);
+    setInitLogs([]);
+    setInitError(null);
     setInitProgress("Đang gửi yêu cầu sinh todolist...");
     try {
       const resp = await fetch(`/api/projects/${projectId}/initialize?token=${encodeURIComponent(token)}`, {
@@ -186,7 +198,16 @@ export function WorkspaceView() {
               }
               throw new Error(`HTTP ${pr.status}`);
             }
-            const prog = (await pr.json()) as { status: string; error?: string; taskCount?: number };
+            const prog = (await pr.json()) as {
+              status: string;
+              error?: string;
+              taskCount?: number;
+              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
+            };
+            // Sync live logs into store
+            if (prog.logs) {
+              setInitLogs(prog.logs);
+            }
             if (prog.status === "done") {
               setInitProgress(`Hoàn thành! ${prog.taskCount || ""} tasks đã tạo.`);
               resolve();
@@ -213,9 +234,12 @@ export function WorkspaceView() {
       await loadProject();
       setActiveTab("tasks");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loi khoi tao");
+      const msg = err instanceof Error ? err.message : "Loi khoi tao";
+      setInitError(msg);
+      toast.error(msg);
     } finally {
       setInitializing(false);
+      setInitRunning(false);
     }
   }
 
@@ -529,6 +553,16 @@ export function WorkspaceView() {
           </div>
         </div>
       </div>
+
+      {/* Live log console overlay during todolist generation */}
+      {initializing && (
+        <TaskProcessingOverlay
+          mode="init"
+          logs={initLogs}
+          error={initError}
+          progressMessage={initProgress}
+        />
+      )}
     </main>
   );
 }

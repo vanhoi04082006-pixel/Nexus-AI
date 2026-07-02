@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useReloadProject } from "../useReload";
+import { TaskProcessingOverlay } from "../TaskProcessingOverlay";
 import {
   Send,
   Bot,
@@ -33,11 +34,16 @@ export function ChatTab() {
   const reload = useReloadProject();
   const isLeader = access?.role === "leader";
 
+  // Refine overlay state (live log console)
+  const refineLogs = useNexus((s) => s.refineLogs);
+  const refineError = useNexus((s) => s.refineError);
+  const setRefineLogs = useNexus((s) => s.setRefineLogs);
+  const setRefineError = useNexus((s) => s.setRefineError);
+
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [aiThinking, setAiThinking] = useState(false);
   const [refining, setRefining] = useState(false);
-  const [refineLogs, setRefineLogs] = useState<{ stage: string; message: string; status: string }[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const socketRef = useRef<Socket | null>(null);
@@ -212,18 +218,14 @@ export function ChatTab() {
   async function refineWithAI() {
     setRefining(true);
     setRefineLogs([]);
-    const addLog = (stage: string, message: string, status: string) => {
-      setRefineLogs((prev) => [...prev, { stage, message, status }]);
-    };
+    setRefineError(null);
 
     try {
-      addLog("START", "Dang doc cuoc thao luan cua nhom...", "PROCESSING");
       const discussion = messages
         .slice(-30)
         .map((m) => `${m.authorName} (${m.authorRole}): ${m.message}`)
         .join("\n");
 
-      addLog("API", "Gui yeu cau AI Refine...", "PROCESSING");
       const resp = await fetch(`/api/projects/${projectId}/refine?token=${encodeURIComponent(token || "")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -234,36 +236,16 @@ export function ChatTab() {
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
 
-      addLog("AI", "AI dang phan tich y kien nhom...", "PROCESSING");
-
-      // Poll with progress messages
-      const refineMessages = [
-        "AI dang phan tich y kien nhom...",
-        "AI dang chinh sua phan Analysis...",
-        "AI dang chinh sua phan HR...",
-        "AI dang chinh sua phan Sprint...",
-        "AI dang chinh sua phan Design...",
-        "AI dang chinh sua phan UML...",
-        "AI dang chinh sua phan Docs...",
-        "AI dang chinh sua phan Git...",
-        "AI dang dong bo cac phan...",
-        "Dang luu ket qua vao database...",
-      ];
-
+      // Poll until refine completes; sync logs each tick
       await new Promise<void>((resolve, reject) => {
         let attempts = 0;
         const poll = async () => {
           attempts++;
-          const msgIdx = Math.min(Math.floor(attempts / 3), refineMessages.length - 1);
-          if (attempts > 1 && msgIdx < refineMessages.length) {
-            addLog("AI", refineMessages[msgIdx], "PROCESSING");
-          }
           try {
             const pr = await fetch(`/api/projects/${projectId}/refine/progress`);
             if (!pr.ok) {
               if (pr.status === 404) {
                 if (attempts > 3) {
-                  addLog("DONE", "AI Refine hoan thanh!", "SUCCESS");
                   resolve();
                   return;
                 }
@@ -272,12 +254,19 @@ export function ChatTab() {
               }
               throw new Error(`HTTP ${pr.status}`);
             }
-            const prog = (await pr.json()) as { status: string; error?: string };
+            const prog = (await pr.json()) as {
+              status: string;
+              error?: string;
+              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
+              sections?: Record<string, boolean>;
+            };
+            // Sync live logs
+            if (prog.logs) {
+              setRefineLogs(prog.logs);
+            }
             if (prog.status === "done") {
-              addLog("DONE", "AI Refine hoan thanh! Tat ca phan da duoc dong bo.", "SUCCESS");
               resolve();
             } else if (prog.status === "error") {
-              addLog("ERROR", prog.error || "Refine that bai", "FAILED");
               reject(new Error(prog.error || "Refine that bai"));
             } else {
               setTimeout(poll, 2500);
@@ -286,7 +275,6 @@ export function ChatTab() {
             if (attempts < 10) {
               setTimeout(poll, 3000);
             } else {
-              addLog("ERROR", "Khong ket noi duoc server", "FAILED");
               reject(err instanceof Error ? err : new Error("Loi poll"));
             }
           }
@@ -294,12 +282,12 @@ export function ChatTab() {
         setTimeout(poll, 1500);
       });
 
-      addLog("RELOAD", "Dang tai lai du lieu...", "PROCESSING");
       await reload();
       toast.success("AI da dong bo lai tat ca phan dua tren cuoc thao luan!");
     } catch (err) {
-      addLog("ERROR", err instanceof Error ? err.message : "Loi AI refine", "FAILED");
-      toast.error(err instanceof Error ? err.message : "Loi AI refine");
+      const msg = err instanceof Error ? err.message : "Loi AI refine";
+      setRefineError(msg);
+      toast.error(msg);
     } finally {
       setRefining(false);
     }
@@ -371,27 +359,53 @@ export function ChatTab() {
         </div>
       )}
 
-      {/* Refine progress console */}
+      {/* Refine progress console (inline mini view) */}
       {refining && refineLogs.length > 0 && (
         <Card className="bg-[#060b14] border-border">
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
             <Terminal className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-mono text-muted-foreground">AI Refine Console</span>
+            <span className="ml-auto text-[10px] font-mono text-muted-foreground/70">
+              {refineLogs.length} line(s)
+            </span>
           </div>
           <div className="p-4 space-y-1.5 max-h-48 overflow-y-auto nexus-scroll font-mono text-[11px]">
-            {refineLogs.map((log, i) => (
-              <div key={i} className="flex items-start gap-2">
-                {log.status === "PROCESSING" && <span className="text-amber-400 nexus-pulse">{"\u25CF"}</span>}
-                {log.status === "SUCCESS" && <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0 mt-0.5" />}
-                {log.status === "FAILED" && <span className="text-destructive">{"\u2716"}</span>}
-                <span className="text-muted-foreground">[{log.stage}]</span>
-                <span className={log.status === "FAILED" ? "text-destructive" : log.status === "SUCCESS" ? "text-emerald-400" : "text-foreground/80"}>
+            {refineLogs.slice(-15).map((log) => (
+              <div key={log.id} className="flex items-start gap-2">
+                {log.level === "success" && <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0 mt-0.5" />}
+                {log.level === "error" && <span className="text-destructive">{"\u2716"}</span>}
+                {log.level === "warn" && <span className="text-amber-400">{"\u26A0"}</span>}
+                {log.level === "info" && <span className="text-slate-400">{"\u2022"}</span>}
+                <span className="text-muted-foreground/80 text-[10px]">
+                  {new Date(log.ts).toLocaleTimeString("en-GB", { hour12: false })}
+                </span>
+                {log.model && (
+                  <span className="px-1 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30 text-[9px] font-bold">
+                    {log.model.length > 24 ? log.model.substring(0, 22) + "…" : log.model}
+                  </span>
+                )}
+                <span className={
+                  log.level === "error" ? "text-destructive" :
+                  log.level === "success" ? "text-emerald-400" :
+                  log.level === "warn" ? "text-amber-400" :
+                  "text-foreground/80"
+                }>
                   {log.message}
                 </span>
               </div>
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Full-screen overlay during refine — same UX as init */}
+      {refining && (
+        <TaskProcessingOverlay
+          mode="refine"
+          logs={refineLogs}
+          error={refineError}
+          progressMessage="AI đang đọc chat + edit requests để re-generate tất cả sections"
+        />
       )}
 
       {/* Messages */}

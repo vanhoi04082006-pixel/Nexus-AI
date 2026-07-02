@@ -42,31 +42,24 @@ export interface PipelineProgress {
   finishedAt?: number;
 }
 
-// AsyncLocalStorage carries the projectId through the entire async pipeline
-// (including Promise.all parallel branches) so deep callees (openrouter.ts,
-// ai.ts) can append log lines without explicit parameter passing.
-const projectIdStorage = new AsyncLocalStorage<string>();
+// Three independent AsyncLocalStorage contexts — one per background process.
+// They can be nested (e.g. a refine run that internally calls the same
+// openrouter.ts code), and each call to `appendLog()` will route to the
+// innermost active context. This way openrouter.ts / ai.ts stay 100%
+// context-agnostic: they just call `appendLog()` and the right tracker
+// picks it up.
+const pipelineAls = new AsyncLocalStorage<string>();
+const initAls = new AsyncLocalStorage<string>();
+const refineAls = new AsyncLocalStorage<string>();
 
 let logSeq = 0;
 
-/**
- * Run a callback inside a pipeline log context. All `appendLog()` calls
- * made anywhere within `fn` (and its async descendants) will be attached
- * to `projectId`'s progress tracker.
- */
-export function runWithProjectLog<T>(projectId: string, fn: () => T): T {
-  return projectIdStorage.run(projectId, fn);
-}
-
-/**
- * Append a log entry to the current pipeline's progress tracker.
- * Safe to call from anywhere — if no pipeline context is active, this is a no-op.
- * Logs are capped at 500 entries (FIFO eviction) to bound memory.
- */
-export function appendLog(entry: Omit<LogEntry, "id" | "ts">): void {
-  const pid = projectIdStorage.getStore();
-  if (!pid) return; // not running inside a pipeline context
-  const p = progressMap.get(pid);
+function pushLog(
+  map: Map<string, { logs: LogEntry[] }>,
+  pid: string,
+  entry: Omit<LogEntry, "id" | "ts">
+): void {
+  const p = map.get(pid);
   if (!p) return;
   p.logs.push({
     ...entry,
@@ -76,8 +69,71 @@ export function appendLog(entry: Omit<LogEntry, "id" | "ts">): void {
   if (p.logs.length > 500) p.logs.shift();
 }
 
+/**
+ * Run a callback inside a pipeline log context. All `appendLog()` calls
+ * made anywhere within `fn` (and its async descendants) will be attached
+ * to `projectId`'s progress tracker.
+ */
+export function runWithProjectLog<T>(projectId: string, fn: () => T): T {
+  return pipelineAls.run(projectId, fn);
+}
+
+/**
+ * Run a callback inside an init (task-generation) log context.
+ */
+export function runWithInitLog<T>(projectId: string, fn: () => T): T {
+  return initAls.run(projectId, fn);
+}
+
+/**
+ * Run a callback inside a refine log context.
+ */
+export function runWithRefineLog<T>(projectId: string, fn: () => T): T {
+  return refineAls.run(projectId, fn);
+}
+
+/**
+ * Append a log entry to the innermost active log context.
+ * Tries refine → init → pipeline in order. Safe to call from anywhere —
+ * if no context is active, this is a no-op.
+ */
+export function appendLog(entry: Omit<LogEntry, "id" | "ts">): void {
+  // Refine is innermost-priority (refineSections can run inside a refine
+  // context and reuses callAndParse → openrouter.ts which calls appendLog).
+  const refinePid = refineAls.getStore();
+  if (refinePid) {
+    pushLog(refineMap as unknown as Map<string, { logs: LogEntry[] }>, refinePid, entry);
+    return;
+  }
+  const initPid = initAls.getStore();
+  if (initPid) {
+    pushLog(initMap as unknown as Map<string, { logs: LogEntry[] }>, initPid, entry);
+    return;
+  }
+  const pipePid = pipelineAls.getStore();
+  if (pipePid) {
+    pushLog(progressMap as unknown as Map<string, { logs: LogEntry[] }>, pipePid, entry);
+    return;
+  }
+  // No active context — silently drop.
+}
+
+// Global maps — stored on globalThis so they survive Next.js dev recompiles.
+// Without this, a route recompile would create a fresh module instance with
+// an empty map, losing all in-flight progress.
+type GlobalStore = {
+  progressMap?: Map<string, PipelineProgress>;
+  refineMap?: Map<string, RefineProgress>;
+  initMap?: Map<string, InitProgress>;
+  rateLimitedKeys?: Map<number, number>;
+  dsRateLimited?: Map<number, number>;
+  aiCache?: Map<string, { result: string; timestamp: number }>;
+};
+const g = globalThis as typeof globalThis & GlobalStore;
+
 // Global map — persists across requests within the same Node.js process.
-const progressMap = new Map<string, PipelineProgress>();
+const progressMap: Map<string, PipelineProgress> = g.progressMap ?? new Map<string, PipelineProgress>();
+g.progressMap = progressMap;
 
 export function initProgress(projectId: string): PipelineProgress {
   const p: PipelineProgress = {
@@ -152,18 +208,21 @@ export interface RefineProgress {
   projectId: string;
   status: "running" | "done" | "error";
   sections: Record<string, boolean>;
+  logs: LogEntry[];
   error?: string;
   startedAt: number;
   finishedAt?: number;
 }
 
-const refineMap = new Map<string, RefineProgress>();
+const refineMap: Map<string, RefineProgress> = g.refineMap ?? new Map<string, RefineProgress>();
+g.refineMap = refineMap;
 
 export function initRefine(projectId: string): RefineProgress {
   const p: RefineProgress = {
     projectId,
     status: "running",
     sections: {},
+    logs: [],
     startedAt: Date.now(),
   };
   refineMap.set(projectId, p);
@@ -197,18 +256,21 @@ export interface InitProgress {
   status: "running" | "done" | "error";
   message: string;
   taskCount?: number;
+  logs: LogEntry[];
   error?: string;
   startedAt: number;
   finishedAt?: number;
 }
 
-const initMap = new Map<string, InitProgress>();
+const initMap: Map<string, InitProgress> = g.initMap ?? new Map<string, InitProgress>();
+g.initMap = initMap;
 
 export function initInitialize(projectId: string): InitProgress {
   const p: InitProgress = {
     projectId,
     status: "running",
     message: "Dang sinh todolist...",
+    logs: [],
     startedAt: Date.now(),
   };
   initMap.set(projectId, p);

@@ -1167,8 +1167,57 @@ export async function refineSections(
         .join("\n")}`
     : "";
 
+  appendLog({
+    level: "info",
+    agentId: "REFINE",
+    provider: "pipeline",
+    message: `▶ AI REFINE STARTED — ${AGENTS.length} sections to re-generate`,
+  });
+  if (editRequests.length > 0) {
+    for (const e of editRequests) {
+      appendLog({
+        level: "info",
+        agentId: "REFINE",
+        provider: "pipeline",
+        message: `📝 Leader edit request [${e.section}]: ${e.change.substring(0, 120)}`,
+      });
+    }
+  }
+  if (chatDiscussion) {
+    appendLog({
+      level: "info",
+      agentId: "REFINE",
+      provider: "pipeline",
+      message: `💬 Chat discussion attached (${chatDiscussion.length} chars)`,
+    });
+  }
+
+  const sectionLabels: Record<string, string> = {
+    analysis: "Phân tích",
+    hr: "Nhân sự",
+    sprint: "Sprint",
+    design: "Thiết kế",
+    uml: "UML",
+    docs: "Tài liệu",
+    git: "Git",
+  };
+
   for (const ag of AGENTS) {
     onProgress?.(ag.key, false);
+    const label = sectionLabels[ag.key] || ag.key;
+    appendLog({
+      level: "info",
+      agentId: "REFINE",
+      provider: "pipeline",
+      message: `─────────────────────────────────────────────`,
+    });
+    appendLog({
+      level: "info",
+      agentId: "REFINE",
+      provider: "pipeline",
+      message: `🔧 [REFINE] ${label} (${ag.key}) → đang đọc nội dung hiện tại + yêu cầu chỉnh sửa...`,
+    });
+
     try {
       const sys =
         PROMPT_MAP[ag.key]() +
@@ -1179,12 +1228,47 @@ export async function refineSections(
       const res = await callAndParse(ag.models, sys, user, ag.temp);
       if (res && isValidSchema(res.data, ag.key)) {
         (refined as Record<string, unknown>)[ag.key] = res.data;
+        appendLog({
+          level: "success",
+          agentId: "REFINE",
+          provider: "pipeline",
+          model: res.model,
+          message: `✓ [REFINE] ${label} → đã chỉnh sửa xong (${res.model})`,
+        });
+      } else if (res) {
+        (refined as Record<string, unknown>)[ag.key] = res.data;
+        appendLog({
+          level: "warn",
+          agentId: "REFINE",
+          provider: "pipeline",
+          model: res.model,
+          message: `⚠ [REFINE] ${label} → schema không hợp lệ, vẫn lưu (${res.model})`,
+        });
+      } else {
+        appendLog({
+          level: "warn",
+          agentId: "REFINE",
+          provider: "fallback",
+          message: `▷ [REFINE] ${label} → giữ nguyên (tất cả model fail)`,
+        });
       }
-    } catch {
-      /* keep current */
+    } catch (e) {
+      appendLog({
+        level: "error",
+        agentId: "REFINE",
+        provider: "pipeline",
+        message: `✗ [REFINE] ${label} → lỗi: ${(e as Error).message?.substring(0, 100)}`,
+      });
     }
     onProgress?.(ag.key, true);
   }
+
+  appendLog({
+    level: "success",
+    agentId: "REFINE",
+    provider: "pipeline",
+    message: `✅ AI REFINE COMPLETED — tất cả section đã được đồng bộ`,
+  });
   return refined;
 }
 
@@ -1198,21 +1282,69 @@ export async function generateTasks(
 ): Promise<TaskItem[]> {
   onProgress?.(false);
   const base = buildCtx("analysis", result, input);
+  // Defensive: sections may be undefined if the project is still in ANALYZING state
+  const analysisStr = result.analysis ? JSON.stringify(result.analysis) : "{}";
+  const hrStr = result.hr ? JSON.stringify(result.hr) : "{}";
+  const sprintStr = result.sprint ? JSON.stringify(result.sprint) : "{}";
+  const designStr = result.design ? JSON.stringify(result.design) : "{}";
   const context = `${base}
 
 PHAN TICH DU AN:
-${JSON.stringify(result.analysis).substring(0, 2500)}
+${analysisStr.substring(0, 2500)}
 
 PHAN NHAN SU:
-${JSON.stringify(result.hr).substring(0, 1500)}
+${hrStr.substring(0, 1500)}
 
 SPRINT PLANNING:
-${JSON.stringify(result.sprint).substring(0, 2500)}
+${sprintStr.substring(0, 2500)}
 
 THIET KE HE THONG:
-${JSON.stringify(result.design).substring(0, 2500)}
+${designStr.substring(0, 2500)}
 
 Hay tao todolist chi tiet cho tung thanh vien.`;
+
+  appendLog({
+    level: "info",
+    agentId: "TASK",
+    provider: "pipeline",
+    message: `▶ TASK GENERATION STARTED — ${input.members.length} member(s)`,
+  });
+
+  // Log member role assignments so the user can see "sinh task cho A: chức năng X do A làm"
+  const assignments = result.hr?.assignments || [];
+  for (const m of input.members) {
+    const a = assignments.find((x) => x.name === m.name);
+    const role = a?.role || "Backend Developer";
+    const modules = a?.modules?.length ? a.modules.join(", ") : "(chưa gán module)";
+    appendLog({
+      level: "info",
+      agentId: "TASK",
+      provider: "pipeline",
+      message: `👤 ${m.name} → vai trò: ${role} · module: ${modules}`,
+    });
+  }
+  const features = result.analysis?.features || [];
+  if (features.length > 0) {
+    appendLog({
+      level: "info",
+      agentId: "TASK",
+      provider: "pipeline",
+      message: `📋 Đã đọc ${features.length} feature(s) + ${result.design?.apiEndpoints?.length || 0} API endpoint(s) để phân chia task`,
+    });
+  }
+
+  appendLog({
+    level: "info",
+    agentId: "TASK",
+    provider: "pipeline",
+    message: `─────────────────────────────────────────────`,
+  });
+  appendLog({
+    level: "info",
+    agentId: "TASK",
+    provider: "pipeline",
+    message: `🤖 [TASK GEN] Gọi AI sinh todolist SMART cho từng thành viên...`,
+  });
 
   try {
     const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25);
@@ -1221,6 +1353,30 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
       const data = res.data as { tasks?: TaskItem[] };
       if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
         console.log(`  [TASK GEN] Success: ${data.tasks.length} tasks from ${res.model}`);
+        appendLog({
+          level: "success",
+          agentId: "TASK",
+          provider: "pipeline",
+          model: res.model,
+          message: `✓ [TASK GEN] AI trả về ${data.tasks.length} task(s) (${res.model})`,
+        });
+        // Log per-member task breakdown so the user sees "sinh task cho A: chức năng X do A làm"
+        const byMember = new Map<string, string[]>();
+        for (const t of data.tasks) {
+          const name = t.assigneeName || "(unassigned)";
+          if (!byMember.has(name)) byMember.set(name, []);
+          byMember.get(name)!.push(t.title || "Untitled");
+        }
+        for (const [name, titles] of byMember) {
+          for (const title of titles) {
+            appendLog({
+              level: "success",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `✓ Sinh task cho ${name}: ${title}`,
+            });
+          }
+        }
         return data.tasks;
       }
       // AI returned data but no tasks array — try to extract from common patterns
@@ -1228,15 +1384,40 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
       for (const key of Object.keys(d)) {
         if (Array.isArray(d[key]) && d[key].length > 0) {
           console.log(`  [TASK GEN] Found tasks under key "${key}": ${d[key].length} items`);
+          appendLog({
+            level: "success",
+            agentId: "TASK",
+            provider: "pipeline",
+            model: res.model,
+            message: `✓ [TASK GEN] Tìm thấy ${d[key].length} task dưới key "${key}" (${res.model})`,
+          });
           return d[key] as TaskItem[];
         }
       }
       console.log(`  [TASK GEN] AI returned data but no tasks array. Keys:`, Object.keys(res.data));
+      appendLog({
+        level: "warn",
+        agentId: "TASK",
+        provider: "pipeline",
+        message: `⚠ [TASK GEN] AI trả về data nhưng không có tasks array. Keys: ${Object.keys(res.data).join(", ")}`,
+      });
     } else {
       console.log(`  [TASK GEN] callAndParse returned null — all models failed`);
+      appendLog({
+        level: "warn",
+        agentId: "TASK",
+        provider: "pipeline",
+        message: `⚠ [TASK GEN] Tất cả model thất bại — chuyển sang fallback tĩnh`,
+      });
     }
     // Fallback: generate diverse tasks for each member based on their role
     console.log(`  [TASK GEN] [WARNING] Using fallback — all AI models failed or returned invalid data`);
+    appendLog({
+      level: "warn",
+      agentId: "TASK",
+      provider: "fallback",
+      message: `▷ FALLBACK — sinh task tĩnh theo vai trò từng thành viên`,
+    });
     const today = new Date();
     const tasks: TaskItem[] = [];
     const fallbackTasksByRole: Record<string, { title: string; layer: string; targetFile: string; steps: string[]; hints: { snippet: string; note: string } }[]> = {
@@ -1269,6 +1450,13 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
       const role = assignment?.role || "Backend Developer";
       const roleTasks = fallbackTasksByRole[role] || fallbackTasksByRole["Backend Developer"];
 
+      appendLog({
+        level: "info",
+        agentId: "TASK",
+        provider: "fallback",
+        message: `👤 Sinh task cho ${m.name} (${role}) — ${roleTasks.length} task(s)`,
+      });
+
       for (const ft of roleTasks) {
         tasks.push({
           assigneeName: m.name,
@@ -1289,13 +1477,31 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
           hours: 8,
           priority: "P0",
         } as TaskItem);
+        appendLog({
+          level: "success",
+          agentId: "TASK",
+          provider: "fallback",
+          message: `  ✓ ${m.name}: ${ft.title}`,
+        });
       }
       console.log(`  [TASK GEN] [FALLBACK] Generated ${roleTasks.length} tasks for ${m.name} (${role})`);
     }
     console.log(`  [TASK GEN] [FALLBACK] Total: ${tasks.length} tasks for ${input.members.length} members`);
+    appendLog({
+      level: "success",
+      agentId: "TASK",
+      provider: "fallback",
+      message: `✅ FALLBACK COMPLETED — ${tasks.length} task(s) cho ${input.members.length} thành viên`,
+    });
     return tasks;
   } catch (err) {
     console.log(`  [TASK GEN] [CATCH] Error:`, err instanceof Error ? err.message : "unknown");
+    appendLog({
+      level: "error",
+      agentId: "TASK",
+      provider: "pipeline",
+      message: `✗ [TASK GEN] Error: ${err instanceof Error ? err.message : "unknown"} — fallback`,
+    });
     onProgress?.(true);
     // Re-use the same diverse fallback as above
     console.log(`  [TASK GEN] [CATCH] Generating diverse fallback tasks`);
@@ -1303,6 +1509,12 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
     const tasks: TaskItem[] = [];
     for (const m of input.members) {
       const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Backend Developer";
+      appendLog({
+        level: "info",
+        agentId: "TASK",
+        provider: "fallback",
+        message: `👤 Sinh task cho ${m.name} (${role}) — fallback`,
+      });
       tasks.push({
         assigneeName: m.name,
         title: `Thiet ke database schema cho ${input.topic}`,
@@ -1322,6 +1534,12 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
         hours: 8,
         priority: "P0",
       } as TaskItem);
+      appendLog({
+        level: "success",
+        agentId: "TASK",
+        provider: "fallback",
+        message: `  ✓ ${m.name}: Thiet ke database schema cho ${input.topic}`,
+      });
       tasks.push({
         assigneeName: m.name,
         title: `Xay dung API routes cho ${input.topic}`,
@@ -1341,8 +1559,20 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
         hours: 12,
         priority: "P1",
       } as TaskItem);
+      appendLog({
+        level: "success",
+        agentId: "TASK",
+        provider: "fallback",
+        message: `  ✓ ${m.name}: Xay dung API routes cho ${input.topic}`,
+      });
     }
     console.log(`  [TASK GEN] [CATCH] Generated ${tasks.length} fallback tasks`);
+    appendLog({
+      level: "success",
+      agentId: "TASK",
+      provider: "fallback",
+      message: `✅ FALLBACK COMPLETED — ${tasks.length} task(s) cho ${input.members.length} thành viên`,
+    });
     return tasks;
   }
 }

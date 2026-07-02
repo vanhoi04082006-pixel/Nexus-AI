@@ -13,6 +13,8 @@ import {
 import {
   initInitialize,
   finishInitialize,
+  appendLog,
+  runWithInitLog,
 } from "@/lib/pipeline-progress";
 import type { TaskItem } from "@/lib/types";
 
@@ -73,6 +75,12 @@ export async function POST(
     // Initialize progress tracker BEFORE starting background task
     // This ensures the progress endpoint returns "running" immediately
     initInitialize(id);
+    appendLog({
+      level: "info",
+      agentId: "TASK",
+      provider: "pipeline",
+      message: `▶ INIT STARTED — project: "${project.topic}" — ${input.members.length} member(s)`,
+    });
 
     // Small delay to ensure progress tracker is visible to polling
     await new Promise((r) => setTimeout(r, 100));
@@ -82,107 +90,140 @@ export async function POST(
       console.log(`>> [INIT] Background task generation started for project ${id}`);
       let savedCount = 0;
 
-      generateTasks(input, result, () => {
-        /* progress callback */
-      })
-        .then(async (tasks: TaskItem[]) => {
-          // ===== Persist tasks =====
-          const memberByName = new Map<string, string>();
-          for (const m of project.members) {
-            memberByName.set(m.name.toLowerCase(), m.id);
-          }
-
-          const tasksByMember = new Map<
-            string,
-            { member: { id: string; name: string; email: string; inviteToken: string }; tasks: { title: string; deadline: string | null }[] }
-          >();
-
-          for (const t of tasks) {
-            const matchedMemberId = t.assigneeName
-              ? memberByName.get(t.assigneeName.toLowerCase().trim()) || null
-              : null;
-
-            const responsibilities = parseArray(t.responsibilities).join("\n");
-            const codeConventions = parseArray(t.codeConventions).join("\n");
-            const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
-            const deadlineDate = parseDeadline(t.deadline);
-            const implementationSteps = parseArray((t as Record<string, unknown>).implementationSteps).join("\n");
-            const technicalHints = JSON.stringify((t as Record<string, unknown>).technicalHints || {});
-
-            const created = await db.task.create({
-              data: {
-                projectId: id,
-                memberId: matchedMemberId,
-                assigneeName: t.assigneeName || "",
-                title: t.title || "Untitled task",
-                description: t.description || "",
-                role: t.role || "",
-                responsibilities,
-                codeConventions,
-                dependencies: t.dependencies || "",
-                acceptanceCriteria,
-                deadline: deadlineDate,
-                sprintName: t.sprintName || "",
-                status: t.status || "todo",
-                hours: typeof t.hours === "number" ? t.hours : 8,
-                priority: t.priority || "P1",
-                layer: (t as Record<string, unknown>).layer as string || "BACKEND",
-                targetFile: (t as Record<string, unknown>).targetFile as string || "",
-                implementationSteps,
-                technicalHints,
-              },
+      // Wrap the entire generation in runWithInitLog so all log calls land in initMap
+      runWithInitLog(id, () => {
+        generateTasks(input, result, () => {
+          /* progress callback */
+        })
+          .then(async (tasks: TaskItem[]) => {
+            appendLog({
+              level: "info",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `─────────────────────────────────────────────`,
             });
-            savedCount++;
+            appendLog({
+              level: "info",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `💾 Đang lưu ${tasks.length} task vào database...`,
+            });
+            // ===== Persist tasks =====
+            const memberByName = new Map<string, string>();
+            for (const m of project.members) {
+              memberByName.set(m.name.toLowerCase(), m.id);
+            }
 
-          if (matchedMemberId) {
-            const member = project.members.find((m) => m.id === matchedMemberId);
-            if (member) {
-              if (!tasksByMember.has(member.id)) {
-                tasksByMember.set(member.id, {
-                  member: {
-                    id: member.id,
-                    name: member.name,
-                    email: member.email,
-                    inviteToken: member.inviteToken,
-                  },
-                  tasks: [],
+            const tasksByMember = new Map<
+              string,
+              { member: { id: string; name: string; email: string; inviteToken: string }; tasks: { title: string; deadline: string | null }[] }
+            >();
+
+            for (const t of tasks) {
+              const matchedMemberId = t.assigneeName
+                ? memberByName.get(t.assigneeName.toLowerCase().trim()) || null
+                : null;
+
+              const responsibilities = parseArray(t.responsibilities).join("\n");
+              const codeConventions = parseArray(t.codeConventions).join("\n");
+              const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
+              const deadlineDate = parseDeadline(t.deadline);
+              const implementationSteps = parseArray((t as Record<string, unknown>).implementationSteps).join("\n");
+              const technicalHints = JSON.stringify((t as Record<string, unknown>).technicalHints || {});
+
+              const created = await db.task.create({
+                data: {
+                  projectId: id,
+                  memberId: matchedMemberId,
+                  assigneeName: t.assigneeName || "",
+                  title: t.title || "Untitled task",
+                  description: t.description || "",
+                  role: t.role || "",
+                  responsibilities,
+                  codeConventions,
+                  dependencies: t.dependencies || "",
+                  acceptanceCriteria,
+                  deadline: deadlineDate,
+                  sprintName: t.sprintName || "",
+                  status: t.status || "todo",
+                  hours: typeof t.hours === "number" ? t.hours : 8,
+                  priority: t.priority || "P1",
+                  layer: (t as Record<string, unknown>).layer as string || "BACKEND",
+                  targetFile: (t as Record<string, unknown>).targetFile as string || "",
+                  implementationSteps,
+                  technicalHints,
+                },
+              });
+              savedCount++;
+
+            if (matchedMemberId) {
+              const member = project.members.find((m) => m.id === matchedMemberId);
+              if (member) {
+                if (!tasksByMember.has(member.id)) {
+                  tasksByMember.set(member.id, {
+                    member: {
+                      id: member.id,
+                      name: member.name,
+                      email: member.email,
+                      inviteToken: member.inviteToken,
+                    },
+                    tasks: [],
+                  });
+                }
+                tasksByMember.get(member.id)!.tasks.push({
+                  title: created.title,
+                  deadline: deadlineDate ? deadlineDate.toISOString().split("T")[0] : null,
                 });
               }
-              tasksByMember.get(member.id)!.tasks.push({
-                title: created.title,
-                deadline: deadlineDate ? deadlineDate.toISOString().split("T")[0] : null,
-              });
             }
           }
-        }
 
-          // ===== Send TASK_ASSIGNED emails =====
-          for (const [, group] of tasksByMember) {
+            appendLog({
+              level: "info",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `📧 Đang gửi ${tasksByMember.size} email thông báo task cho thành viên...`,
+            });
+            // ===== Send TASK_ASSIGNED emails =====
+            for (const [, group] of tasksByMember) {
+              try {
+                await sendTaskAssignedEmail(id, project.topic, group.member, group.tasks);
+              } catch {
+                /* non-fatal */
+              }
+            }
+
+            // ===== Update project status =====
             try {
-              await sendTaskAssignedEmail(id, project.topic, group.member, group.tasks);
+              await db.project.update({
+                where: { id },
+                data: { status: "INITIALIZED" },
+              });
             } catch {
               /* non-fatal */
             }
-          }
 
-          // ===== Update project status =====
-          try {
-            await db.project.update({
-              where: { id },
-              data: { status: "INITIALIZED" },
+            finishInitialize(id, savedCount);
+            console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
+            appendLog({
+              level: "success",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `✅ INIT COMPLETED — ${savedCount} task(s) đã lưu, email đã gửi`,
             });
-          } catch {
-            /* non-fatal */
-          }
-
-          finishInitialize(id, savedCount);
-          console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
-        })
-        .catch((err) => {
-          const msg = err instanceof Error ? err.message : "Task generation failed";
-          console.error(`>> [INIT] Background task generation FAILED:`, msg);
-          finishInitialize(id, undefined, msg);
-        });
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : "Task generation failed";
+            console.error(`>> [INIT] Background task generation FAILED:`, msg);
+            appendLog({
+              level: "error",
+              agentId: "TASK",
+              provider: "pipeline",
+              message: `❌ INIT FAILED — ${msg}`,
+            });
+            finishInitialize(id, undefined, msg);
+          });
+      });
     });
 
     return Response.json({ started: true });

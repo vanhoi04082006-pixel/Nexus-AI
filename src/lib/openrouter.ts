@@ -53,8 +53,15 @@ export function resetTokenTracking(): void {
   lastTokenUsage = null;
 }
 
-// ===== In-memory cache =====
-const aiCache = new Map<string, { result: string; timestamp: number }>();
+// ===== In-memory cache (stored on globalThis to survive dev recompiles) =====
+type GlobalCacheStore = {
+  aiCache?: Map<string, { result: string; timestamp: number }>;
+  rateLimitedKeys?: Map<number, number>;
+  dsRateLimited?: Map<number, number>;
+};
+const gc = globalThis as typeof globalThis & GlobalCacheStore;
+const aiCache: Map<string, { result: string; timestamp: number }> = gc.aiCache ?? new Map();
+gc.aiCache = aiCache;
 const CACHE_TTL = 3600000;
 
 function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
@@ -100,8 +107,9 @@ const DEEPSEEK_MODEL_MAP: Record<string, string> = {
   "deepseek/deepseek-r1:free": "deepseek-reasoner",
 };
 
-// Track rate-limited DeepSeek keys
-const dsRateLimited = new Map<number, number>();
+// Track rate-limited DeepSeek keys (globalThis to survive dev recompiles)
+const dsRateLimited: Map<number, number> = gc.dsRateLimited ?? new Map<number, number>();
+gc.dsRateLimited = dsRateLimited;
 
 function getAvailableDeepSeekKey(): number {
   const now = Date.now();
@@ -300,7 +308,8 @@ function getAllApiKeys(): string[] {
   return keys.filter((k) => k && k.startsWith("sk-or-"));
 }
 
-const rateLimitedKeys = new Map<number, number>();
+const rateLimitedKeys: Map<number, number> = gc.rateLimitedKeys ?? new Map<number, number>();
+gc.rateLimitedKeys = rateLimitedKeys;
 
 function getAvailableKeyIndex(): number {
   const keys = getAllApiKeys();
