@@ -60,7 +60,6 @@ function NexusApp() {
   }, [githubConnected, githubError]);
 
   // Warn on exit during AI work (pipeline, initialize, refine)
-  const pipelineRunning = useNexus((s) => s.pipelineRunning);
   useEffect(() => {
     if (!pipelineRunning) return;
     const handler = (e: BeforeUnloadEvent) => {
