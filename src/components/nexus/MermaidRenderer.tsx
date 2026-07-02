@@ -167,9 +167,10 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
 
   function downloadPNG() {
     if (!svg) return;
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
+    // Convert SVG to data URL (avoids tainted canvas from blob URL)
+    const svgDataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
       canvas.width = img.width * 2;
@@ -181,18 +182,18 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
       }
-      canvas.toBlob((pngBlob) => {
-        if (!pngBlob) return;
-        const pngUrl = URL.createObjectURL(pngBlob);
+      try {
+        const pngUrl = canvas.toDataURL("image/png");
         const a = document.createElement("a");
         a.href = pngUrl;
         a.download = `${id}-diagram.png`;
         a.click();
-        URL.revokeObjectURL(pngUrl);
-      });
-      URL.revokeObjectURL(url);
+      } catch {
+        // Fallback: just download SVG
+        downloadSVG();
+      }
     };
-    img.src = url;
+    img.src = svgDataUrl;
   }
 
   return (

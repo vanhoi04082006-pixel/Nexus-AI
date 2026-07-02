@@ -2,8 +2,6 @@
 // Redirects the user to GitHub's OAuth authorize page.
 // Query params: ?projectId=X&token=X (leader token, to verify access)
 
-import fs from "fs";
-import path from "path";
 import { resolveAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -34,23 +32,10 @@ export async function GET(req: Request) {
   // state = projectId|token so the callback knows which project to save the token to
   const state = `${projectId}|${token}`;
 
-  // Read current public URL (from .public-url file or env var)
-  // This ensures GitHub OAuth callback works through Cloudflare Tunnel
-  let appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "";
-  if (!appUrl || appUrl.includes("localhost")) {
-    try {
-      const urlPath = path.join(process.cwd(), ".public-url");
-      const fileContent = fs.readFileSync(urlPath, "utf-8").trim();
-      if (fileContent && fileContent.startsWith("http")) {
-        appUrl = fileContent;
-      }
-    } catch {
-      /* file not found */
-    }
-  }
-  if (!appUrl) appUrl = `http://localhost:${url.port || 3000}`;
-
-  const redirectUri = `${appUrl}/api/github/callback`;
+  // GitHub OAuth redirect_uri MUST match what's configured in the OAuth App.
+  // Leader runs server on their machine → always use localhost:3000.
+  // (Only leader does OAuth; members access via tunnel but don't need OAuth)
+  const redirectUri = `http://localhost:3000/api/github/callback`;
   const scope = "repo";
   const githubAuthUrl =
     `https://github.com/login/oauth/authorize` +

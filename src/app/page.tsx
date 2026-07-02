@@ -59,6 +59,19 @@ function NexusApp() {
     }
   }, [githubConnected, githubError]);
 
+  // Warn on exit during AI work (pipeline, initialize, refine)
+  const pipelineRunning = useNexus((s) => s.pipelineRunning);
+  useEffect(() => {
+    if (!pipelineRunning) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "AI dang lam viec. Ban co chac muon thoat?";
+      return e.returnValue;
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [pipelineRunning]);
+
   return (
     <div className="min-h-screen flex flex-col nexus-grid-bg">
       {view === "home" && <HomeView />}

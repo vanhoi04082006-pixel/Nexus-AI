@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,7 @@ function toArray(val: unknown): string[] {
 
 export function TasksTab() {
   const tasks = useNexus((s) => s.tasks);
+  const setTasks = useNexus((s) => s.setTasks);
   const access = useNexus((s) => s.access);
   const projectId = useNexus((s) => s.projectId);
   const token = useNexus((s) => s.token);
@@ -65,6 +66,36 @@ export function TasksTab() {
   const [showMyTasksOnly, setShowMyTasksOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Real-time polling: fetch tasks every 5s so leader sees member updates
+  useEffect(() => {
+    if (!projectId || !token) return;
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const resp = await fetch(`/api/projects/${projectId}/tasks?token=${encodeURIComponent(token)}`);
+        if (!resp.ok || !active) return;
+        const data = await resp.json();
+        if (data.tasks && active) {
+          // Only update if tasks actually changed (avoid unnecessary re-renders)
+          const newJson = JSON.stringify(data.tasks.map((t: { id: string; status: string }) => ({ id: t.id, status: t.status })));
+          const oldJson = JSON.stringify(tasks.map((t) => ({ id: t.id, status: t.status })));
+          if (newJson !== oldJson) {
+            setTasks(data.tasks);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const interval = setInterval(poll, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [projectId, token]);
+
+  // Need useEffect import
   if (tasks.length === 0) {
     return (
       <div className="text-center py-16">

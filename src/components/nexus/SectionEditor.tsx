@@ -92,7 +92,19 @@ export function SectionEditor({ section, title, content, onSaved }: SectionEdito
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
-      toast.success("Da gui de xuat. Nhom truong se xem xet.");
+      // Auto-post to chat so everyone sees the proposal
+      try {
+        await fetch(`/api/projects/${projectId}/chat?token=${encodeURIComponent(token || "")}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: `[De xuat chinh sua - ${title}]: ${proposalText.trim()}`,
+          }),
+        });
+      } catch {
+        /* non-fatal — proposal still saved */
+      }
+      toast.success("Da gui de xuat vao phong thao luan. Nhom truong se xem xet.");
       setProposalText("");
       setProposeOpen(false);
     } catch (err) {
