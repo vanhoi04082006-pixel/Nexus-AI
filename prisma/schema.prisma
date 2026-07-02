@@ -145,7 +145,7 @@ model ChatMessage {
   @@index([projectId])
 }
 
-// Detailed task in the todolist, generated after project initialization
+// Detailed task in the todolist — SMART model with technical hints
 model Task {
   id              String   @id @default(cuid())
   projectId       String
@@ -155,16 +155,21 @@ model Task {
   assigneeName    String   @default("")
   title           String
   description     String   @default("")
-  role            String   @default("") // e.g. "Backend Developer"
-  responsibilities String  @default("") // newline-separated list
-  codeConventions String   @default("") // e.g. "Function validateUser() must return boolean"
-  dependencies    String   @default("") // depends on which other tasks / members
+  role            String   @default("")
+  responsibilities String  @default("")
+  codeConventions String   @default("")
+  dependencies    String   @default("")
   acceptanceCriteria String @default("")
   deadline        DateTime?
   sprintName      String   @default("")
-  status          String   @default("todo") // todo | in_progress | review | done
+  status          String   @default("todo")
   hours           Int      @default(8)
-  priority        String   @default("P1") // P0 | P1 | P2
+  priority        String   @default("P1")
+  // New fields for Kanban + Developer-First model
+  layer           String   @default("BACKEND") // DATABASE | BACKEND | UI | CONFIG | TESTING
+  targetFile      String   @default("") // file/class/namespace cần can thiệp
+  implementationSteps String @default("[]") // JSON array of step strings
+  technicalHints  String   @default("{}") // JSON { snippet, note }
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

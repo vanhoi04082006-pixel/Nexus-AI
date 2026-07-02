@@ -67,11 +67,17 @@ export async function POST(
     if (!input) return Response.json({ error: "Project input not reconstructable" }, { status: 500 });
     const result = await reconstructResult(id);
 
-    // Initialize progress tracker
+    // Delete old tasks first (clean slate — fixes "stale tasks" issue)
+    await db.task.deleteMany({ where: { projectId: id } });
+
+    // Initialize progress tracker BEFORE starting background task
+    // This ensures the progress endpoint returns "running" immediately
     initInitialize(id);
 
-    // Run task generation IN THE BACKGROUND using process.nextTick
-    // (same pattern as POST /api/projects — more stable than async IIFE)
+    // Small delay to ensure progress tracker is visible to polling
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Run task generation IN THE BACKGROUND
     process.nextTick(() => {
       console.log(`>> [INIT] Background task generation started for project ${id}`);
       let savedCount = 0;
@@ -100,6 +106,8 @@ export async function POST(
             const codeConventions = parseArray(t.codeConventions).join("\n");
             const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
             const deadlineDate = parseDeadline(t.deadline);
+            const implementationSteps = parseArray((t as Record<string, unknown>).implementationSteps).join("\n");
+            const technicalHints = JSON.stringify((t as Record<string, unknown>).technicalHints || {});
 
             const created = await db.task.create({
               data: {
@@ -118,6 +126,10 @@ export async function POST(
                 status: t.status || "todo",
                 hours: typeof t.hours === "number" ? t.hours : 8,
                 priority: t.priority || "P1",
+                layer: (t as Record<string, unknown>).layer as string || "BACKEND",
+                targetFile: (t as Record<string, unknown>).targetFile as string || "",
+                implementationSteps,
+                technicalHints,
               },
             });
             savedCount++;

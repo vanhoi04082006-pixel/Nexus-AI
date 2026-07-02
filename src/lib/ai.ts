@@ -482,22 +482,42 @@ Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, doc
 
 const TASK_GEN_PROMPT = `Ban la Senior Project Manager & Tech Lead. Ban tao todolist CHI TIET cho tung thanh vien de ho co the bat dau code ngay ma khong can hoi them.
 Muc tieu: nguoi moi hoan toan khong biet gi cung hieu phai lam gi, vai tro gi, code nhu the nao de dong bo voi nguoi khac.
+
+NGUYEN TAC SINH TASK (SMART + ATOMIC):
+1. Moi task bat dau bang DONG TU HANH DONG (vd: "Thiet ke", "Viet", "Tao", "Cau hinh")
+2. NGUYEN TU HOA: 1 task = 1 cong vie cu the, khong the chia nho hon
+3. KHONG GIOI HAN so luong task - phan ra triet de theo layers: Database, Backend, Frontend, Testing, DevOps
+4. Moi thanh vien co 5-15 task (phan bo theo vai tro + kha nang)
+5. Task phai co BOI CANH file/ngu canh ro rang (vd: "Trong file src/api/users.ts")
+6. Task phai co GIAI MA KY THUAT (code snippets, SQL, config examples)
+7. Dependencies phai ro rang: task nao phai lam truoc, task nao phu thuoc task nao
+
 ${JSON_INSTRUCTION}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
-- "title" (string): ten cong vie cu the
-- "description" (string): mo ta chi tiet 2-3 cau, noi ro phai lam gi
-- "role" (string): vai tro trong task nay (vd "Backend Developer")
-- "responsibilities" (array string): danh sach trach nhiem cu the (it nhat 3)
-- "codeConventions" (array string): QUY UOC CODE ma nguoi nay phai tuan theo. VI DU: "Ham validateUser() phai tra ve boolean (true/false)", "API endpoint POST /api/login phai tra ve { success: boolean, token: string }", "Component UserCard phai nhan prop user: {id, name, email}". DAY LA PHAN QUAN TRONG NHAT de cac thanh vien dong bo code voi nhau.
-- "dependencies" (string): phu thuoc vao task/nguoi khac (vd "Can User model cua A moi lam duoc")
-- "acceptanceCriteria" (array string): tieu chi hoan thanh (it nhat 2)
-- "deadline" (string YYYY-MM-DD): han chot
+- "title" (string): ten task bat dau bang dong tu (vd: "Thiet ke Schema Prisma cho User")
+- "description" (string): mo ta chi tiet 3-5 cau. Ghi ro: muc tieu, file can sua, cach lam, Definition of Done.
+- "role" (string): vai tro (vd "Backend Developer")
+- "layer" (string): "DATABASE" | "BACKEND" | "UI" | "CONFIG" | "TESTING"
+- "targetFile" (string): file/namespace can can thiep (vd: "prisma/schema.prisma" hoac "src/components/UserList.tsx")
+- "responsibilities" (array string): danh sach trach nhiem chi tiet (it nhat 3)
+- "codeConventions" (array string): QUY UOC CODE + CODE SNIPPETS cu the
+- "implementationSteps" (array string): cac buoc lam cu the (it nhat 3). Vd: ["1. Tao User model trong Prisma", "2. Chay prisma migrate", "3. Viet unit test"]
+- "technicalHints" (object): { "snippet": "doan code mau cu the (SQL/Prisma/React/C#)", "note": "luu y ky thuat" }
+- "dependencies" (string): phu thuoc task nao truoc
+- "acceptanceCriteria" (array string): tieu chi hoan thanh (it nhat 3)
+- "deadline" (string YYYY-MM-DD): han chot - tinh tu hom nay, phan bo theo do kho
 - "sprintName" (string): "Sprint 1" hoac "Sprint 2"...
-- "hours" (number): so gio du kien
-- "priority" (string): "P0" | "P1" | "P2"
+- "hours" (number): so gio du kien (2-40h)
+- "priority" (string): "P0" (bat buoc) | "P1" (quan trong) | "P2" (nice-to-have)
 
-Dam bao: MOI thanh vien co it nhat 3-5 task. Cac task phai lien ket voi nhau (codeConventions ghi ro rang de A biet B can gi). Phan bo cong bang.`;
+DAM BAO:
+- Phan ra theo layers: Database, API Backend, Frontend UI, Testing, DevOps
+- Moi thanh vien co 5-15 task phu hop vai tro
+- codeConventions + technicalHints phai CO CODE SNIPPETS cu the (SQL, Prisma schema, API response, component props)
+- Dependencies lien ket ro rang giua cac task cua cac thanh vien khac nhau
+- Deadline phan bo theo do uu tien + do kho
+- technicalHints.snippet phai la code dung de copy-paste (SQL JOIN, Prisma model, React component, etc.)`;
 
 const PROMPT_MAP: Record<SectionType, () => string> = {
   analysis: analystPrompt,
