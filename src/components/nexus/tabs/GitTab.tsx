@@ -37,6 +37,7 @@ export function GitTab() {
   const r = (result?.git || {}) as Partial<GitData>;
 
   const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{ repoUrl?: string; prUrl?: string | null; fileCount?: number; branch?: string } | null>(null);
   const isLeader = access?.role === "leader";
   const githubConnected = project?.githubConnected;
   const githubUsername = project?.githubUsername;
@@ -64,13 +65,20 @@ export function GitTab() {
       const data = (await resp.json()) as {
         success?: boolean;
         repoUrl?: string;
+        prUrl?: string | null;
         fileCount?: number;
+        branch?: string;
         error?: string;
       };
       if (!resp.ok || !data.success) {
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
-      toast.success(`Da push ${data.fileCount} files len GitHub!`);
+      setPushResult({ repoUrl: data.repoUrl, prUrl: data.prUrl, fileCount: data.fileCount, branch: data.branch });
+      toast.success(
+        data.prUrl
+          ? `Da push ${data.fileCount} files + tao PR!`
+          : `Da push ${data.fileCount} files len GitHub!`
+      );
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Loi push GitHub");
@@ -150,6 +158,33 @@ export function GitTab() {
                     <Github className="w-3.5 h-3.5" /> Doi tai khoan
                   </Button>
                 </div>
+
+                {/* Push result with PR link */}
+                {pushResult && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-emerald-400 font-semibold">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Da push {pushResult.fileCount} files
+                      {pushResult.branch && (
+                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                          branch: {pushResult.branch}
+                        </Badge>
+                      )}
+                    </div>
+                    {pushResult.repoUrl && (
+                      <a href={pushResult.repoUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-primary hover:underline">
+                        <ExternalLink className="w-3 h-3" /> {pushResult.repoUrl}
+                      </a>
+                    )}
+                    {pushResult.prUrl && (
+                      <a href={pushResult.prUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-emerald-400 hover:underline font-semibold">
+                        <ExternalLink className="w-3 h-3" /> Pull Request da tao — Click de review & merge
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <p className="text-xs text-muted-foreground bg-secondary/30 border border-border rounded-lg p-3">
                   <strong className="text-foreground">NEXUS AI se tao repo va push cac files:</strong>
