@@ -2,76 +2,89 @@
 
 ### Multi-Agent Project Architect
 
-> Hệ thống AI đa tác tử (multi-agent) tự động phân tích dự án, thiết kế hệ thống, lập kế hoạch sprint, phân nhân sự, sinh todolist chi tiết và push code lên GitHub.
+> Hệ thống AI đa tác tử tự động phân tích dự án, thiết kế hệ thống, lập kế hoạch sprint, phân nhân sự, sinh todolist chi tiết (Kanban board), push code lên GitHub và gửi email mời thành viên.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8)
 ![Prisma](https://img.shields.io/badge/Prisma-6-2d3748)
+![DeepSeek](https://img.shields.io/badge/DeepSeek-V4-red)
 ![Bun](https://img.shields.io/badge/Bun-1-f472b6)
 
 ---
 
 ## 📖 NEXUS AI là gì?
 
-Nhập chủ đề dự án + danh sách thành viên → **8 AI Agent** tự động:
+Nhập chủ đề dự án + danh sách thành viên → **8 AI Agent** (DeepSeek V4 Pro/Flash + OpenRouter fallback) tự động:
 
-| Agent | Vai trò |
-|---|---|
-| 01 · Requirement Analyst | Phân tích chủ đề, tech stack, features, actors, modules |
-| 02 · HR Planner | Phân vai trò, workload, rủi ro |
-| 03 · Sprint Planner | Chia sprint, gán task, deadline, milestones |
-| 04 · System Architect | Thiết kế database, API, folder structure |
-| 05 · UML Generator | Vẽ 4 biểu đồ Mermaid (Use Case, Class, ERD, Sequence) |
-| 06 · Technical Writer | Viết README, Coding Convention, API Standard |
-| 07 · Git/DevOps | Git commands, branch strategy, issue template |
-| 08 · Quality Reviewer | Tổng hợp, đồng bộ, sửa lỗi 7 Agent trên |
+1. **Phân tích chủ đề** — tech stack, features, actors, modules
+2. **Phân nhân sự** — vai trò, workload, rủi ro
+3. **Lập Sprint** — chia sprint, gán task, deadline
+4. **Thiết kế hệ thống** — database schema, API endpoints, folder structure (tree format)
+5. **Vẽ UML** — Use Case, Class Diagram (interactive), ERD (interactive), Sequence
+6. **Viết tài liệu** — README, Coding Convention, API Standard (rendered markdown)
+7. **Git workflow** — git commands, branch strategy, issue template
+8. **Quality Review** — reviewer tổng hợp + đồng bộ
 
-Sau đó nhóm trưởng **khởi tạo dự án** → AI sinh **todolist chi tiết** cho từng thành viên (vai trò, trách nhiệm, quy ước code, deadline).
+Sau đó → **Kanban Todolist** (SMART tasks + code snippets + drag-drop) → **Push GitHub** (tạo repo + PR) → **Email mời thành viên**.
 
 ---
 
 ## ✨ Tính năng
 
-### 🧠 Multi-Agent AI Pipeline
-- 8 Agent chuyên biệt, mỗi Agent có danh sách model riêng + fallback
-- Dùng **OpenRouter** với nhiều model free (NVIDIA Nemotron, OpenAI GPT-OSS, Google Gemma, Cohere, Poolside)
-- **Multi-API key rotation** — tự chuyển key khi bị rate limit
-- JSON fixer string-aware (không phá URL `https://`)
-- Retry + exponential backoff
+### 🧠 Multi-Agent Pipeline (DeepSeek + OpenRouter)
+- **DeepSeek V4 Flash** — Agent phân tích, HR, Sprint (nhanh, rẻ)
+- **DeepSeek V4 Pro** — Agent kiến trúc, UML, Git, Task Gen (thông minh, coding)
+- **OpenRouter fallback** — 5+ API keys luân chuyển khi DeepSeek rate-limit
+- Parallel execution: Phase 2 (4 agents) chạy song song → giảm 40% thời gian
+- In-memory cache (1h TTL) — skip repeated API calls
+- Token usage tracking per agent per key
+
+### 📋 Kanban Board (Drag & Drop)
+- 4 cột: Cần Làm → Đang Làm → Cần Review → Hoàn Thành
+- Kéo thả task giữa các cột (dnd-kit)
+- Real-time polling 5s — nhóm trưởng thấy member cập nhật ngay
+- Task cards: layer, priority, target file, deadline, code snippet indicator
+- Task detail dialog: implementation steps, code conventions, technical hints (copy-paste), acceptance criteria
+- SMART tasks: động từ hành động, nguyên tử, bối cảnh file, gợi ý kỹ thuật
 
 ### 💬 Real-time Collaboration
 - Chat realtime (Socket.io + polling fallback)
-- AI Assistant tham gia chat, tổng hợp ý kiến
-- **AI Refine** — đọc chat + edits → sinh lại tất cả sections
-- Edit Proposals — thành viên đề xuất, nhóm trưởng duyệt
+- AI Assistant tham gia chat
+- **AI Refine** — đọc chat + edits → sinh lại tất cả sections (có live console log)
+- Edit proposals tự động post vào chat
 - Typing indicator
 
-### 📋 Todolist chi tiết
-- Mỗi thành viên 3-5 task với: vai trò, trách nhiệm, **quy ước code**, dependencies, deadline, tiêu chí hoàn thành
-- Progress tracking: todo → in_progress → review → done
-- Filter "Việc của tôi" cho thành viên
-- Rollback optimistic update khi lỗi
-
 ### 🔌 GitHub Integration
-- **OAuth** — không cần PAT, chỉ bấm "Connect GitHub"
-- **Push to GitHub** — tự tạo repo (private) + push tất cả files
+- **OAuth** — không cần PAT
+- **Push to GitHub** — tạo repo (private) + push 15+ files
+- **Pull Request** — tạo branch + PR với body markdown
 - Dùng GitHub REST API (không cần git CLI)
-- Repo name unique (append projectId)
 
 ### 📧 Email SMTP
-- Gửi email thật qua **Gmail App Password** (nodemailer)
-- SMTP verify trước khi gửi — log warning nếu auth fail
+- Gửi email thật qua Gmail App Password
+- SMTP verify trước khi gửi
 - Email lời mời, task assigned, deadline reminder
-- Mailbox UI xem tất cả email đã gửi
-- Link trong email tự động dùng URL tunnel
+- Mailbox UI xem tất cả email
 
 ### 🎨 UI/UX
 - Dark theme teal accent
-- Mermaid.js UML render + retry button
-- Responsive (mobile + desktop)
-- Zustand persist (save form across reloads)
-- Polling architecture (no 504 gateway timeout)
+- Mermaid.js UML + **React Flow interactive canvas** (Class + ERD kéo thả)
+- Kanban board (dnd-kit)
+- Rendered markdown docs (headings, code blocks, tables)
+- Zustand persist (form data across reloads)
+- beforeunload warning khi AI đang chạy
+
+### 🏠 Project History
+- Home page hiển thị tất cả dự án đã tạo
+- Click để mở lại workspace (data vẫn còn)
+- Xóa dự án (xác nhận "Delete")
+- Long-term memory (ProjectContext) — AI nhớ dự án
+
+### 🐳 Docker
+- Standalone Dockerfile (multi-stage build)
+- SQLite persistent volume
+- Healthcheck
 
 ---
 
@@ -79,14 +92,13 @@ Sau đó nhóm trưởng **khởi tạo dự án** → AI sinh **todolist chi ti
 
 ### Yêu cầu
 - [Bun](https://bun.sh) v1+
-- [Node.js](https://nodejs.org) v18+ (cho Prisma)
-- [OpenRouter API key](https://openrouter.ai/keys) (free)
+- [Node.js](https://nodejs.org) v18+
+- [DeepSeek API key](https://platform.deepseek.com/api_keys) (free credit)
+- [OpenRouter API key](https://openrouter.ai/keys) (free, fallback)
 - [GitHub OAuth App](https://github.com/settings/developers) (tùy chọn)
-- Gmail App Password (cho email SMTP)
+- Gmail App Password (cho email)
 
-### Cách 1: Chạy Local + Cloudflare Tunnel (FREE, không cần thẻ)
-
-**Windows:**
+### Windows
 ```cmd
 git clone https://github.com/vanhoi04082006-pixel/Nexus-AI.git
 cd Nexus-AI
@@ -95,7 +107,7 @@ copy .env.example .env
 scripts\run-local.bat
 ```
 
-**macOS / Linux:**
+### macOS / Linux
 ```bash
 git clone https://github.com/vanhoi04082006-pixel/Nexus-AI.git
 cd Nexus-AI
@@ -104,45 +116,31 @@ cp .env.example .env
 bash scripts/run-local.sh
 ```
 
-Script tự động: cài deps → setup DB → khởi động server → tạo URL public.
+Script tự động: cài deps → setup DB → khởi động server → tạo Cloudflare Tunnel URL.
 
 👉 Chi tiết: [LOCAL_RUN.md](LOCAL_RUN.md)
 
-### Cách 2: Chạy thủ công
-
-```bash
-bun install
-bun run db:push
-bun run dev          # http://localhost:3000
-```
-
-Chat service (tùy chọn, cho realtime WebSocket):
-```bash
-cd mini-services/chat-service
-bun install
-bun run dev          # port 3001
-```
-
 ---
 
-## ⚙️ Cấu hình Environment
-
-Tạo file `.env` từ `.env.example`:
+## ⚙️ Cấu hình `.env`
 
 ```env
-# Database (SQLite)
+# Database
 DATABASE_URL=file:./db/custom.db
 
-# OpenRouter — hỗ trợ nhiều key để tránh rate limit
-OPENROUTER_API_KEY=sk-or-v1-xxxxx
-OPENROUTER_API_KEY_2=sk-or-v1-xxxxx    # (tùy chọn)
-OPENROUTER_API_KEY_3=sk-or-v1-xxxxx    # (tùy chọn)
+# DeepSeek API (PRIORITY — nhanh, rẻ, thông minh)
+DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 
-# GitHub OAuth (tùy chọn)
+# OpenRouter API (FALLBACK — luân chuyển multi-key)
+OPENROUTER_API_KEY=sk-or-v1-xxxxx
+OPENROUTER_API_KEY_2=sk-or-v1-xxxxx
+OPENROUTER_API_KEY_3=sk-or-v1-xxxxx
+
+# GitHub OAuth
 GITHUB_CLIENT_ID=xxxxx
 GITHUB_CLIENT_SECRET=xxxxx
 
-# App URL (script tự cập nhật khi tunnel chạy)
+# App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 APP_URL=http://localhost:3000
 ```
@@ -155,29 +153,30 @@ APP_URL=http://localhost:3000
 - Nhập chủ đề + mô tả + mục đích
 - Nhập email + Gmail App Password (nhóm trưởng)
 - Thêm thành viên (tên + email + ưu/nhược điểm)
-- Bấm **"Khởi tạo Dự Án"** → 8 AI Agent chạy
+- Bấm **"Khởi tạo Dự Án"** → 8 AI Agent chạy (DeepSeek priority)
 
 ### 2. Workspace (7 tabs)
-- **Phân Tích Chủ Đề** — tech stack, features, actors, modules
-- **Phân Nhân Sự** — vai trò, workload, rủi ro
-- **Sprint Planning** — sprint timeline, tasks, milestones
-- **Thiết Kế Hệ Thống** — architecture, DB schema, API, folder
-- **UML Diagrams** — Use Case, Class, ERD, Sequence (Mermaid)
-- **Tài Liệu** — README, Coding Convention, API Standard
-- **Git & Repo** — git commands + GitHub OAuth + Push
+- **Phân Tích** — tech stack, features, actors, modules
+- **Nhân Sự** — vai trò, workload, rủi ro
+- **Sprint** — timeline, tasks, milestones (ngày hiện tại)
+- **Thiết Kế** — architecture, DB schema, API, folder tree
+- **UML** — Use Case + Class (interactive) + ERD (interactive) + Sequence
+- **Tài Liệu** — README, Convention, API Standard (rendered markdown)
+- **Git & Repo** — commands + GitHub OAuth + Push + PR
 
 ### 3. Thảo luận & Refine
 - Tab **Thảo Luận** — chat + AI Assistant
-- Nhóm trưởng bấm **"AI Refine"** → AI sinh lại tất cả sections
+- **AI Refine** — live console log, sinh lại tất cả sections
 
-### 4. Khởi tạo Todolist
-- Nhóm trưởng bấm **"Khởi tạo Dự Án"** (sidebar)
-- AI sinh todolist chi tiết cho từng thành viên
-- Email thông báo tự gửi
+### 4. Khởi tạo Todolist (Kanban)
+- Bấm **"Khởi tạo Dự Án"** (sidebar)
+- AI sinh SMART tasks: layer, targetFile, code snippets, dependencies
+- Kéo thả task giữa các cột
+- Click task → detail dialog với code snippet + Copy button
 
 ### 5. Push lên GitHub
-- Tab **Git & Repo** → **"Connect GitHub"** (OAuth)
-- Bấm **"Push to GitHub"** → tạo repo + push files
+- Tab **Git & Repo** → **"Connect GitHub"** → **"Push to GitHub"**
+- Tự tạo repo (private) + branch + Pull Request
 
 ---
 
@@ -186,44 +185,51 @@ APP_URL=http://localhost:3000
 ```
 Nexus-AI/
 ├── prisma/
-│   └── schema.prisma              # Database schema (SQLite)
+│   └── schema.prisma              # DB schema (Project, Member, Task, TokenLog...)
 ├── src/
 │   ├── app/
-│   │   ├── api/                   # API routes
-│   │   │   ├── projects/          # Project CRUD + pipeline
-│   │   │   ├── github/            # OAuth + push
-│   │   │   └── config/            # Public URL config
-│   │   ├── layout.tsx
-│   │   └── page.tsx               # Main page (router)
+│   │   ├── api/                   # API routes (projects, github, chat, tasks)
+│   │   ├── layout.tsx             # Root layout (Mermaid CDN)
+│   │   └── page.tsx               # Main page (home/input/workspace router)
 │   ├── components/
-│   │   ├── nexus/
-│   │   │   ├── tabs/              # 11 workspace tabs
-│   │   │   ├── InputView.tsx      # Form nhập dự án
-│   │   │   ├── WorkspaceView.tsx  # Main workspace
-│   │   │   ├── ProcessingOverlay.tsx
-│   │   │   ├── MermaidRenderer.tsx
-│   │   │   └── SectionEditor.tsx
-│   │   └── ui/                    # shadcn/ui components
+│   │   └── nexus/
+│   │       ├── tabs/              # 11 workspace tabs
+│   │       │   ├── AnalysisTab.tsx
+│   │       │   ├── HRTab.tsx
+│   │       │   ├── SprintTab.tsx
+│   │       │   ├── DesignTab.tsx
+│   │       │   ├── UMLTab.tsx     # React Flow interactive + Mermaid
+│   │       │   ├── DocsTab.tsx    # Rendered markdown
+│   │       │   ├── GitTab.tsx     # OAuth + Push + PR
+│   │       │   ├── ChatTab.tsx    # Real-time + AI Refine console
+│   │       │   ├── MembersTab.tsx
+│   │       │   ├── TasksTab.tsx   # Kanban board (dnd-kit)
+│   │       │   └── MailboxTab.tsx
+│   │       ├── HomeView.tsx       # Project history
+│   │       ├── InputView.tsx      # Form nhập dự án
+│   │       ├── WorkspaceView.tsx  # Main workspace
+│   │       ├── ProcessingOverlay.tsx
+│   │       ├── MermaidRenderer.tsx
+│   │       └── SectionEditor.tsx
 │   ├── lib/
-│   │   ├── ai.ts                  # Multi-agent pipeline
-│   │   ├── openrouter.ts          # OpenRouter client + key rotation
-│   │   ├── github.ts              # GitHub push logic
-│   │   ├── email.ts               # SMTP email service
-│   │   ├── access.ts              # Access control
-│   │   ├── db.ts                  # Prisma client
-│   │   ├── types.ts               # TypeScript types
-│   │   └── pipeline-progress.ts   # Background progress tracker
+│   │   ├── ai.ts                  # 8-agent pipeline (parallel + fallback)
+│   │   ├── openrouter.ts          # DeepSeek + OpenRouter multi-provider
+│   │   ├── github.ts              # Push + PR creation
+│   │   ├── email.ts               # SMTP (nodemailer)
+│   │   ├── pipeline-progress.ts   # Background progress tracker
+│   │   └── types.ts
 │   └── store/
-│       └── useNexus.ts            # Zustand store (persisted)
+│       └── useNexus.ts            # Zustand (persisted)
 ├── mini-services/
-│   └── chat-service/              # Socket.io chat (port 3001, optional)
+│   └── chat-service/              # Socket.io (port 3001, optional)
 ├── scripts/
 │   ├── run-local.bat              # Windows: chạy + tunnel
-│   ├── run-local.ps1              # PowerShell alternative
-│   ├── run-local.sh               # macOS/Linux: chạy + tunnel
-│   └── push-to-github.js          # Push source code lên GitHub
-├── .env.example                   # Template environment variables
-├── LOCAL_RUN.md                   # Hướng dẫn chạy local chi tiết
+│   ├── run-local.ps1              # PowerShell
+│   ├── run-local.sh               # macOS/Linux
+│   └── parse-tunnel-url.ps1
+├── Dockerfile                     # Standalone Docker
+├── .env.example
+├── LOCAL_RUN.md
 └── package.json
 ```
 
@@ -236,57 +242,53 @@ Nexus-AI/
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui |
 | Backend | Next.js API Routes (Node.js runtime) |
 | Database | Prisma ORM + SQLite |
-| Real-time | Socket.io (optional) + HTTP polling fallback |
-| AI | OpenRouter (multi-key rotation, model fallback) |
-| Diagrams | Mermaid.js 11 (via CDN) |
+| AI Provider | **DeepSeek V4** (direct API) + OpenRouter (fallback) |
+| Real-time | Socket.io (optional) + HTTP polling |
+| Diagrams | Mermaid.js 11 + React Flow (interactive) |
+| Kanban | @hello-pangea/dnd |
 | State | Zustand (persisted) |
 | Email | Nodemailer (Gmail SMTP) |
 | Icons | Lucide React |
 
 ---
 
-## 🤖 8 AI Agents & Models
+## 🤖 8 AI Agents
 
-| # | Agent | Models (fallback order) |
-|---|---|---|
-| 01 | Requirement Analyst | NVIDIA Nemotron Ultra → Super → OpenAI GPT-OSS |
-| 02 | HR Planner | Nemotron Ultra → Google Gemma → GPT-OSS |
-| 03 | Sprint Planner | Nemotron Ultra → Super → GPT-OSS |
-| 04 | System Architect | Poolside Laguna M.1 → GPT-OSS → Cohere → Laguna XS.2 |
-| 05 | UML Generator | Poolside Laguna M.1 → GPT-OSS → Cohere → Laguna XS.2 |
-| 06 | Technical Writer | Google Gemma → GPT-OSS |
-| 07 | Git/DevOps | Poolside Laguna XS.2 → Cohere |
-| 08 | Quality Reviewer | Nemotron Ultra → Super → GPT-OSS → Gemma |
+| # | Agent | Model (priority) | Vai trò |
+|---|---|---|---|
+| 01 | Requirement Analyst | DeepSeek V4 Flash | Phân tích, tech stack, features |
+| 02 | HR Planner | DeepSeek V4 Flash | Vai trò, workload, rủi ro |
+| 03 | Sprint Planner | DeepSeek V4 Flash | Sprint, tasks, milestones |
+| 04 | System Architect | DeepSeek V4 Pro | DB schema, API, folder tree |
+| 05 | UML Generator | DeepSeek V4 Pro | 4 diagrams + relationships |
+| 06 | Technical Writer | DeepSeek V4 Flash | README, Convention, API Standard |
+| 07 | Git/DevOps | DeepSeek V4 Pro | Git commands, branch, issue template |
+| 08 | Quality Reviewer | DeepSeek V4 Pro | Tổng hợp, đồng bộ |
+| - | Task Generator | DeepSeek V4 Pro | SMART tasks + code snippets |
+| - | Chat Assistant | DeepSeek V4 Pro (thinking) | Hội thoại hướng dẫn code |
 
-**Key rotation:** Khi 1 API key bị 429/401/403, tự động chuyển sang key tiếp theo (`OPENROUTER_API_KEY` → `_2` → `_3`).
+**Fallback:** DeepSeek → OpenRouter (NVIDIA Nemotron, GPT-OSS, Gemma, Cohere) → SAFE → fallback data
 
 ---
 
 ## 🔐 Bảo mật
 
-- **GitHub OAuth** — không cần PAT, user authorize 1 lần
-- **Chat auth** — Socket.io verify token trước khi join room
-- Token lưu trong DB, chỉ nhóm trưởng có quyền đầy đủ
-- Thành viên chỉ xem + chat + đề xuất chỉnh sửa
-- GitHub repo tạo **private** mặc định
+- GitHub OAuth (không cần PAT)
+- Chat service verify token trước khi join
+- Token lưu DB, chỉ nhóm trưởng có quyền đầy đủ
+- GitHub repo tạo private mặc định
 - `leaderEmail`, `githubRepoName` chỉ hiện cho nhóm trưởng
-- Thu hồi quyền GitHub bất cứ lúc nào từ GitHub Settings
-
----
-
-## 📦 Deploy
-
-Xem hướng dẫn chạy local + Cloudflare Tunnel (FREE, không cần thẻ tín dụng): **[LOCAL_RUN.md](LOCAL_RUN.md)**
+- Thu hồi quyền GitHub bất cứ lúc nào
 
 ---
 
 ## 📝 License
 
-MIT License — tự do sử dụng, chỉnh sửa và phân phối.
+MIT License
 
 ---
 
 <p align="center">
   <strong>NEXUS AI</strong> — Multi-Agent Architect<br>
-  Powered by 8 AI Agents 🤖
+  Powered by DeepSeek V4 + 8 AI Agents 🤖
 </p>

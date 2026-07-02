@@ -1,28 +1,25 @@
 # 🏠 Chạy NEXUS AI Local + Cloudflare Tunnel
 
-> **FREE, không cần thẻ tín dụng, không cần deploy.** Chạy thẳng từ máy bạn, có URL public chia sẻ cho team.
+> FREE, không cần thẻ tín dụng, không cần deploy. Chạy từ máy bạn, có URL public.
 
 ## Cách hoạt động
 
 ```
-Máy bạn (Next.js + SQLite)  ←→  Cloudflare Tunnel  ←→  Internet
-     localhost:3000              (FREE, no card)        *.trycloudflare.com
+Máy bạn (Next.js + SQLite)
+  ↓ Cloudflare Tunnel (FREE)
+URL public: https://xxx.trycloudflare.com
+  ↓ Thành viên truy cập từ bất kỳ đâu
 ```
-
-- **Next.js** chạy trên máy bạn (port 3000)
-- **Cloudflare Tunnel** tạo URL public miễn phí
-- **Thành viên** truy cập URL đó từ bất kỳ đâu
-- **Chat** dùng polling (3 giây/lần) — không cần chat service riêng
-- **SQLite** lưu trên ổ cứng máy bạn — data không mất
 
 ---
 
-## 🚀 Cài đặt nhanh
+## 🚀 Cài đặt
 
 ### Yêu cầu
 - [Bun](https://bun.sh) v1+
 - [Node.js](https://nodejs.org) v18+
-- [OpenRouter API key](https://openrouter.ai/keys) (free)
+- [DeepSeek API key](https://platform.deepseek.com/api_keys)
+- [OpenRouter API key](https://openrouter.ai/keys) (fallback)
 
 ### Windows
 
@@ -32,21 +29,18 @@ cd Nexus-AI
 copy .env.example .env
 ```
 
-Mở file `.env`, điền:
+Mở `.env`, điền:
+
 ```env
+DEEPSEEK_API_KEY=sk-xxxxxxxx
 OPENROUTER_API_KEY=sk-or-v1-xxxxx
-GITHUB_CLIENT_ID=xxxxx           (tùy chọn)
-GITHUB_CLIENT_SECRET=xxxxx       (tùy chọn)
+GITHUB_CLIENT_ID=xxxxx
+GITHUB_CLIENT_SECRET=xxxxx
 ```
 
 Chạy:
 ```cmd
 scripts\run-local.bat
-```
-
-Hoặc PowerShell:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\run-local.ps1
 ```
 
 ### macOS / Linux
@@ -55,7 +49,6 @@ powershell -ExecutionPolicy Bypass -File scripts\run-local.ps1
 git clone https://github.com/vanhoi04082006-pixel/Nexus-AI.git
 cd Nexus-AI
 cp .env.example .env
-# Điền API keys vào .env
 bash scripts/run-local.sh
 ```
 
@@ -63,26 +56,21 @@ bash scripts/run-local.sh
 
 ## 📋 Script tự động làm gì?
 
-1. ✅ Kiểm tra `.env` đã có
-2. ✅ Kiểm tra Bun đã cài
-3. ✅ Install dependencies (`bun install`)
-4. ✅ Setup database (`bun run db:push`)
-5. ✅ Tải `cloudflared` (nếu chưa có)
-6. ✅ Khởi động Next.js server (port 3000)
-7. ✅ Tạo Cloudflare Tunnel → URL public
-8. ✅ Cập nhật `.public-url` → email link dùng URL đúng
+1. Kiểm tra `.env` + Bun
+2. Install dependencies (`bun install`)
+3. Setup database (`bun run db:push`)
+4. Tải `cloudflared` (nếu chưa có)
+5. Khởi động Next.js (port 3000)
+6. Tạo Cloudflare Tunnel → URL public
+7. Ghi URL vào `.public-url` → email dùng URL đúng
 
 ---
 
-## ⚠️ Nếu cloudflared tải thất bại (Windows)
+## ⚠️ Nếu cloudflared lỗi
 
-Tải thủ công:
+Tải thủ công: https://github.com/cloudflare/cloudflared/releases/latest
 
-1. Tải file: https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
-2. Đổi tên thành `cloudflared.exe`
-3. Đặt vào thư mục `E:\Nexus-AI\` (cùng cấp với `package.json`)
-
-Sau đó mở **2 terminal**:
+Mở 2 terminal:
 
 **Terminal 1:**
 ```cmd
@@ -94,68 +82,30 @@ bun run dev
 cloudflared.exe tunnel --url http://localhost:3000
 ```
 
-Tìm URL `https://xxx.trycloudflare.com` trong Terminal 2 → copy → dán vào file `.public-url` (ghi đè nội dung cũ).
+Copy URL `https://xxx.trycloudflare.com` → dán vào file `.public-url`.
 
 ---
 
-## ✉️ Email link hoạt động thế nào?
+## ✉️ Email link
 
-Khi Cloudflare Tunnel chạy, script ghi URL public vào file `.public-url`:
-
-```
-https://random-words-xxxx.trycloudflare.com
-```
-
-Khi AI gửi email lời mời cho thành viên, link trong email đọc từ file này:
+Khi tunnel chạy, script ghi URL vào `.public-url`. Email lời mời dùng URL này:
 
 ```
-https://random-words-xxxx.trycloudflare.com/?p=PROJECT_ID&token=MEMBER_TOKEN
+https://xxx.trycloudflare.com/?p=PROJECT_ID&token=MEMBER_TOKEN
 ```
 
-→ Thành viên click link → truy cập workspace từ bất kỳ thiết bị nào.
-
-**Nếu URL tunnel đổi** (chạy lại script), chỉ cần cập nhật `.public-url` — email mới sẽ dùng URL đúng.
+Thành viên click link → vào workspace.
 
 ---
 
-## 💡 Lưu ý quan trọng
+## 💡 Lưu ý
 
 | Vấn đề | Giải thích |
 |---|---|
-| **Máy phải bật** | URL chỉ hoạt động khi máy bạn đang chạy server |
-| **URL đổi mỗi lần** | Mỗi lần chạy script → URL `*.trycloudflare.com` khác nhau |
-| **Chat dùng polling** | 3 giây/lần, không cần chat service riêng |
-| **Data trên máy** | SQLite tại `db/custom.db` — tắt script data vẫn còn |
-
----
-
-## 🔄 URL cố định (tùy chọn)
-
-Muốn URL không đổi mỗi lần chạy:
-
-### Cloudflare named tunnel (free, cần account)
-
-1. Đăng ký [Cloudflare free](https://dash.cloudflare.com/sign-up)
-2. `cloudflared tunnel login`
-3. `cloudflared tunnel create nexus-ai`
-4. Cấu hình `~/.cloudflared/config.yml`:
-   ```yaml
-   tunnel: nexus-ai
-   credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
-   ingress:
-     - hostname: nexus-ai.yourdomain.com
-       service: http://localhost:3000
-     - service: http_status:404
-   ```
-5. `cloudflared tunnel run nexus-ai`
-
-### Hoặc dùng ngrok (free)
-
-```bash
-# Đăng ký https://ngrok.com
-ngrok config add-authtoken YOUR_TOKEN
-ngrok http 3000
-```
+| Máy phải bật | URL chỉ hoạt động khi máy đang chạy |
+| URL đổi mỗi lần | Mỗi lần chạy script → URL khác |
+| Chat dùng polling | 3 giây/lần, không cần chat service |
+| Data trên máy | SQLite tại `db/custom.db` |
 
 ---
 
@@ -163,46 +113,28 @@ ngrok http 3000
 
 ### `bun: command not found`
 ```bash
-# macOS / Linux
 curl -fsSL https://bun.sh/install | bash
-
-# Windows (PowerShell)
-irm bun.sh/install.ps1 | iex
 ```
 
-### `cloudflared: command not found`
-Tải thủ công từ https://github.com/cloudflare/cloudflared/releases/latest
-
-### `Port 3000 already in use`
-```cmd
-:: Windows
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
-```
-```bash
-# macOS / Linux
-lsof -i :3000
-kill -9 <PID>
-```
+### DeepSeek rate limit
+- Hệ thống tự chuyển sang OpenRouter fallback
+- Thêm `DEEPSEEK_API_KEY_2` nếu có nhiều key
 
 ### OpenRouter rate limit
-- Thêm `OPENROUTER_API_KEY_2`, `OPENROUTER_API_KEY_3` vào `.env`
-- Hệ thống tự chuyển key khi 1 key bị limit
+- Thêm `OPENROUTER_API_KEY_2`, `_3`... vào `.env`
+- Hệ thống tự luân chuyển
 
-### Email không gửi được
-- Kiểm tra Gmail App Password đúng (không phải password thường)
-- Bật 2FA trên Google account trước
-- Xem log: tìm dòng `[EMAIL]` trong terminal
+### Email không gửi
+- Kiểm tra Gmail App Password (không phải password thường)
+- Bật 2FA trên Google account
+- Xem log: `[EMAIL]` trong terminal
 
----
-
-## 📞 Hỗ trợ
-
-- Repo: https://github.com/vanhoi04082006-pixel/Nexus-AI
-- Issues: https://github.com/vanhoi04082006-pixel/Nexus-AI/issues
+### Mermaid render lỗi
+- Bấm nút "Thu lai" trên diagram
+- Hệ thống tự fix `\\n`, `PK FK`, `class` prefix
 
 ---
 
 <p align="center">
-  <strong>NEXUS AI</strong> — Chạy local, chia sẻ toàn cầu 🌐
+  <strong>NEXUS AI</strong> — Chạy local, chia sẻ toàn cầu
 </p>
