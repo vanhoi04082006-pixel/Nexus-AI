@@ -154,8 +154,49 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
     };
   }, [code, id, retryCount]);
 
+  function downloadSVG() {
+    if (!svg) return;
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${id}-diagram.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadPNG() {
+    if (!svg) return;
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * 2;
+      canvas.height = img.height * 2;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(2, 2);
+        ctx.fillStyle = "#0c1322";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+      }
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) return;
+        const pngUrl = URL.createObjectURL(pngBlob);
+        const a = document.createElement("a");
+        a.href = pngUrl;
+        a.download = `${id}-diagram.png`;
+        a.click();
+        URL.revokeObjectURL(pngUrl);
+      });
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+
   return (
-    <div className="mermaid-container">
+    <div className="mermaid-container flex-col">
       {loading && !error && !svg && (
         <div className="text-muted-foreground text-sm nexus-pulse">Dang render diagram...</div>
       )}
@@ -175,7 +216,25 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
           </pre>
         </>
       )}
-      {svg && !error && <div dangerouslySetInnerHTML={{ __html: svg }} />}
+      {svg && !error && (
+        <>
+          <div dangerouslySetInnerHTML={{ __html: svg }} />
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={downloadSVG}
+              className="px-2.5 py-1 text-[11px] border border-border text-muted-foreground rounded hover:border-primary hover:text-primary transition-colors"
+            >
+              Tai SVG
+            </button>
+            <button
+              onClick={downloadPNG}
+              className="px-2.5 py-1 text-[11px] border border-border text-muted-foreground rounded hover:border-primary hover:text-primary transition-colors"
+            >
+              Tai PNG
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -409,12 +409,14 @@ Tra object voi cac key BAT BUOC:
 }
 
 function sprintPrompt(): string {
-  return `Ban la Scrum Master. Chia du an thanh Sprint (moi Sprint 2 tuan), gan task cu the cho tung nguoi, dat deadline ro rang. Ngay bat dau tu hom nay.
+  const today = new Date().toISOString().split("T")[0];
+  return `Ban la Scrum Master. Chia du an thanh Sprint (moi Sprint 2 tuan), gan task cu the cho tung nguoi, dat deadline ro rang.
+QUAN TRONG: Ngay hom nay la ${today}. Sprint 1 bat dau tu ${today}. Moi sprint ke tiep bat dau ngay sau sprint truoc ket thuc.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
 - "totalSprints" (number): thuong 2-4
 - "sprintDuration" (string): "2 tuan"
-- "sprints" (array): moi phan tu { "name" (vd "Sprint 1"), "start" (YYYY-MM-DD), "end" (YYYY-MM-DD), "goals" (array string), "tasks" (array: moi { "task", "assignee", "hours", "status": "todo" }), "color" (vd "#00d4aa") }
+- "sprints" (array): moi phan tu { "name" (vd "Sprint 1"), "start" (YYYY-MM-DD, bat dau tu ${today}), "end" (YYYY-MM-DD, 14 ngay sau start), "goals" (array string), "tasks" (array: moi { "task", "assignee", "hours", "status": "todo" }), "color" (vd "#00d4aa") }
 - "milestones" (array): moi phan tu { "date" (YYYY-MM-DD), "event" }`;
 }
 
@@ -918,15 +920,52 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
     onProgress?.(true);
     if (res && res.data) {
       const data = res.data as { tasks?: TaskItem[] };
-      if (data.tasks && Array.isArray(data.tasks)) return data.tasks;
+      if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
+        console.log(`  [TASK GEN] Success: ${data.tasks.length} tasks from ${res.model}`);
+        return data.tasks;
+      }
+      // AI returned data but no tasks array — try to extract from common patterns
+      const d = res.data as Record<string, unknown>;
+      for (const key of Object.keys(d)) {
+        if (Array.isArray(d[key]) && d[key].length > 0) {
+          console.log(`  [TASK GEN] Found tasks under key "${key}": ${d[key].length} items`);
+          return d[key] as TaskItem[];
+        }
+      }
+      console.log(`  [TASK GEN] AI returned data but no tasks array. Keys:`, Object.keys(res.data));
+    } else {
+      console.log(`  [TASK GEN] callAndParse returned null — all models failed`);
     }
-    return [];
-  } catch {
+    // Fallback: generate basic tasks for each member
+    console.log(`  [TASK GEN] Using fallback tasks`);
+    const today = new Date();
+    const tasks: TaskItem[] = [];
+    for (const m of input.members) {
+      const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Developer";
+      tasks.push({
+        assigneeName: m.name,
+        title: "Setup moi truong phat trien",
+        description: "Cai dat va cau hinh moi truong phat trien theo tech stack.",
+        role,
+        responsibilities: ["Cai dat dependencies", "Cau hinh IDE", "Clone repository"],
+        codeConventions: ["Tuan thu coding convention trong tai lieu"],
+        dependencies: "Khong",
+        acceptanceCriteria: ["Co the chay project locally"],
+        deadline: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
+        sprintName: "Sprint 1",
+        status: "todo",
+        hours: 8,
+        priority: "P0",
+      });
+    }
+    return tasks;
+  } catch (err) {
+    console.log(`  [TASK GEN] Error:`, err instanceof Error ? err.message : "unknown");
     onProgress?.(true);
     const today = new Date();
     const tasks: TaskItem[] = [];
     for (const m of input.members) {
-      const role = result.hr.assignments.find((a) => a.name === m.name)?.role || "Developer";
+      const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Developer";
       tasks.push({
         assigneeName: m.name,
         title: "Setup moi truong phat trien",
