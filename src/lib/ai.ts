@@ -23,6 +23,11 @@ const MAX_DELAY = 30000;
 /* ===========================================================
    PRIMARY MODELS (safe fallbacks that are known to work)
 =========================================================== */
+// DeepSeek models (priority — cheaper + faster + smarter)
+const DS_FLASH = "deepseek/deepseek-chat:free"; // V4 Flash — fast, cheap, good for planning
+const DS_PRO = "deepseek/deepseek-r1:free"; // V4 Pro — flagship, best for coding/decomposition
+const DS_REASONER = "deepseek/deepseek-r1:free"; // Thinking mode for chat
+
 const SAFE_1 = "openai/gpt-oss-120b:free";
 const SAFE_2 = "cohere/north-mini-code:free";
 
@@ -48,6 +53,7 @@ const AGENTS: AgentDef[] = [
     required: true,
     temp: 0.2,
     models: [
+      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
       "openai/gpt-oss-120b:free",
@@ -61,6 +67,7 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.25,
     models: [
+      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "google/gemma-4-31b-it:free",
       SAFE_1,
@@ -73,6 +80,7 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.2,
     models: [
+      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
       SAFE_1,
@@ -85,10 +93,10 @@ const AGENTS: AgentDef[] = [
     required: true,
     temp: 0.15,
     models: [
+      DS_PRO,
       "poolside/laguna-m.1:free",
       "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
-      "poolside/laguna-xs.2:free",
       SAFE_1,
     ],
   },
@@ -99,10 +107,10 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.1,
     models: [
+      DS_PRO,
       "poolside/laguna-m.1:free",
       "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
-      "poolside/laguna-xs.2:free",
       SAFE_2,
     ],
   },
@@ -113,6 +121,7 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.35,
     models: [
+      DS_FLASH,
       "google/gemma-4-31b-it:free",
       "openai/gpt-oss-120b:free",
       SAFE_1,
@@ -125,6 +134,7 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.15,
     models: [
+      DS_PRO,
       "poolside/laguna-xs.2:free",
       "cohere/north-mini-code:free",
       SAFE_2,
@@ -133,6 +143,7 @@ const AGENTS: AgentDef[] = [
 ];
 
 const REVIEWER_MODELS = [
+  DS_PRO,
   "nvidia/nemotron-3-ultra-550b-a55b:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
   "openai/gpt-oss-120b:free",
@@ -140,6 +151,8 @@ const REVIEWER_MODELS = [
 ];
 
 const TASK_GEN_MODELS = [
+  DS_PRO,
+  DS_FLASH,
   "nvidia/nemotron-3-ultra-550b-a55b:free",
   "openai/gpt-oss-120b:free",
   "cohere/north-mini-code:free",
@@ -147,6 +160,8 @@ const TASK_GEN_MODELS = [
 ];
 
 const CHAT_MODELS = [
+  DS_REASONER,
+  DS_FLASH,
   "openai/gpt-oss-120b:free",
   "google/gemma-4-31b-it:free",
   SAFE_1,
@@ -1022,52 +1037,114 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
     } else {
       console.log(`  [TASK GEN] callAndParse returned null — all models failed`);
     }
-    // Fallback: generate basic tasks for each member
-    console.log(`  [TASK GEN] Using fallback tasks`);
+    // Fallback: generate diverse tasks for each member based on their role
+    console.log(`  [TASK GEN] [WARNING] Using fallback — all AI models failed or returned invalid data`);
     const today = new Date();
     const tasks: TaskItem[] = [];
+    const fallbackTasksByRole: Record<string, { title: string; layer: string; targetFile: string; steps: string[]; hints: { snippet: string; note: string } }[]> = {
+      "Frontend Developer": [
+        { title: "Tao project structure va cai dat dependencies", layer: "CONFIG", targetFile: "package.json", steps: ["1. Khoi tao project voi Vite/Next.js", "2. Cai dat Tailwind CSS + shadcn/ui", "3. Cau hinh ESLint + Prettier"], hints: { snippet: "npm create vite@latest my-app -- --template react-ts", note: "Dung TypeScript cho type safety" } },
+        { title: "Thiet ket layout chinh va routing", layer: "UI", targetFile: "src/App.tsx", steps: ["1. Tao Layout component voi Header/Sidebar/Footer", "2. Cau hinh React Router", "3. Tao trang Dashboard"], hints: { snippet: "<Layout><Routes><Route path='/' element={<Dashboard/>}/></Routes></Layout>", note: "Responsive voi Tailwind breakpoints" } },
+        { title: "Xay dung components UI co ban", layer: "UI", targetFile: "src/components/", steps: ["1. Tao Button, Input, Card components", "2. Tao DataTable component", "3. Tao Modal/Dialog"], hints: { snippet: "export function Button({children, variant}) { return <button className={cn(base, variants[variant])}>{children}</button> }", note: "Dung class-variance-authority cho variants" } },
+      ],
+      "Backend Developer": [
+        { title: "Thiet ke database schema va models", layer: "DATABASE", targetFile: "prisma/schema.prisma", steps: ["1. Dinh nghia cac Prisma models", "2. Set up relations giua cac bang", "3. Chay prisma migrate"], hints: { snippet: "model User { id String @id @default(cuid()) email String @unique createdAt DateTime @default(now()) }", note: "Dung cuid() cho ID" } },
+        { title: "Xay dung API routes CRUD", layer: "BACKEND", targetFile: "src/app/api/", steps: ["1. Tao route GET/POST cho moi resource", "2. Them validation voi Zod", "3. Them error handling"], hints: { snippet: "export async function GET(req: Request) { const users = await db.user.findMany(); return Response.json(users); }", note: "Luon return Response.json" } },
+        { title: "Implement authentication va authorization", layer: "BACKEND", targetFile: "src/lib/auth.ts", steps: ["1. Tao JWT token generation/verification", "2. Tao login/register API", "3. Tao middleware protect routes"], hints: { snippet: "const token = jwt.sign({userId}, secret, {expiresIn: '7d'})", note: "Store secret trong .env" } },
+      ],
+      "Database Engineer": [
+        { title: "Thiet ke va tao database schema", layer: "DATABASE", targetFile: "prisma/schema.prisma", steps: ["1. Phan tao cac entities", "2. Dinh nghia relations + indexes", "3. Chay migration"], hints: { snippet: "model Order { id String @id items OrderItem[] status String @default('pending') }", note: "Index cac column hay query" } },
+        { title: "Viet SQL queries va stored procedures", layer: "DATABASE", targetFile: "src/lib/queries.ts", steps: ["1. Viet complex JOIN queries", "2. Tao aggregation queries cho reports", "3. Optimize voi indexes"], hints: { snippet: "SELECT u.name, COUNT(o.id) FROM users u LEFT JOIN orders o ON o.userId = u.id GROUP BY u.id", note: "Dung EXPLAIN ANALYZE de optimize" } },
+      ],
+      "QA/Tester": [
+        { title: "Cai dat testing framework va viet unit tests", layer: "TESTING", targetFile: "tests/unit/", steps: ["1. Cai dat Vitest/Jest", "2. Viet unit tests cho services", "3. Viet tests cho API routes"], hints: { snippet: "test('should create user', async () => { const res = await POST(req); expect(res.status).toBe(201) })", note: "Mock database trong tests" } },
+        { title: "Viet integration tests va E2E tests", layer: "TESTING", targetFile: "tests/e2e/", steps: ["1. Cai dat Playwright", "2. Viet E2E test cho login flow", "3. Viet test cho CRUD operations"], hints: { snippet: "test('login flow', async ({page}) => { await page.goto('/login'); await page.fill('[name=email]', 'test@test.com') })", note: "Dung test database rieng" } },
+      ],
+      "DevOps": [
+        { title: "Cau hinh CI/CD pipeline", layer: "CONFIG", targetFile: ".github/workflows/ci.yml", steps: ["1. Tao GitHub Actions workflow", "2. Them build + test + lint steps", "3. Them auto deploy"], hints: { snippet: "name: CI\\non: [push]\\njobs:\\n  build:\\n    runs-on: ubuntu-latest\\n    steps:\\n      - uses: actions/checkout@v4", note: "Cache dependencies de speed up" } },
+        { title: "Cau hinh Docker va deployment", layer: "CONFIG", targetFile: "Dockerfile", steps: ["1. Tao Dockerfile multi-stage", "2. Tao docker-compose.yml", "3. Cau hinh environment variables"], hints: { snippet: "FROM node:20-alpine AS build\\nWORKDIR /app\\nCOPY . .\\nRUN npm ci && npm run build", note: "Dung alpine image de giam size" } },
+      ],
+    };
+
     for (const m of input.members) {
-      const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Developer";
-      tasks.push({
-        assigneeName: m.name,
-        title: "Setup moi truong phat trien",
-        description: "Cai dat va cau hinh moi truong phat trien theo tech stack.",
-        role,
-        responsibilities: ["Cai dat dependencies", "Cau hinh IDE", "Clone repository"],
-        codeConventions: ["Tuan thu coding convention trong tai lieu"],
-        dependencies: "Khong",
-        acceptanceCriteria: ["Co the chay project locally"],
-        deadline: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
-        sprintName: "Sprint 1",
-        status: "todo",
-        hours: 8,
-        priority: "P0",
-      });
+      const assignment = result.hr?.assignments?.find((a) => a.name === m.name);
+      const role = assignment?.role || "Backend Developer";
+      const roleTasks = fallbackTasksByRole[role] || fallbackTasksByRole["Backend Developer"];
+
+      for (const ft of roleTasks) {
+        tasks.push({
+          assigneeName: m.name,
+          title: ft.title,
+          description: `${ft.title} cho ${role}. File can sua: ${ft.targetFile}. Definition of Done: code hoat dong dung, qua review.`,
+          role,
+          layer: ft.layer,
+          targetFile: ft.targetFile,
+          responsibilities: ["Thuc hien theo implementation steps", "Test code locally", "Tao PR khi hoan thanh"],
+          codeConventions: ["Tuan thu coding convention trong docs/CODING_CONVENTION.md", "Commit message theo conventional commits"],
+          implementationSteps: ft.steps,
+          technicalHints: ft.hints,
+          dependencies: "Can setup project xong truoc",
+          acceptanceCriteria: ["Code chay khong loi", "Pass unit tests", "Code review approved"],
+          deadline: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
+          sprintName: "Sprint 1",
+          status: "todo",
+          hours: 8,
+          priority: "P0",
+        } as TaskItem);
+      }
+      console.log(`  [TASK GEN] [FALLBACK] Generated ${roleTasks.length} tasks for ${m.name} (${role})`);
     }
+    console.log(`  [TASK GEN] [FALLBACK] Total: ${tasks.length} tasks for ${input.members.length} members`);
     return tasks;
   } catch (err) {
-    console.log(`  [TASK GEN] Error:`, err instanceof Error ? err.message : "unknown");
+    console.log(`  [TASK GEN] [CATCH] Error:`, err instanceof Error ? err.message : "unknown");
     onProgress?.(true);
+    // Re-use the same diverse fallback as above
+    console.log(`  [TASK GEN] [CATCH] Generating diverse fallback tasks`);
     const today = new Date();
     const tasks: TaskItem[] = [];
     for (const m of input.members) {
-      const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Developer";
+      const role = result.hr?.assignments?.find((a) => a.name === m.name)?.role || "Backend Developer";
       tasks.push({
         assigneeName: m.name,
-        title: "Setup moi truong phat trien",
-        description: "Cai dat va cau hinh moi truong phat trien theo tech stack.",
+        title: `Thiet ke database schema cho ${input.topic}`,
+        description: `Tao Prisma models phu hop voi ${input.topic}. File: prisma/schema.prisma. DoD: schema hop le, migration chay thanh cong.`,
         role,
-        responsibilities: ["Cai dat dependencies", "Cau hinh IDE", "Clone repository"],
-        codeConventions: ["Tuan thu coding convention trong tai lieu"],
+        layer: "DATABASE",
+        targetFile: "prisma/schema.prisma",
+        responsibilities: ["Phan tich requirements", "Tao Prisma models", "Chay migration"],
+        codeConventions: ["Dung cuid() cho ID", "Timestamps cho moi bang"],
+        implementationSteps: ["1. Dinh nghia models", "2. Set up relations", "3. Chay prisma migrate"],
+        technicalHints: { snippet: "model User { id String @id @default(cuid()) email String @unique }", note: "Dung @unique cho email" },
         dependencies: "Khong",
-        acceptanceCriteria: ["Co the chay project locally"],
+        acceptanceCriteria: ["Schema hop le", "Migration OK"],
         deadline: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
         sprintName: "Sprint 1",
         status: "todo",
         hours: 8,
         priority: "P0",
-      });
+      } as TaskItem);
+      tasks.push({
+        assigneeName: m.name,
+        title: `Xay dung API routes cho ${input.topic}`,
+        description: `Tao CRUD API routes. File: src/app/api/. DoD: API hoat dong dung, tra ve JSON.`,
+        role,
+        layer: "BACKEND",
+        targetFile: "src/app/api/",
+        responsibilities: ["Tao GET/POST routes", "Them validation", "Error handling"],
+        codeConventions: ["Return Response.json", "Dung Zod validation"],
+        implementationSteps: ["1. Tao route handlers", "2. Them validation", "3. Test API"],
+        technicalHints: { snippet: "export async function GET() { return Response.json(await db.user.findMany()) }", note: "Luon return Response.json" },
+        dependencies: "Can database schema xong",
+        acceptanceCriteria: ["API tra ve dung data", "Validation hoat dong"],
+        deadline: new Date(today.getTime() + 10 * 86400000).toISOString().split("T")[0],
+        sprintName: "Sprint 1",
+        status: "todo",
+        hours: 12,
+        priority: "P1",
+      } as TaskItem);
     }
+    console.log(`  [TASK GEN] [CATCH] Generated ${tasks.length} fallback tasks`);
     return tasks;
   }
 }
