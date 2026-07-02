@@ -427,11 +427,23 @@ Tra object voi cac key BAT BUOC:
 - "architectureDesc" (string): 6-8 cau mo ta kien truc he thong chi tiet. Ghi ro: cac layer (frontend-backend-db-cache), luong du lieu chinh, cach cac module giao tiep, security, scalability.
 - "dbTables" (array): moi phan tu { "name" (vi du "users"), "columns" (array string, moi cot kem kieu du lieu va constraint vd "id: INT PRIMARY KEY AUTO_INCREMENT", "email: VARCHAR(255) UNIQUE NOT NULL", "created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP"), "relations" (array string vd "has_many: tasks", "belongs_to: department") }. It nhat 8 bang, moi bang it nhat 5 cot.
 - "apiEndpoints" (array): moi phan tu { "method" ("GET"|"POST"|"PUT"|"DELETE"), "path" (vd "/api/users"), "desc" (mo ta chi tiet: input, output, auth required) }. It nhat 15 endpoints, phu cover tat ca CRUD operations.
-- "folderStructure" (string): text tree cua cau truc thu muc CHI TIET, dung \\n cho xuong dong. Moi thu muc phu hop voi tech stack, bao gom: src/, tests/, docs/, config/`;
+- "folderStructure" (string): CAU TRUC TREE dung ky tu Unicode. BAT BUOC dung format:
+  project-root/
+  \u251C\u2500\u2500 src/
+  \u2502   \u251C\u2500\u2500 app/
+  \u2502   \u2502   \u251C\u2500\u2500 api/
+  \u2502   \u2502   \u2502   \u251C\u2500\u2500 auth/login/route.ts
+  \u2502   \u2502   \u2502   \u2514\u2500\u2500 users/[id]/route.ts
+  \u2502   \u2502   \u2514\u2500\u2500 page.tsx
+  \u2502   \u251C\u2500\u2500 components/
+  \u2502   \u2514\u2500\u2500 lib/
+  \u251C\u2500\u2500 tests/
+  \u2514\u2500\u2500 package.json
+  Dung \\n cho xuong dong. BAT BUOC dung ky tu tree, KHONG dung khoang trang.`;
 }
 
 function umlPrompt(): string {
-  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do. Moi bieu do phai co it nhat 8-12 node/actor de the hien day du he thong.
+  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do.
 QUAN TRONG:
 - KHONG dung [("text")] - dung ["text"] hoac ("text")
 - KHONG dung markdown block ben trong string
@@ -440,12 +452,26 @@ QUAN TRONG:
 - Class: bat dau bang "classDiagram"
 - ERD: bat dau bang "erDiagram"
 - Sequence: bat dau bang "sequenceDiagram"
+
+YEU CAU BAT BUONG CHO CLASS DIAGRAM:
+- Ve TAT CA class chinh (it nhat 8 class)
+- Moi class co thuoc tinh + method
+- BAT BUONG ve quan he: User <|-- Student, Course "1" --> "*" Class
+- KHONG dung tu khoa "class" truoc dong quan he
+- It nhat 6 quan he
+
+YEU CAU BAT BUONG CHO ERD:
+- Ve TAT CA bang (it nhat 8 bang)
+- Moi bang co it nhat 4 cot
+- BAT BUONG ve quan he giua TAT CA bang co lien quan (it nhat 7 quan he)
+- Cu phap: A ||--o{ B : "label"
+
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "useCase" (string): mermaid code, ve day du cac actor va use case
-- "classDiagram" (string): mermaid code, ve cac class chinh voi thuoc tinh va method
-- "erd" (string): mermaid code, ve quan he giua cac bang DB
-- "sequence" (string): mermaid code, ve luong xu ly chinh (vd: dang nhap, tao task)`;
+- "useCase" (string): mermaid code, ve day du actor + use case
+- "classDiagram" (string): mermaid code, ve class + thuoc tinh + method + QUAN HE
+- "erd" (string): mermaid code, ve TAT CA bang + TAT CA quan he
+- "sequence" (string): mermaid code, ve it nhat 2 luong xu ly`;
 }
 
 function docsPrompt(): string {
