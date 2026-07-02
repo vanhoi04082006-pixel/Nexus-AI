@@ -16,17 +16,24 @@ function fixMermaid(code: string): string {
   s = s.replace(/\[\[\(/g, "[").replace(/\)\]\]/g, "]");
 
   // ===== ERD fixes =====
-  // Mermaid ERD doesn't support "PK FK" on the same line.
-  // Each attribute can only have ONE key type: PK, FK, or UK.
-  // Fix: "int role_id PK FK" → "int role_id PK" (keep first key type)
   if (s.includes("erDiagram")) {
     s = s.replace(/^(\s*\w+\s+\w+)\s+PK\s+FK\s*$/gm, "$1 PK");
     s = s.replace(/^(\s*\w+\s+\w+)\s+FK\s+PK\s*$/gm, "$1 PK");
-    s = s.replace(/^(\s*\w+\s+\w+)\s+PK\s+UK\s*$/gm, "$1 PK");
-    s = s.replace(/^(\s*\w+\s+\w+)\s+UK\s+PK\s*$/gm, "$1 PK");
-    // Also fix "PK, FK" with comma
     s = s.replace(/^(\s*\w+\s+\w+)\s+PK,?\s*FK\s*$/gmi, "$1 PK");
     s = s.replace(/^(\s*\w+\s+\w+)\s+FK,?\s*PK\s*$/gmi, "$1 PK");
+  }
+
+  // ===== classDiagram fixes =====
+  // AI writes "class User <|-- Student" but Mermaid wants "User <|-- Student"
+  // (no "class" keyword before relationship lines)
+  // Also fixes "class Course "1" --> "*" Class" → 'Course "1" --> "*" Class'
+  if (s.includes("classDiagram")) {
+    // Remove "class " prefix from relationship lines (lines with <|--, --|>, <--, *--, o--, ..>, ..|>, -->, ---, ..)
+    s = s.replace(/^(\s*)class\s+(\w+)\s+([<>*o.]+[-]+[>|*o.]+|--+|\.+[>|]+)\s*/gm, "$1$2 $3 ");
+    // Remove "class " prefix from lines with cardinality: class Course "1" --> "*" Class
+    s = s.replace(/^(\s*)class\s+(\w+)\s+("[^"]*"\s*[-]+[>|]*\s*"[^"]*")\s*/gm, '$1$2 $3 ');
+    // Fix extra whitespace in class body (e.g. "    +int currentStudents" with leading spaces)
+    s = s.replace(/^(\s*)\s{8,}(\+)/gm, "$1    $2");
   }
 
   // Wrap edge labels containing special chars in double quotes.
@@ -70,10 +77,10 @@ function fixMermaid(code: string): string {
   });
   s = fixedLines.join("\n");
 
-  // Trim trailing whitespace per line
+  // Trim trailing whitespace per line + fix excessive indentation
   s = s
     .split("\n")
-    .map((line) => line.replace(/\s+$/, ""))
+    .map((line) => line.replace(/\s+$/, "").replace(/\t/g, "    "))
     .join("\n");
   return s;
 }
