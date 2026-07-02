@@ -2,7 +2,7 @@
 // Returns the full workspace data for a project.
 
 import { db } from "@/lib/db";
-import { resolveAccess } from "@/lib/access";
+import { resolveAccess, requireLeader } from "@/lib/access";
 import { publicMember } from "@/app/api/projects/_lib/reconstruct";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +126,35 @@ export async function GET(
   } catch (err) {
     return Response.json(
       { error: "Failed to fetch project", details: err instanceof Error ? err.message : "unknown" },
+      { status: 500 }
+    );
+  }
+}
+
+// ===== DELETE: Delete project + all related data =====
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const url = new URL(req.url);
+    const token = url.searchParams.get("token");
+
+    const access = await resolveAccess(id, token);
+    if (!requireLeader(access)) {
+      return Response.json({ error: "Leader access required to delete" }, { status: 403 });
+    }
+
+    // Delete project — cascade will delete all related records (members, analyses, tasks, etc.)
+    await db.project.delete({
+      where: { id },
+    });
+
+    return Response.json({ success: true });
+  } catch (err) {
+    return Response.json(
+      { error: "Failed to delete project", details: err instanceof Error ? err.message : "unknown" },
       { status: 500 }
     );
   }
