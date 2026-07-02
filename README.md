@@ -8,14 +8,14 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8)
 ![Prisma](https://img.shields.io/badge/Prisma-6-2d3748)
-![DeepSeek](https://img.shields.io/badge/DeepSeek-V4-red)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-Multi--Key-orange)
 ![Bun](https://img.shields.io/badge/Bun-1-f472b6)
 
 ---
 
 ## 📖 NEXUS AI là gì?
 
-Nhập chủ đề dự án + danh sách thành viên → **8 AI Agent** (DeepSeek V4 Pro/Flash + OpenRouter fallback) tự động:
+Nhập chủ đề dự án + danh sách thành viên → **8 AI Agent** (OpenRouter multi-key rotation) tự động:
 
 1. **Phân tích chủ đề** — tech stack, features, actors, modules
 2. **Phân nhân sự** — vai trò, workload, rủi ro
@@ -32,10 +32,10 @@ Sau đó → **Kanban Todolist** (SMART tasks + code snippets + drag-drop) → *
 
 ## ✨ Tính năng
 
-### 🧠 Multi-Agent Pipeline (DeepSeek + OpenRouter)
-- **DeepSeek V4 Flash** — Agent phân tích, HR, Sprint (nhanh, rẻ)
-- **DeepSeek V4 Pro** — Agent kiến trúc, UML, Git, Task Gen (thông minh, coding)
-- **OpenRouter fallback** — 5+ API keys luân chuyển khi DeepSeek rate-limit
+### 🧠 Multi-Agent Pipeline (OpenRouter Multi-Key)
+- **OpenRouter multi-key rotation** — hỗ trợ không giới hạn số API key, tự luân chuyển khi 1 key bị rate-limit
+- **Live Log Console** — xem realtime model nào, agent nào, API key nào đang chạy, thành công hay thất bại
+- **Multi-model fallback** — mỗi agent có danh sách model ưu tiên (NVIDIA Nemotron, GPT-OSS, Gemma, Cohere…)
 - Parallel execution: Phase 2 (4 agents) chạy song song → giảm 40% thời gian
 - In-memory cache (1h TTL) — skip repeated API calls
 - Token usage tracking per agent per key
@@ -93,8 +93,7 @@ Sau đó → **Kanban Todolist** (SMART tasks + code snippets + drag-drop) → *
 ### Yêu cầu
 - [Bun](https://bun.sh) v1+
 - [Node.js](https://nodejs.org) v18+
-- [DeepSeek API key](https://platform.deepseek.com/api_keys) (free credit)
-- [OpenRouter API key](https://openrouter.ai/keys) (free, fallback)
+- [OpenRouter API key](https://openrouter.ai/keys) (free, multi-key rotation)
 - [GitHub OAuth App](https://github.com/settings/developers) (tùy chọn)
 - Gmail App Password (cho email)
 
@@ -128,13 +127,11 @@ Script tự động: cài deps → setup DB → khởi động server → tạo 
 # Database
 DATABASE_URL=file:./db/custom.db
 
-# DeepSeek API (PRIORITY — nhanh, rẻ, thông minh)
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
-
-# OpenRouter API (FALLBACK — luân chuyển multi-key)
+# OpenRouter API (multi-key rotation — thêm bao nhiêu key cũng được)
 OPENROUTER_API_KEY=sk-or-v1-xxxxx
 OPENROUTER_API_KEY_2=sk-or-v1-xxxxx
 OPENROUTER_API_KEY_3=sk-or-v1-xxxxx
+# ... thêm OPENROUTER_API_KEY_4, _5... tùy ý
 
 # GitHub OAuth
 GITHUB_CLIENT_ID=xxxxx
@@ -153,7 +150,7 @@ APP_URL=http://localhost:3000
 - Nhập chủ đề + mô tả + mục đích
 - Nhập email + Gmail App Password (nhóm trưởng)
 - Thêm thành viên (tên + email + ưu/nhược điểm)
-- Bấm **"Khởi tạo Dự Án"** → 8 AI Agent chạy (DeepSeek priority)
+- Bấm **"Khởi tạo Dự Án"** → 8 AI Agent chạy song song với OpenRouter multi-key
 
 ### 2. Workspace (7 tabs)
 - **Phân Tích** — tech stack, features, actors, modules
@@ -208,15 +205,15 @@ Nexus-AI/
 │   │       ├── HomeView.tsx       # Project history
 │   │       ├── InputView.tsx      # Form nhập dự án
 │   │       ├── WorkspaceView.tsx  # Main workspace
-│   │       ├── ProcessingOverlay.tsx
+│   │       ├── ProcessingOverlay.tsx   # Agent board + live log console
 │   │       ├── MermaidRenderer.tsx
 │   │       └── SectionEditor.tsx
 │   ├── lib/
 │   │   ├── ai.ts                  # 8-agent pipeline (parallel + fallback)
-│   │   ├── openrouter.ts          # DeepSeek + OpenRouter multi-provider
+│   │   ├── openrouter.ts          # OpenRouter multi-key rotation client
 │   │   ├── github.ts              # Push + PR creation
 │   │   ├── email.ts               # SMTP (nodemailer)
-│   │   ├── pipeline-progress.ts   # Background progress tracker
+│   │   ├── pipeline-progress.ts   # Background progress + log tracker
 │   │   └── types.ts
 │   └── store/
 │       └── useNexus.ts            # Zustand (persisted)
@@ -242,7 +239,7 @@ Nexus-AI/
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui |
 | Backend | Next.js API Routes (Node.js runtime) |
 | Database | Prisma ORM + SQLite |
-| AI Provider | **DeepSeek V4** (direct API) + OpenRouter (fallback) |
+| AI Provider | **OpenRouter** (multi-key rotation, multi-model fallback) |
 | Real-time | Socket.io (optional) + HTTP polling |
 | Diagrams | Mermaid.js 11 + React Flow (interactive) |
 | Kanban | @hello-pangea/dnd |
@@ -256,18 +253,45 @@ Nexus-AI/
 
 | # | Agent | Model (priority) | Vai trò |
 |---|---|---|---|
-| 01 | Requirement Analyst | DeepSeek V4 Flash | Phân tích, tech stack, features |
-| 02 | HR Planner | DeepSeek V4 Flash | Vai trò, workload, rủi ro |
-| 03 | Sprint Planner | DeepSeek V4 Flash | Sprint, tasks, milestones |
-| 04 | System Architect | DeepSeek V4 Pro | DB schema, API, folder tree |
-| 05 | UML Generator | DeepSeek V4 Pro | 4 diagrams + relationships |
-| 06 | Technical Writer | DeepSeek V4 Flash | README, Convention, API Standard |
-| 07 | Git/DevOps | DeepSeek V4 Pro | Git commands, branch, issue template |
-| 08 | Quality Reviewer | DeepSeek V4 Pro | Tổng hợp, đồng bộ |
-| - | Task Generator | DeepSeek V4 Pro | SMART tasks + code snippets |
-| - | Chat Assistant | DeepSeek V4 Pro (thinking) | Hội thoại hướng dẫn code |
+| 01 | Requirement Analyst | GPT-OSS 120B → Nemotron Ultra | Phân tích, tech stack, features |
+| 02 | HR Planner | Nemotron Ultra → Gemma 4 | Vai trò, workload, rủi ro |
+| 03 | Sprint Planner | Nemotron Ultra → GPT-OSS 120B | Sprint, tasks, milestones |
+| 04 | System Architect | GPT-OSS 120B → North-Mini-Code | DB schema, API, folder tree |
+| 05 | UML Generator | GPT-OSS 120B → North-Mini-Code | 4 diagrams + relationships |
+| 06 | Technical Writer | Gemma 4 → GPT-OSS 120B | README, Convention, API Standard |
+| 07 | Git/DevOps | GPT-OSS 120B → North-Mini-Code | Git commands, branch, issue template |
+| 08 | Quality Reviewer | GPT-OSS 120B → Gemma 4 | Tổng hợp, đồng bộ |
+| - | Task Generator | GPT-OSS 120B → Nemotron | SMART tasks + code snippets |
+| - | Chat Assistant | GPT-OSS 120B → Gemma 4 | Hội thoại hướng dẫn code |
 
-**Fallback:** DeepSeek → OpenRouter (NVIDIA Nemotron, GPT-OSS, Gemma, Cohere) → SAFE → fallback data
+**Fallback:** OpenRouter model 1 → model 2 → ... → fallback data (luôn có kết quả)
+
+---
+
+## 📊 Live Log Console
+
+Trong quá trình chạy pipeline, màn hình **ProcessingOverlay** hiển thị **2 bảng song song**:
+
+| Bảng Agent (trái) | Bảng Log Console (phải) |
+|---|---|
+| Trạng thái 8 agent (pending/running/done/failed) | Realtime log line-by-line |
+| Icon + tên agent | Mỗi line: timestamp + provider + model + key# + status |
+| Tổng tiến độ % | Color-coded: xanh = success, đỏ = fail, vàng = warn |
+
+Ví dụ log line:
+```
+14:23:01 [AGENT-01] Requirement Analyst → start
+14:23:01 [OpenRouter] Key #1, model: openai/gpt-oss-120b:free
+14:23:04 ✓ [AGENT-01] openai/gpt-oss-120b:free (1/2)
+14:23:04 [AGENT-02] HR Planner → start
+14:23:04 [OpenRouter] Key #1, model: nvidia/nemotron-3-ultra-550b-a55b:free
+14:23:08 [KEY ROTATION] OpenRouter Key #1 rate-limited for 60s
+14:23:08 [OpenRouter] Key #2, model: nvidia/nemotron-3-ultra-550b-a55b:free
+14:23:12 ✓ [AGENT-02] nvidia/nemotron-3-ultra-550b-a55b:free
+14:23:12 ✗ [1] cohere/north-mini-code:free → [429] Rate limit exceeded
+```
+
+→ Biết chính xác model nào, API key nào còn sống / đã chết để refill kịp thời.
 
 ---
 
@@ -290,5 +314,5 @@ MIT License
 
 <p align="center">
   <strong>NEXUS AI</strong> — Multi-Agent Architect<br>
-  Powered by DeepSeek V4 + 8 AI Agents 🤖
+  Powered by OpenRouter Multi-Key + 8 AI Agents 🤖
 </p>

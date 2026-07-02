@@ -11,6 +11,8 @@ import {
   updateAgent,
   finishProgress,
   failProgress,
+  appendLog,
+  runWithProjectLog,
 } from "@/lib/pipeline-progress";
 import type { ProjectInput } from "@/lib/types";
 
@@ -143,101 +145,123 @@ export async function POST(req: Request) {
 
   // ===== Initialize progress tracker =====
   initProgress(project.id);
+  appendLog({
+    level: "info",
+    provider: "pipeline",
+    agentId: "PIPELINE",
+    message: `▶ PIPELINE STARTED — topic: "${input.topic}" — ${input.members.length} member(s)`,
+  });
 
   // ===== Run pipeline IN THE BACKGROUND =====
   process.nextTick(() => {
     console.log(`>> [PIPELINE] Background pipeline started for project ${project.id} (${input.topic})`);
-    runPipeline(input, (ev) => {
-      if (ev.type === "agent_start") {
-        updateAgent(project.id, ev.id, "running");
-      } else if (ev.type === "agent_done") {
-        updateAgent(project.id, ev.id, "done");
-      } else if (ev.type === "agent_fail") {
-        updateAgent(project.id, ev.id, "failed", ev.error);
-      }
-    })
-      .then(async (result) => {
-        // Persist all sections
-        try {
-          for (const key of SECTION_KEYS) {
-            const content = (result as unknown as Record<string, unknown>)[key];
-            if (content === undefined || content === null) continue;
-            const existing = await db.analysis.findUnique({
-              where: { projectId_type: { projectId: project.id, type: key } },
-            });
-            if (existing) {
-              await db.analysis.update({
-                where: { id: existing.id },
-                data: { content: JSON.stringify(content), version: { increment: 1 } },
+    // Wrap the entire pipeline in runWithProjectLog so all deep callees
+    // (openrouter.ts, ai.ts) can append log lines via AsyncLocalStorage.
+    runWithProjectLog(project.id, () => {
+      runPipeline(input, (ev) => {
+        if (ev.type === "agent_start") {
+          updateAgent(project.id, ev.id, "running");
+        } else if (ev.type === "agent_done") {
+          updateAgent(project.id, ev.id, "done");
+        } else if (ev.type === "agent_fail") {
+          updateAgent(project.id, ev.id, "failed", ev.error);
+        }
+      })
+        .then(async (result) => {
+          // Persist all sections
+          try {
+            for (const key of SECTION_KEYS) {
+              const content = (result as unknown as Record<string, unknown>)[key];
+              if (content === undefined || content === null) continue;
+              const existing = await db.analysis.findUnique({
+                where: { projectId_type: { projectId: project.id, type: key } },
               });
-            } else {
-              await db.analysis.create({
-                data: { projectId: project.id, type: key, content: JSON.stringify(content) },
-              });
+              if (existing) {
+                await db.analysis.update({
+                  where: { id: existing.id },
+                  data: { content: JSON.stringify(content), version: { increment: 1 } },
+                });
+              } else {
+                await db.analysis.create({
+                  data: { projectId: project.id, type: key, content: JSON.stringify(content) },
+                });
+              }
             }
+
+            // ===== Save long-term memory (ProjectContext) =====
+            // Store compressed summary so AI can "remember" this project
+            const summary = {
+              topic: input.topic,
+              modules: result.analysis?.modules || [],
+              techStack: {
+                fe: result.analysis?.techStack?.frontend?.name,
+                be: result.analysis?.techStack?.backend?.name,
+                db: result.analysis?.techStack?.database?.name,
+              },
+              actors: (result.analysis?.actors || []).map((a) => a.name),
+              features: (result.analysis?.features || []).map((f) => f.name),
+              members: input.members.map((m) => ({ name: m.name, email: m.email })),
+              assignments: (result.hr?.assignments || []).map((a) => ({
+                name: a.name,
+                role: a.role,
+              })),
+              sprints: (result.sprint?.sprints || []).map((s) => s.name),
+            };
+
+            await db.projectContext.upsert({
+              where: { projectId: project.id },
+              create: {
+                projectId: project.id,
+                summary: JSON.stringify(summary),
+                fullResults: JSON.stringify(result).substring(0, 50000),
+                runCount: 1,
+              },
+              update: {
+                summary: JSON.stringify(summary),
+                fullResults: JSON.stringify(result).substring(0, 50000),
+                runCount: { increment: 1 },
+              },
+            });
+            console.log(`>> [PIPELINE] Long-term memory saved for project ${project.id}`);
+          } catch (err) {
+            console.error(`>> [PIPELINE] Failed to save sections/context:`, err);
           }
 
-          // ===== Save long-term memory (ProjectContext) =====
-          // Store compressed summary so AI can "remember" this project
-          const summary = {
-            topic: input.topic,
-            modules: result.analysis?.modules || [],
-            techStack: {
-              fe: result.analysis?.techStack?.frontend?.name,
-              be: result.analysis?.techStack?.backend?.name,
-              db: result.analysis?.techStack?.database?.name,
-            },
-            actors: (result.analysis?.actors || []).map((a) => a.name),
-            features: (result.analysis?.features || []).map((f) => f.name),
-            members: input.members.map((m) => ({ name: m.name, email: m.email })),
-            assignments: (result.hr?.assignments || []).map((a) => ({
-              name: a.name,
-              role: a.role,
-            })),
-            sprints: (result.sprint?.sprints || []).map((s) => s.name),
-          };
+          // Update project status
+          try {
+            await db.project.update({ where: { id: project.id }, data: { status: "WORKSPACE" } });
+          } catch {
+            /* non-fatal */
+          }
 
-          await db.projectContext.upsert({
-            where: { projectId: project.id },
-            create: {
-              projectId: project.id,
-              summary: JSON.stringify(summary),
-              fullResults: JSON.stringify(result).substring(0, 50000),
-              runCount: 1,
-            },
-            update: {
-              summary: JSON.stringify(summary),
-              fullResults: JSON.stringify(result).substring(0, 50000),
-              runCount: { increment: 1 },
-            },
+          // Send invitation emails
+          try {
+            await sendInvitationEmails(project.id, input.topic, input.leaderName, memberRows);
+          } catch (err) {
+            console.error(`>> [PIPELINE] Failed to send invitations:`, err);
+          }
+
+          finishProgress(project.id, { projectId: project.id, leaderToken: project.leaderToken });
+          console.log(`>> [PIPELINE] Background pipeline COMPLETED for project ${project.id}`);
+          appendLog({
+            level: "success",
+            provider: "pipeline",
+            agentId: "PIPELINE",
+            message: `✅ PIPELINE COMPLETED — all sections saved, invitations sent`,
           });
-          console.log(`>> [PIPELINE] Long-term memory saved for project ${project.id}`);
-        } catch (err) {
-          console.error(`>> [PIPELINE] Failed to save sections/context:`, err);
-        }
-
-        // Update project status
-        try {
-          await db.project.update({ where: { id: project.id }, data: { status: "WORKSPACE" } });
-        } catch {
-          /* non-fatal */
-        }
-
-        // Send invitation emails
-        try {
-          await sendInvitationEmails(project.id, input.topic, input.leaderName, memberRows);
-        } catch (err) {
-          console.error(`>> [PIPELINE] Failed to send invitations:`, err);
-        }
-
-        finishProgress(project.id, { projectId: project.id, leaderToken: project.leaderToken });
-        console.log(`>> [PIPELINE] Background pipeline COMPLETED for project ${project.id}`);
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : "Pipeline failed";
-        console.error(`>> [PIPELINE] Background pipeline FAILED:`, msg);
-        failProgress(project.id, msg);
-      });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "Pipeline failed";
+          console.error(`>> [PIPELINE] Background pipeline FAILED:`, msg);
+          appendLog({
+            level: "error",
+            provider: "pipeline",
+            agentId: "PIPELINE",
+            message: `❌ PIPELINE FAILED — ${msg}`,
+          });
+          failProgress(project.id, msg);
+        });
+    });
   });
 
   // ===== Return immediately so the client can start polling =====

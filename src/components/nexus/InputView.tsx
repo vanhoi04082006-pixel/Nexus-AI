@@ -61,6 +61,7 @@ export function InputView() {
   const startPipeline = useNexus((s) => s.startPipeline);
   const setAgentStatus = useNexus((s) => s.setAgentStatus);
   const setPipelineError = useNexus((s) => s.setPipelineError);
+  const setLogs = useNexus((s) => s.setLogs);
   const finishPipeline = useNexus((s) => s.finishPipeline);
 
   const [showOptional, setShowOptional] = useState(false);
@@ -185,6 +186,7 @@ export function InputView() {
             const prog = (await pr.json()) as {
               status: string;
               agents?: { id: string; status: string; error?: string }[];
+              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
               error?: string;
             };
 
@@ -195,6 +197,11 @@ export function InputView() {
                 else if (a.status === "done") setAgentStatus(a.id, "done");
                 else if (a.status === "failed") setAgentStatus(a.id, "failed", a.error);
               }
+            }
+
+            // Sync live logs (replace full list each poll — backend keeps the source of truth)
+            if (prog.logs) {
+              setLogs(prog.logs);
             }
 
             if (prog.status === "done") {

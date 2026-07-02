@@ -4,6 +4,7 @@
 // backoff, a JSON fixer, an AI self-fix pass, and graceful fallbacks.
 
 import { callOpenRouter, type OpenRouterError } from "./openrouter";
+import { appendLog } from "./pipeline-progress";
 import type {
   ProjectResult,
   ProjectInput,
@@ -307,6 +308,11 @@ async function callAndParse(
     for (let a = 1; a <= MAX_RETRIES; a++) {
       try {
         console.log(`      [${a}/${MAX_RETRIES}] ${model}`);
+        appendLog({
+          level: "info",
+          model,
+          message: `  → [${a}/${MAX_RETRIES}] trying ${model}`,
+        });
         const raw = await callModel(model, sys, usr, temp);
         let data: unknown = null;
 
@@ -335,6 +341,11 @@ async function callAndParse(
         if (!data) {
           // AI self-fix pass
           console.log(`      [${a}] JSON loi, AI sua...`);
+          appendLog({
+            level: "warn",
+            model,
+            message: `  ⚠ [${a}] ${model} returned invalid JSON — AI self-fix pass`,
+          });
           const fix = await callModel(
             model,
             "JSON fixer. Chi tra JSON hop le, khong them gi nua.",
@@ -346,6 +357,11 @@ async function callAndParse(
 
         if (data) {
           console.log(`      ✓ ${model} (lan ${a})`);
+          appendLog({
+            level: "success",
+            model,
+            message: `  ✓ ${model} parsed OK (attempt ${a})`,
+          });
           return { data, model };
         }
       } catch (err) {
@@ -353,11 +369,22 @@ async function callAndParse(
         const st = e.status;
         const msg = (e.message || "").substring(0, 120);
         console.log(`      ✗ [${a}] ${model} → [${st || e.code || "NET"}] ${msg}`);
+        appendLog({
+          level: "error",
+          model,
+          keyIndex: e.keyIndex != null ? e.keyIndex + 1 : undefined,
+          message: `  ✗ [${a}/${MAX_RETRIES}] ${model} → [${st || e.code || "NET"}] ${msg}`,
+        });
 
         // 429: rate limit — wait and retry same model
         if (st === 429) {
           const ra = e.retryAfter || d;
           console.log(`      ⏳ Rate limit, doi ${Math.min(ra, MAX_DELAY)}ms`);
+          appendLog({
+            level: "warn",
+            model,
+            message: `  ⏳ Rate-limited — waiting ${Math.min(ra, MAX_DELAY) / 1000}s before retry`,
+          });
           await wait(Math.min(ra, MAX_DELAY));
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
@@ -371,6 +398,11 @@ async function callAndParse(
           e.code === "ECONNRESET"
         ) {
           console.log(`      ⏳ Server/timeout, doi ${d}ms`);
+          appendLog({
+            level: "warn",
+            model,
+            message: `  ⏳ Server/timeout — retrying in ${d / 1000}s`,
+          });
           await wait(d);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
@@ -386,6 +418,11 @@ async function callAndParse(
         }
 
         // 4xx (non-429, non-401/403): invalid model / bad request — skip to next model
+        appendLog({
+          level: "warn",
+          model,
+          message: `  ⚠ ${model} → skip to next model (HTTP ${st})`,
+        });
         break;
       }
     }
@@ -825,6 +862,18 @@ export async function runPipeline(
     console.log(`\n>> [AGENT-${ag.id}] ${ag.name}`);
     console.log(`   Models: ${ag.models.join(" → ")}`);
     console.log(`   Temp: ${ag.temp}`);
+    appendLog({
+      level: "info",
+      agentId: ag.id,
+      provider: "pipeline",
+      message: `─────────────────────────────────────────────`,
+    });
+    appendLog({
+      level: "info",
+      agentId: ag.id,
+      provider: "pipeline",
+      message: `[AGENT-${ag.id}] ${ag.name} → start (models: ${ag.models.length})`,
+    });
 
     const ctx = buildCtx(ag.key, results, input);
     const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
@@ -833,24 +882,56 @@ export async function runPipeline(
       (results as Record<string, unknown>)[ag.key] = res.data;
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
+      appendLog({
+        level: "success",
+        agentId: ag.id,
+        provider: "pipeline",
+        model: res.model,
+        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
+      });
     } else if (res) {
       console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
       (results as Record<string, unknown>)[ag.key] = res.data;
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      appendLog({
+        level: "warn",
+        agentId: ag.id,
+        provider: "pipeline",
+        model: res.model,
+        message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
+      });
     } else {
       failed.push(ag);
       onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
       console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
+      appendLog({
+        level: "error",
+        agentId: ag.id,
+        provider: "pipeline",
+        message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
+      });
     }
   }
 
   // ===== PHASE 2: Parallel agents (design, uml, docs, git) =====
   // These only depend on Phase 1 results, so they can run in parallel
   console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
+  appendLog({
+    level: "info",
+    agentId: "PIPELINE",
+    provider: "pipeline",
+    message: `▶ PHASE 2: ${phase2Agents.length} agents in parallel`,
+  });
   const phase2Promises = phase2Agents.map(async (ag) => {
     const i = AGENTS.indexOf(ag);
     onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
     console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
+    appendLog({
+      level: "info",
+      agentId: ag.id,
+      provider: "pipeline",
+      message: `[AGENT-${ag.id}] ${ag.name} → start (parallel)`,
+    });
 
     const ctx = buildCtx(ag.key, results, input);
     const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
@@ -858,14 +939,34 @@ export async function runPipeline(
     if (res && isValidSchema(res.data, ag.key)) {
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
+      appendLog({
+        level: "success",
+        agentId: ag.id,
+        provider: "pipeline",
+        model: res.model,
+        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
+      });
       return { ag, res, failed: false };
     } else if (res) {
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
+      appendLog({
+        level: "warn",
+        agentId: ag.id,
+        provider: "pipeline",
+        model: res.model,
+        message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
+      });
       return { ag, res, failed: false };
     } else {
       onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
       console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
+      appendLog({
+        level: "error",
+        agentId: ag.id,
+        provider: "pipeline",
+        message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
+      });
       return { ag, res: null, failed: true };
     }
   });
@@ -883,6 +984,12 @@ export async function runPipeline(
   // ===== PHASE 2: Retry failed agents =====
   if (failed.length > 0) {
     console.log(`\n>> RETRY: ${failed.length} Agent that bai...`);
+    appendLog({
+      level: "warn",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ RETRY: ${failed.length} agent(s) failed, retrying after 5s`,
+    });
     for (const ag of failed) {
       onProgress?.({
         type: "agent_start",
@@ -892,6 +999,12 @@ export async function runPipeline(
         total,
       });
       console.log(`   ⏳ Doi 5s truoc retry ${ag.name}...`);
+      appendLog({
+        level: "warn",
+        agentId: ag.id,
+        provider: "pipeline",
+        message: `[AGENT-${ag.id}] ${ag.name} → retry in 5s...`,
+      });
       await wait(5000);
 
       const ctx = buildCtx(ag.key, results, input);
@@ -907,12 +1020,32 @@ export async function runPipeline(
           total,
         });
         console.log(`✓ [RETRY-${ag.id}] ${ag.name} → ${res.model}`);
+        appendLog({
+          level: "success",
+          agentId: ag.id,
+          provider: "pipeline",
+          model: res.model,
+          message: `✓ [RETRY-${ag.id}] ${ag.name} → done (${res.model})`,
+        });
       } else if (res) {
         (results as Record<string, unknown>)[ag.key] = res.data;
         onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Retry)`, index: 7, total });
+        appendLog({
+          level: "warn",
+          agentId: ag.id,
+          provider: "pipeline",
+          model: res.model,
+          message: `⚠ [RETRY-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
+        });
       } else {
         onProgress?.({ type: "agent_fail", id: ag.id, name: `${ag.name} (Retry)`, index: 7, total });
         console.log(`✗ [RETRY-${ag.id}] ${ag.name} → VAN FAIL`);
+        appendLog({
+          level: "error",
+          agentId: ag.id,
+          provider: "pipeline",
+          message: `✗ [RETRY-${ag.id}] ${ag.name} → STILL FAIL`,
+        });
       }
     }
   }
@@ -927,6 +1060,12 @@ export async function runPipeline(
   for (const ag of AGENTS) {
     if (!results[ag.key]) {
       console.log(`>> FALLBACK: ${ag.name}`);
+      appendLog({
+        level: "warn",
+        agentId: ag.id,
+        provider: "fallback",
+        message: `▷ FALLBACK: ${ag.name} → using static fallback data`,
+      });
       (results as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
     }
   }
@@ -940,6 +1079,18 @@ export async function runPipeline(
     total,
   });
   console.log("\n>> [AGENT-08] Quality Reviewer");
+  appendLog({
+    level: "info",
+    agentId: "08",
+    provider: "pipeline",
+    message: `─────────────────────────────────────────────`,
+  });
+  appendLog({
+    level: "info",
+    agentId: "08",
+    provider: "pipeline",
+    message: `[AGENT-08] Quality Reviewer → start`,
+  });
 
   try {
     // Send FULL results (not just summary) so reviewer can actually fix content.
@@ -966,15 +1117,34 @@ export async function runPipeline(
       const sec = ((Date.now() - t0) / 1000).toFixed(1);
       onProgress?.({ type: "agent_done", id: "08", name: "Quality Reviewer", index: 7, total });
       console.log(`✓ [AGENT-08] Reviewer → ${res.model} (${sec}s tong)`);
+      appendLog({
+        level: "success",
+        agentId: "08",
+        provider: "pipeline",
+        model: res.model,
+        message: `✓ [AGENT-08] Reviewer → done (${res.model}, ${sec}s total)`,
+      });
       return rev as unknown as ProjectResult;
     }
   } catch (e) {
     console.log(`✗ [AGENT-08] Reviewer fail: ${(e as Error).message?.substring(0, 100)}`);
+    appendLog({
+      level: "error",
+      agentId: "08",
+      provider: "pipeline",
+      message: `✗ [AGENT-08] Reviewer → ${(e as Error).message?.substring(0, 100)}`,
+    });
   }
 
   onProgress?.({ type: "agent_fail", id: "08", name: "Quality Reviewer", index: 7, total });
   const sec = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`>> Tra ket qua goc (${sec}s)\n`);
+  appendLog({
+    level: "warn",
+    agentId: "08",
+    provider: "pipeline",
+    message: `▷ [AGENT-08] Reviewer → returning original results (${sec}s)`,
+  });
   return results as ProjectResult;
 }
 

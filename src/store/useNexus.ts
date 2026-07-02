@@ -75,6 +75,19 @@ export interface AgentProgress {
   error?: string;
 }
 
+export type LogLevel = "info" | "success" | "warn" | "error";
+
+export interface LogEntry {
+  id: string;
+  ts: number;
+  level: LogLevel;
+  agentId?: string;
+  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  model?: string;
+  keyIndex?: number;
+  message: string;
+}
+
 /* ===========================================================
    Store
 =========================================================== */
@@ -106,6 +119,7 @@ interface NexusState {
   pipelineRunning: boolean;
   agents: AgentProgress[];
   pipelineError: string | null;
+  logs: LogEntry[];
 
   // workspace
   project: ProjectView | null;
@@ -134,6 +148,7 @@ interface NexusState {
   startPipeline: () => void;
   setAgentStatus: (id: string, status: AgentProgress["status"], error?: string) => void;
   setPipelineError: (msg: string | null) => void;
+  setLogs: (logs: LogEntry[]) => void;
   finishPipeline: (projectId: string, token: string) => void;
 
   setAccess: (a: AccessInfo | null) => void;
@@ -186,6 +201,7 @@ export const useNexus = create<NexusState>()(
   pipelineRunning: false,
   agents: [],
   pipelineError: null,
+  logs: [],
 
   project: null,
   result: null,
@@ -228,6 +244,7 @@ export const useNexus = create<NexusState>()(
     set({
       pipelineRunning: true,
       pipelineError: null,
+      logs: [],
       agents: [
         { id: "01", name: "Requirement Analyst", status: "pending" },
         { id: "02", name: "HR Planner", status: "pending" },
@@ -244,6 +261,7 @@ export const useNexus = create<NexusState>()(
       agents: s.agents.map((a) => (a.id === id ? { ...a, status, error } : a)),
     })),
   setPipelineError: (msg) => set({ pipelineError: msg }),
+  setLogs: (logs) => set({ logs }),
   finishPipeline: (projectId, token) =>
     set({
       pipelineRunning: false,

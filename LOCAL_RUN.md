@@ -18,8 +18,7 @@ URL public: https://xxx.trycloudflare.com
 ### Yêu cầu
 - [Bun](https://bun.sh) v1+
 - [Node.js](https://nodejs.org) v18+
-- [DeepSeek API key](https://platform.deepseek.com/api_keys)
-- [OpenRouter API key](https://openrouter.ai/keys) (fallback)
+- [OpenRouter API key](https://openrouter.ai/keys) (free, multi-key rotation)
 
 ### Windows
 
@@ -32,8 +31,8 @@ copy .env.example .env
 Mở `.env`, điền:
 
 ```env
-DEEPSEEK_API_KEY=sk-xxxxxxxx
 OPENROUTER_API_KEY=sk-or-v1-xxxxx
+OPENROUTER_API_KEY_2=sk-or-v1-xxxxx (tùy chọn, dự phòng)
 GITHUB_CLIENT_ID=xxxxx
 GITHUB_CLIENT_SECRET=xxxxx
 ```
@@ -116,13 +115,10 @@ Thành viên click link → vào workspace.
 curl -fsSL https://bun.sh/install | bash
 ```
 
-### DeepSeek rate limit
-- Hệ thống tự chuyển sang OpenRouter fallback
-- Thêm `DEEPSEEK_API_KEY_2` nếu có nhiều key
-
 ### OpenRouter rate limit
-- Thêm `OPENROUTER_API_KEY_2`, `_3`... vào `.env`
-- Hệ thống tự luân chuyển
+- Thêm `OPENROUTER_API_KEY_2`, `_3`, `_4`... vào `.env` (hỗ trợ không giới hạn số key)
+- Hệ thống tự luân chuyển khi 1 key bị 429
+- Xem **Live Log Console** trong UI để biết key nào còn sống / đã chết
 
 ### Email không gửi
 - Kiểm tra Gmail App Password (không phải password thường)

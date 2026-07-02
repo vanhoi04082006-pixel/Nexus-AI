@@ -1,7 +1,8 @@
-// NEXUS AI - Multi-provider AI client (DeepSeek + OpenRouter)
-// Priority: DeepSeek API first (cheaper, faster) → OpenRouter fallback (multi-key rotation)
+// NEXUS AI - Multi-provider AI client (OpenRouter multi-key rotation)
+// Each request tries multiple API keys + multiple models, with retry on rate-limit.
 
 import { db } from "./db";
+import { appendLog } from "./pipeline-progress";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -65,6 +66,11 @@ export function getCachedResult(key: string): string | null {
   const cached = aiCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     console.log("  [CACHE] Hit — skipping API call");
+    appendLog({
+      level: "info",
+      provider: "cache",
+      message: "[CACHE] Hit — skip API call (cached ≤1h)",
+    });
     return cached.result;
   }
   return null;
@@ -132,6 +138,13 @@ async function callDeepSeek(
 
   try {
     console.log(`      [DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}${isReasoner ? " (V4 Pro — thinking)" : " (V4 Flash)"}`);
+    appendLog({
+      level: "info",
+      provider: "deepseek",
+      model: dsModel,
+      keyIndex: keyIdx + 1,
+      message: `[DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}${isReasoner ? " (V4 Pro)" : " (V4 Flash)"}`,
+    });
     const resp = await fetch(DEEPSEEK_URL, {
       method: "POST",
       headers: {
@@ -168,12 +181,34 @@ async function callDeepSeek(
         const ra = parseInt(resp.headers.get("retry-after") || "60");
         dsRateLimited.set(keyIdx, Date.now() + ra * 1000);
         console.log(`  [DeepSeek] Key #${keyIdx + 1} rate-limited for ${ra}s`);
+        appendLog({
+          level: "warn",
+          provider: "deepseek",
+          model: dsModel,
+          keyIndex: keyIdx + 1,
+          message: `[KEY ROTATION] DeepSeek Key #${keyIdx + 1} rate-limited for ${ra}s`,
+        });
         throw err;
       }
       if (resp.status === 401 || resp.status === 403) {
         console.log(`  [DeepSeek] Key #${keyIdx + 1} invalid (${resp.status})`);
+        appendLog({
+          level: "error",
+          provider: "deepseek",
+          model: dsModel,
+          keyIndex: keyIdx + 1,
+          message: `✗ DeepSeek Key #${keyIdx + 1} invalid (${resp.status}) — ${errMsg}`,
+        });
         throw err;
       }
+      // 402 (insufficient balance) and other errors
+      appendLog({
+        level: "error",
+        provider: "deepseek",
+        model: dsModel,
+        keyIndex: keyIdx + 1,
+        message: `✗ DeepSeek Key #${keyIdx + 1} → [${resp.status}] ${errMsg}`,
+      });
       throw err;
     }
 
@@ -219,6 +254,13 @@ async function callDeepSeek(
     }
 
     console.log(`      [DeepSeek] ✓ Success (${dsModel}${isReasoner ? " V4 Pro" : " V4 Flash"})`);
+    appendLog({
+      level: "success",
+      provider: "deepseek",
+      model: dsModel,
+      keyIndex: keyIdx + 1,
+      message: `✓ DeepSeek ${dsModel} (Key #${keyIdx + 1})`,
+    });
     return content as string;
   } catch (e: unknown) {
     if (e && typeof e === "object" && "status" in e) {
@@ -229,6 +271,13 @@ async function callDeepSeek(
       message: (e as Error)?.message || "DeepSeek network error",
       keyIndex: keyIdx,
     };
+    appendLog({
+      level: "error",
+      provider: "deepseek",
+      model: dsModel,
+      keyIndex: keyIdx + 1,
+      message: `✗ DeepSeek ${dsModel} → [${err.code}] ${err.message}`,
+    });
     throw err;
   } finally {
     clearTimeout(timer);
@@ -278,6 +327,12 @@ function getAvailableKeyIndex(): number {
 function markKeyRateLimited(keyIndex: number, retryAfter: number) {
   rateLimitedKeys.set(keyIndex, Date.now() + retryAfter * 1000);
   console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} rate-limited for ${retryAfter}s`);
+  appendLog({
+    level: "warn",
+    provider: "openrouter",
+    keyIndex: keyIndex + 1,
+    message: `[KEY ROTATION] OpenRouter Key #${keyIndex + 1} rate-limited for ${retryAfter}s`,
+  });
 }
 
 function getKeyByIndex(index: number): string {
@@ -309,6 +364,11 @@ async function callOpenRouterDirect(
       );
       if (waitMs > 0) {
         console.log(`  [KEY ROTATION] All OpenRouter keys rate-limited, waiting ${Math.round(waitMs / 1000)}s...`);
+        appendLog({
+          level: "warn",
+          provider: "openrouter",
+          message: `[KEY ROTATION] All OpenRouter keys rate-limited — waiting ${Math.round(waitMs / 1000)}s...`,
+        });
         await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
@@ -322,6 +382,13 @@ async function callOpenRouterDirect(
 
     try {
       console.log(`      [OpenRouter] Key #${keyIndex + 1}, model: ${params.model}`);
+      appendLog({
+        level: "info",
+        provider: "openrouter",
+        model: params.model,
+        keyIndex: keyIndex + 1,
+        message: `[OpenRouter] Key #${keyIndex + 1}, model: ${params.model}`,
+      });
       const resp = await fetch(OPENROUTER_URL, {
         method: "POST",
         headers: {
@@ -354,15 +421,37 @@ async function callOpenRouterDirect(
         const err: OpenRouterError = { status: resp.status, message: errMsg, retryAfter, keyIndex };
 
         if (resp.status === 429) {
+          appendLog({
+            level: "error",
+            provider: "openrouter",
+            model: params.model,
+            keyIndex: keyIndex + 1,
+            message: `✗ [Key #${keyIndex + 1}] ${params.model} → [429] ${errMsg}`,
+          });
           markKeyRateLimited(keyIndex, retryAfter || 60);
           lastError = err;
           continue;
         }
         if (resp.status === 401 || resp.status === 403) {
           console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} invalid (${resp.status})`);
+          appendLog({
+            level: "error",
+            provider: "openrouter",
+            model: params.model,
+            keyIndex: keyIndex + 1,
+            message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${resp.status}] invalid key — ${errMsg}`,
+          });
           lastError = err;
           continue;
         }
+        // 4xx (non-429, non-401/403): invalid model / bad request — log and skip to next model
+        appendLog({
+          level: "error",
+          provider: "openrouter",
+          model: params.model,
+          keyIndex: keyIndex + 1,
+          message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${resp.status}] ${errMsg}`,
+        });
         throw err;
       }
 
@@ -391,6 +480,13 @@ async function callOpenRouterDirect(
       }
 
       console.log(`      [OpenRouter] ✓ Success (${params.model})`);
+      appendLog({
+        level: "success",
+        provider: "openrouter",
+        model: params.model,
+        keyIndex: keyIndex + 1,
+        message: `✓ [Key #${keyIndex + 1}] ${params.model} → Success`,
+      });
       return content as string;
     } catch (e: unknown) {
       if (e && typeof e === "object" && "status" in e) {
@@ -402,6 +498,13 @@ async function callOpenRouterDirect(
         keyIndex,
       };
       console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} network error: ${err.code}`);
+      appendLog({
+        level: "error",
+        provider: "openrouter",
+        model: params.model,
+        keyIndex: keyIndex + 1,
+        message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${err.code}] ${err.message}`,
+      });
       lastError = err;
       continue;
     } finally {
@@ -409,6 +512,12 @@ async function callOpenRouterDirect(
     }
   }
 
+  appendLog({
+    level: "error",
+    provider: "openrouter",
+    model: params.model,
+    message: `✗ All ${keys.length} OpenRouter keys exhausted for ${params.model}`,
+  });
   throw lastError || { message: "All OpenRouter keys exhausted" };
 }
 
@@ -433,6 +542,12 @@ export async function callOpenRouter(
     } catch (err) {
       const e = err as OpenRouterError;
       console.log(`  [FALLBACK] DeepSeek failed (${e.status || e.code}): ${e.message} → trying OpenRouter`);
+      appendLog({
+        level: "warn",
+        provider: "deepseek",
+        model: params.model,
+        message: `[FALLBACK] DeepSeek failed (${e.status || e.code}) → switching to OpenRouter`,
+      });
     }
   }
 

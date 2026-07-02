@@ -2,6 +2,8 @@
 // Stores live progress of background pipeline runs so the frontend can poll.
 // This replaces SSE streaming — polling is far more robust through proxies/gateways.
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface AgentState {
   id: string;
   name: string;
@@ -9,10 +11,28 @@ export interface AgentState {
   error?: string;
 }
 
+/* ===========================================================
+   Live log entries — visible in ProcessingOverlay
+   Each line: timestamp + provider + model + key + status
+=========================================================== */
+export type LogLevel = "info" | "success" | "warn" | "error";
+
+export interface LogEntry {
+  id: string;
+  ts: number; // epoch ms
+  level: LogLevel;
+  agentId?: string; // "01".."08" | "PIPELINE" | "TASK" | "REVIEWER"
+  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  model?: string;
+  keyIndex?: number; // 1-based
+  message: string;
+}
+
 export interface PipelineProgress {
   projectId: string;
   status: "running" | "done" | "error";
   agents: AgentState[];
+  logs: LogEntry[];
   error?: string;
   result?: {
     projectId: string;
@@ -20,6 +40,40 @@ export interface PipelineProgress {
   };
   startedAt: number;
   finishedAt?: number;
+}
+
+// AsyncLocalStorage carries the projectId through the entire async pipeline
+// (including Promise.all parallel branches) so deep callees (openrouter.ts,
+// ai.ts) can append log lines without explicit parameter passing.
+const projectIdStorage = new AsyncLocalStorage<string>();
+
+let logSeq = 0;
+
+/**
+ * Run a callback inside a pipeline log context. All `appendLog()` calls
+ * made anywhere within `fn` (and its async descendants) will be attached
+ * to `projectId`'s progress tracker.
+ */
+export function runWithProjectLog<T>(projectId: string, fn: () => T): T {
+  return projectIdStorage.run(projectId, fn);
+}
+
+/**
+ * Append a log entry to the current pipeline's progress tracker.
+ * Safe to call from anywhere — if no pipeline context is active, this is a no-op.
+ * Logs are capped at 500 entries (FIFO eviction) to bound memory.
+ */
+export function appendLog(entry: Omit<LogEntry, "id" | "ts">): void {
+  const pid = projectIdStorage.getStore();
+  if (!pid) return; // not running inside a pipeline context
+  const p = progressMap.get(pid);
+  if (!p) return;
+  p.logs.push({
+    ...entry,
+    id: `log-${Date.now()}-${++logSeq}`,
+    ts: Date.now(),
+  });
+  if (p.logs.length > 500) p.logs.shift();
 }
 
 // Global map — persists across requests within the same Node.js process.
@@ -39,6 +93,7 @@ export function initProgress(projectId: string): PipelineProgress {
       { id: "07", name: "Git / DevOps", status: "pending" },
       { id: "08", name: "Quality Reviewer", status: "pending" },
     ],
+    logs: [],
     startedAt: Date.now(),
   };
   progressMap.set(projectId, p);
