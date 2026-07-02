@@ -28,7 +28,59 @@ export interface OpenRouterError {
   code?: string;
   message: string;
   retryAfter?: number;
-  keyIndex?: number; // which key was used when error occurred
+  keyIndex?: number;
+}
+
+// ===== Token Usage Tracking =====
+export interface TokenUsage {
+  model: string;
+  keyIndex: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+let lastTokenUsage: TokenUsage | null = null;
+let totalTokensUsed = 0;
+
+export function getLastTokenUsage(): TokenUsage | null {
+  return lastTokenUsage;
+}
+
+export function getTotalTokensUsed(): number {
+  return totalTokensUsed;
+}
+
+export function resetTokenTracking(): void {
+  totalTokensUsed = 0;
+  lastTokenUsage = null;
+}
+
+// ===== In-memory cache (replaces Redis for sandbox) =====
+const aiCache = new Map<string, { result: string; timestamp: number }>();
+const CACHE_TTL = 3600000; // 1 hour
+
+function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
+  const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
+  return `${model}:${temperature}:${content.substring(0, 500)}`;
+}
+
+export function getCachedResult(key: string): string | null {
+  const cached = aiCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    console.log("  [CACHE] Hit — skipping API call");
+    return cached.result;
+  }
+  return null;
+}
+
+export function setCachedResult(key: string, result: string): void {
+  aiCache.set(key, { result, timestamp: Date.now() });
+  // Clean old entries
+  if (aiCache.size > 100) {
+    const oldest = [...aiCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
+    if (oldest) aiCache.delete(oldest[0]);
+  }
 }
 
 /* ===========================================================
@@ -109,6 +161,13 @@ export async function callOpenRouter(
   params: CallModelParams,
   timeoutMs = 120000
 ): Promise<string> {
+  // Check cache first (skip for chat — different each time)
+  if (params.temperature < 0.5) {
+    const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
+    const cached = getCachedResult(cacheKey);
+    if (cached) return cached;
+  }
+
   const keys = getAllApiKeys();
   if (keys.length === 0) {
     throw {
@@ -205,6 +264,26 @@ export async function callOpenRouter(
       if (!content) {
         throw { message: "Null response from model", keyIndex } as OpenRouterError;
       }
+
+      // Track token usage (store in global for ai.ts to persist)
+      const usage = data?.usage;
+      if (usage) {
+        lastTokenUsage = {
+          model: params.model,
+          keyIndex: keyIndex + 1,
+          promptTokens: usage.prompt_tokens || 0,
+          completionTokens: usage.completion_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+        };
+        totalTokensUsed += lastTokenUsage.totalTokens;
+      }
+
+      // Cache result (only for low-temperature deterministic calls)
+      if (params.temperature < 0.5) {
+        const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
+        setCachedResult(cacheKey, content);
+      }
+
       return content as string;
     } catch (e: unknown) {
       if (e && typeof e === "object" && "status" in e) {

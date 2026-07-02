@@ -725,9 +725,13 @@ export async function runPipeline(
   const t0 = Date.now();
   const total = AGENTS.length + 1; // +1 reviewer
 
-  // ===== PHASE 1: 7 Agents =====
-  for (let i = 0; i < AGENTS.length; i++) {
-    const ag = AGENTS[i];
+  // ===== PHASE 1: Sequential agents (analysis → hr → sprint) =====
+  // These must run sequentially because each depends on the previous
+  const phase1Agents = AGENTS.filter((a) => ["analysis", "hr", "sprint"].includes(a.key));
+  const phase2Agents = AGENTS.filter((a) => ["design", "uml", "docs", "git"].includes(a.key));
+
+  for (const ag of phase1Agents) {
+    const i = AGENTS.indexOf(ag);
     onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
     console.log(`\n>> [AGENT-${ag.id}] ${ag.name}`);
     console.log(`   Models: ${ag.models.join(" → ")}`);
@@ -748,6 +752,42 @@ export async function runPipeline(
       failed.push(ag);
       onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
       console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
+    }
+  }
+
+  // ===== PHASE 2: Parallel agents (design, uml, docs, git) =====
+  // These only depend on Phase 1 results, so they can run in parallel
+  console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
+  const phase2Promises = phase2Agents.map(async (ag) => {
+    const i = AGENTS.indexOf(ag);
+    onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
+    console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
+
+    const ctx = buildCtx(ag.key, results, input);
+    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+
+    if (res && isValidSchema(res.data, ag.key)) {
+      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
+      return { ag, res, failed: false };
+    } else if (res) {
+      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
+      return { ag, res, failed: false };
+    } else {
+      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
+      console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
+      return { ag, res: null, failed: true };
+    }
+  });
+
+  // Wait for all parallel agents to complete
+  const phase2Results = await Promise.all(phase2Promises);
+  for (const r of phase2Results) {
+    if (r.failed) {
+      failed.push(r.ag);
+    } else if (r.res) {
+      (results as Record<string, unknown>)[r.ag.key] = r.res.data;
     }
   }
 
