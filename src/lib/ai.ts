@@ -23,12 +23,12 @@ const MAX_DELAY = 30000;
 /* ===========================================================
    PRIMARY MODELS (safe fallbacks that are known to work)
 =========================================================== */
-// DeepSeek models (priority — cheaper + faster + smarter)
-// V4 Flash = deepseek-chat (fast, cheap, good for planning)
-// V4 Pro = deepseek-reasoner (flagship, smart, best for coding/architecture)
+// DeepSeek models (direct API only — NOT available free on OpenRouter anymore)
+// V4 Flash = deepseek-chat (fast, cheap)
+// V4 Pro = deepseek-reasoner (flagship, smart)
 const DS_FLASH = "deepseek/deepseek-chat:free";       // V4 Flash
 const DS_PRO = "deepseek/deepseek-r1:free";            // V4 Pro (reasoner)
-const DS_REASONER = "deepseek/deepseek-r1:free";       // V4 Pro for chat (thinking mode)
+const DS_REASONER = "deepseek/deepseek-r1:free";       // V4 Pro for chat
 
 const SAFE_1 = "openai/gpt-oss-120b:free";
 const SAFE_2 = "cohere/north-mini-code:free";
@@ -96,7 +96,6 @@ const AGENTS: AgentDef[] = [
     temp: 0.15,
     models: [
       DS_PRO,
-      "poolside/laguna-m.1:free",
       "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
       SAFE_1,
@@ -110,7 +109,6 @@ const AGENTS: AgentDef[] = [
     temp: 0.1,
     models: [
       DS_PRO,
-      "poolside/laguna-m.1:free",
       "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
       SAFE_2,
@@ -137,7 +135,7 @@ const AGENTS: AgentDef[] = [
     temp: 0.15,
     models: [
       DS_PRO,
-      "poolside/laguna-xs.2:free",
+      "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
       SAFE_2,
     ],
@@ -146,16 +144,14 @@ const AGENTS: AgentDef[] = [
 
 const REVIEWER_MODELS = [
   DS_PRO,
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
   "openai/gpt-oss-120b:free",
   "google/gemma-4-31b-it:free",
+  SAFE_1,
 ];
 
 const TASK_GEN_MODELS = [
   DS_PRO,
   DS_FLASH,
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "openai/gpt-oss-120b:free",
   "cohere/north-mini-code:free",
   SAFE_1,
@@ -477,11 +473,41 @@ YEU CAU BAT BUONG CHO CLASS DIAGRAM:
 - KHONG dung tu khoa "class" truoc dong quan he
 - It nhat 6 quan he
 
-YEU CAU BAT BUONG CHO ERD:
-- Ve TAT CA bang (it nhat 8 bang)
-- Moi bang co it nhat 4 cot
-- BAT BUONG ve quan he giua TAT CA bang co lien quan (it nhat 7 quan he)
-- Cu phap: A ||--o{ B : "label"
+YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
+- Ve TAT CA bang trong database (it nhat 8 bang)
+- Moi bang CO it nhat 4 cot voi kieu du lieu (vd: int id PK, varchar name, text description, datetime created_at)
+- BAT BUOC ve quan he giua TAT CA cac bang co lien quan (it nhat 8 quan he)
+- DUNG cu phap Mermaid ERD chuan:
+  A ||--o{ B : "has many"     (1-n)
+  A ||--|| B : "has one"       (1-1)
+  A }o--o{ B : "many to many"  (n-n)
+  A }o--|| B : "belongs to"    (n-1)
+- KHONG viet quan he dang text "makes", "pays" — PHAI dung cu phap Mermaid chuan
+- VI DU DUNG:
+  erDiagram
+      USERS {
+          int id PK
+          varchar email
+          varchar password
+          datetime created_at
+      }
+      RESERVATIONS {
+          int id PK
+          int user_id FK
+          int room_id FK
+          datetime check_in
+          datetime check_out
+      }
+      ROOMS {
+          int id PK
+          varchar name
+          int branch_id FK
+          decimal price
+      }
+      USERS ||--o{ RESERVATIONS : "makes"
+      ROOMS ||--o{ RESERVATIONS : "reserved by"
+      BRANCHES ||--o{ ROOMS : "contains"
+- TAT CA bang phai co ket noi — KHONG duoc de bang nao thua don
 
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
