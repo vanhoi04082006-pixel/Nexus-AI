@@ -189,7 +189,7 @@ export function UMLTab() {
   const reload = useReloadProject();
   const r = (result?.uml || {}) as Partial<UMLData>;
   const [active, setActive] = useState<string>("useCase");
-  const [viewMode, setViewMode] = useState<"interactive" | "mermaid">("interactive");
+  const [viewMode, setViewMode] = useState<"interactive" | "mermaid">("mermaid");
 
   // Parse ERD
   const erdData = parseERD(r.erd || "");
@@ -223,16 +223,14 @@ export function UMLTab() {
     }
   }, [r.erd, r.classDiagram, active]);
 
-  const isInteractive = (active === "erd" || active === "classDiagram") && viewMode === "interactive";
-  const hasInteractiveNodes = active === "erd" ? erdNodes.length > 0 : classNodes.length > 0;
+  const isInteractive = (active === "erd" || active === "classDiagram") && viewMode === "interactive" && hasInteractiveNodes;
 
   return (
     <div className="space-y-6">
       <SectionEditor section="uml" title="UML Diagrams" content={r} onSaved={reload} />
 
       <p className="text-xs text-muted-foreground bg-secondary/30 border border-border rounded-lg p-3">
-        Class Diagram va ERD ho tro keo tha (interactive) — ban co the di chuyen cac node, zoom,
-        them/xoa ket noi. Use Case va Sequence dung Mermaid render.
+        Class Diagram va ERD ho tro keo tha (interactive) hoac xem Mermaid. Use Case va Sequence dung Mermaid render.
       </p>
 
       {/* Tab buttons */}

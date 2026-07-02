@@ -25,8 +25,8 @@ const MAX_DELAY = 30000;
 =========================================================== */
 // DeepSeek models (priority — cheaper + faster + smarter)
 const DS_FLASH = "deepseek/deepseek-chat:free"; // V4 Flash — fast, cheap, good for planning
-const DS_PRO = "deepseek/deepseek-r1:free"; // V4 Pro — flagship, best for coding/decomposition
-const DS_REASONER = "deepseek/deepseek-r1:free"; // Thinking mode for chat
+const DS_PRO = "deepseek/deepseek-chat:free"; // Use chat for structured output (reasoner is slow + unreliable for JSON)
+const DS_REASONER = "deepseek/deepseek-r1:free"; // Thinking mode for chat (plain text, not JSON)
 
 const SAFE_1 = "openai/gpt-oss-120b:free";
 const SAFE_2 = "cohere/north-mini-code:free";
