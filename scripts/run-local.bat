@@ -1,5 +1,6 @@
 @echo off
 title NEXUS AI - Local Run + Cloudflare Tunnel
+setlocal disabledelayedexpansion
 
 echo.
 echo ========================================================
@@ -8,36 +9,27 @@ echo    (Windows - khong can WSL)
 echo ========================================================
 echo.
 
-REM ===== Detect project directory =====
 cd /d "%~dp0\.."
 echo Project dir: %CD%
 echo.
 
-REM ===== Bước 0: Kiểm tra .env =====
+REM ===== Step 0: Check .env =====
 echo [0/5] Kiem tra .env...
 if not exist ".env" (
-    echo.
-    echo [X] Khong tim thay .env!
-    echo     Tao .env tu .env.example:
+    echo [X] Khong tim thay .env
     copy .env.example .env
-    echo.
-    echo [!] Mo file .env va dien API keys, roi chay lai script nay!
-    echo.
+    echo [] Mo file .env va dien API keys, roi chay lai
     pause
     exit /b 1
 )
 echo [v] .env da co
 echo.
 
-REM ===== Bước 1: Kiểm tra Bun =====
+REM ===== Step 1: Check Bun =====
 echo [1/5] Kiem tra Bun...
 where bun >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo [X] Bun chua cai! Cai now:
-    echo     powershell -c "irm bun.sh/install.ps1 ^| iex"
-    echo.
-    echo Sau khi cai, mo terminal moi va chay lai script nay.
+    echo [X] Bun chua cai Cai: powershell -c "irm bun.sh/install.ps1 | iex"
     pause
     exit /b 1
 )
@@ -45,44 +37,39 @@ echo [v] Bun:
 bun --version
 echo.
 
-REM ===== Bước 2: Install dependencies =====
+REM ===== Step 2: Install deps =====
 echo [2/5] Install dependencies...
 bun install
 if errorlevel 1 (
-    echo [X] Loi install dependencies!
+    echo [X] Loi install
     pause
     exit /b 1
 )
 echo [v] Dependencies installed
 echo.
 
-REM ===== Bước 3: Setup database =====
+REM ===== Step 3: Setup DB =====
 echo [3/5] Setup database...
 bun run db:push
 if errorlevel 1 (
-    echo [X] Loi setup database!
+    echo [X] Loi database
     pause
     exit /b 1
 )
 echo [v] Database ready
 echo.
 
-REM ===== Bước 4: Kiểm tra cloudflared =====
+REM ===== Step 4: Check cloudflared =====
 echo [4/5] Kiem tra cloudflared...
 where cloudflared >nul 2>&1
 if errorlevel 1 (
     if exist ".\cloudflared.exe" (
-        echo [v] cloudflared.exe da co trong project
+        echo [v] cloudflared.exe da co
     ) else (
-        echo [!] cloudflared chua cai. Dang tai...
+        echo [] Dang tai cloudflared...
         powershell -Command "Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile 'cloudflared.exe'"
-        if errorlevel 1 (
-            echo [X] Khong tai duoc cloudflared!
-            echo     Tai thu cong: https://github.com/cloudflare/cloudflared/releases/latest
-            echo.
-            echo     Tam thoi, server se chay o localhost:3000
-            echo     (Thanh vien khong truy cap duoc tu ngoai mang)
-            echo.
+        if not exist ".\cloudflared.exe" (
+            echo [X] Khong tai duoc cloudflared
             goto :start_server_only
         )
         echo [v] cloudflared da tai
@@ -92,17 +79,17 @@ if errorlevel 1 (
 )
 echo.
 
-REM ===== Bước 5: Khởi động server + tunnel =====
+REM ===== Step 5: Start server + tunnel =====
 :start_full
 echo [5/5] Khoi dong Next.js + Cloudflare Tunnel...
 echo.
-echo Server se chay o nen. Nhan Ctrl+C de dung.
+echo Nhan Ctrl+C de dung.
 echo.
 
-REM Khoi dong Next.js server trong background
+REM Start Next.js
 start /b bun run dev > dev.log 2>&1
 
-REM Doi server san sang
+REM Wait for server
 echo Dang doi server san sang...
 set /a tries=0
 :wait_loop
@@ -110,40 +97,35 @@ set /a tries+=1
 timeout /t 2 /nobreak >nul
 curl -s -o nul -w "%%{http_code}" http://localhost:3000/ 2>nul | find "200" >nul
 if errorlevel 1 (
-    if %tries% lss 15 (
-        goto :wait_loop
-    )
-    echo [X] Server khong khoi dong duoc! Kiem tra dev.log
+    if %tries% lss 15 goto :wait_loop
+    echo [X] Server khong khoi dong Kiem tra dev.log
     pause
     exit /b 1
 )
-echo [v] Server san sang tai http://localhost:3000
+echo [v] Server: http://localhost:3000
 echo.
 
-REM Khoi dong Cloudflare Tunnel
+REM Start tunnel
 echo Dang tao URL public...
-echo.
-
-REM Chay cloudflared va luu output vao tunnel.log
 start /b cloudflared.exe tunnel --url http://localhost:3000 > tunnel.log 2>&1
 
-REM Doi 15 giay de tunnel tao URL
+REM Wait 15s for tunnel
 timeout /t 15 /nobreak >nul
 
-REM Dung PowerShell de extract URL va ghi vao file tunnel-url.txt
-powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path tunnel.log) { $c = Get-Content tunnel.log -Raw; if ($c -match 'https://[a-z0-9-]+\.trycloudflare\.com') { $matches[0] | Out-File -FilePath tunnel-url.txt -Encoding ascii -NoNewline } }"
+REM Parse URL using separate PS1 file (avoid CMD escaping issues)
+if exist tunnel-url.txt del tunnel-url.txt
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\parse-tunnel-url.ps1
 
-REM Doc URL tu file tunnel-url.txt
+REM Read URL from file
 set "TUNNEL_URL="
 if exist tunnel-url.txt set /p TUNNEL_URL=<tunnel-url.txt
 
 if defined TUNNEL_URL (
-    REM Ghi URL vao file .public-url
     echo %TUNNEL_URL%> .public-url
     echo.
     echo ========================================================
     echo.
-    echo  NEXUS AI DANG CHAY!
+    echo  NEXUS AI DANG CHAY
     echo.
     echo     Local:  http://localhost:3000
     echo     Public: %TUNNEL_URL%
@@ -160,7 +142,7 @@ if defined TUNNEL_URL (
     echo.
     echo ========================================================
     echo.
-    echo  NEXUS AI DANG CHAY (localhost only)!
+    echo  NEXUS AI DANG CHAY (localhost only)
     echo.
     echo     Local: http://localhost:3000
     echo.
@@ -176,16 +158,15 @@ goto :keep_alive
 echo.
 echo ========================================================
 echo.
-echo  NEXUS AI DANG CHAY (localhost only)!
+echo  NEXUS AI DANG CHAY (localhost only)
 echo.
 echo     URL: http://localhost:3000
 echo.
-echo     Khong co URL public. Chi ban truy cap duoc.
+echo     Khong co URL public.
 echo     Cai cloudflared de co URL public.
 echo.
 echo     Nhan Ctrl+C de dung.
 echo.
 
 :keep_alive
-REM Giu script chay
 pause >nul
