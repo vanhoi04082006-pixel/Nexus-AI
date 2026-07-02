@@ -1,12 +1,7 @@
-// NEXUS AI - OpenRouter API client with multi-key rotation
-// Endpoint: https://openrouter.ai/api/v1/chat/completions
-//
-// Supports multiple API keys to avoid rate limits:
-// - OPENROUTER_API_KEY (primary)
-// - OPENROUTER_API_KEY_2, OPENROUTER_API_KEY_3, ... (fallbacks)
-// On 429 (rate limit) or 401/403 (key invalid), rotates to next key.
+// NEXUS AI - Multi-provider AI client (DeepSeek + OpenRouter)
+// Priority: DeepSeek API first (cheaper, faster) → OpenRouter fallback (multi-key rotation)
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+import { db } from "./db";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -35,6 +30,7 @@ export interface OpenRouterError {
 export interface TokenUsage {
   model: string;
   keyIndex: number;
+  provider: string;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
@@ -56,9 +52,9 @@ export function resetTokenTracking(): void {
   lastTokenUsage = null;
 }
 
-// ===== In-memory cache (replaces Redis for sandbox) =====
+// ===== In-memory cache =====
 const aiCache = new Map<string, { result: string; timestamp: number }>();
-const CACHE_TTL = 3600000; // 1 hour
+const CACHE_TTL = 3600000;
 
 function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
   const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
@@ -76,48 +72,180 @@ export function getCachedResult(key: string): string | null {
 
 export function setCachedResult(key: string, result: string): void {
   aiCache.set(key, { result, timestamp: Date.now() });
-  // Clean old entries
   if (aiCache.size > 100) {
     const oldest = [...aiCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
     if (oldest) aiCache.delete(oldest[0]);
   }
 }
 
-/* ===========================================================
-   Multi-API key management
-=========================================================== */
+// ===========================================================
+// DeepSeek API (direct — priority provider)
+// ===========================================================
+const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_KEYS: string[] = [
+  process.env.DEEPSEEK_API_KEY || "",
+  process.env.DEEPSEEK_API_KEY_2 || "",
+  process.env.DEEPSEEK_API_KEY_3 || "",
+].filter((k) => k && k.startsWith("sk-"));
 
-/** Collect all API keys from environment variables — unlimited count */
+// Map OpenRouter model names → DeepSeek native model names
+const DEEPSEEK_MODEL_MAP: Record<string, string> = {
+  "deepseek/deepseek-chat:free": "deepseek-chat",
+  "deepseek/deepseek-r1:free": "deepseek-reasoner",
+};
+
+// Track rate-limited DeepSeek keys
+const dsRateLimited = new Map<number, number>();
+
+function getAvailableDeepSeekKey(): number {
+  const now = Date.now();
+  for (let i = 0; i < DEEPSEEK_KEYS.length; i++) {
+    const resetAt = dsRateLimited.get(i);
+    if (!resetAt || resetAt < now) {
+      dsRateLimited.delete(i);
+      return i;
+    }
+  }
+  return -1; // all rate-limited
+}
+
+async function callDeepSeek(
+  params: CallModelParams,
+  timeoutMs = 120000
+): Promise<string> {
+  if (DEEPSEEK_KEYS.length === 0) {
+    throw { status: 401, message: "No DEEPSEEK_API_KEY configured" } as OpenRouterError;
+  }
+
+  const dsModel = DEEPSEEK_MODEL_MAP[params.model] || "deepseek-chat";
+  const keyIdx = getAvailableDeepSeekKey();
+  if (keyIdx === -1) {
+    throw { status: 429, message: "All DeepSeek keys rate-limited" } as OpenRouterError;
+  }
+
+  const apiKey = DEEPSEEK_KEYS[keyIdx];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    console.log(`      [DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}`);
+    const resp = await fetch(DEEPSEEK_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: dsModel,
+        messages: params.messages,
+        temperature: params.temperature,
+        max_tokens: params.max_tokens ?? 8000,
+        top_p: params.top_p ?? 0.9,
+        frequency_penalty: params.frequency_penalty ?? 0.1,
+        presence_penalty: params.presence_penalty ?? 0.1,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!resp.ok) {
+      let errMsg = `HTTP ${resp.status}`;
+      try {
+        const body = await resp.json();
+        errMsg = body?.error?.message || errMsg;
+      } catch { /* ignore */ }
+
+      const err: OpenRouterError = {
+        status: resp.status,
+        message: errMsg,
+        keyIndex: keyIdx,
+      };
+
+      if (resp.status === 429) {
+        const ra = parseInt(resp.headers.get("retry-after") || "60");
+        dsRateLimited.set(keyIdx, Date.now() + ra * 1000);
+        console.log(`  [DeepSeek] Key #${keyIdx + 1} rate-limited for ${ra}s`);
+        throw err;
+      }
+      if (resp.status === 401 || resp.status === 403) {
+        console.log(`  [DeepSeek] Key #${keyIdx + 1} invalid (${resp.status})`);
+        throw err;
+      }
+      throw err;
+    }
+
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      throw { message: "Null response from DeepSeek", keyIndex: keyIdx } as OpenRouterError;
+    }
+
+    // Track tokens
+    const usage = data?.usage;
+    if (usage) {
+      lastTokenUsage = {
+        model: dsModel,
+        keyIndex: keyIdx + 1,
+        provider: "deepseek",
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
+      };
+      totalTokensUsed += lastTokenUsage.totalTokens;
+    }
+
+    // Cache
+    if (params.temperature < 0.5) {
+      const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
+      setCachedResult(cacheKey, content);
+    }
+
+    console.log(`      [DeepSeek] ✓ Success (${dsModel})`);
+    return content as string;
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "status" in e) {
+      throw e;
+    }
+    const err: OpenRouterError = {
+      code: (e as Error)?.name === "AbortError" ? "ETIMEDOUT" : "ENET",
+      message: (e as Error)?.message || "DeepSeek network error",
+      keyIndex: keyIdx,
+    };
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ===========================================================
+// OpenRouter API (fallback provider — multi-key rotation)
+// ===========================================================
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
 function getAllApiKeys(): string[] {
   const keys: string[] = [];
-  // Primary key
   if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY);
-  // Additional keys: OPENROUTER_API_KEY_2, _3, _4, ... up to _100 (unlimited)
   for (let i = 2; i <= 100; i++) {
     const key = process.env[`OPENROUTER_API_KEY_${i}`];
     if (key) keys.push(key);
-    else break; // stop at first missing key (keys must be sequential)
+    else break;
   }
   return keys.filter((k) => k && k.startsWith("sk-or-"));
 }
 
-/** Track which keys are rate-limited + when they reset */
-const rateLimitedKeys = new Map<number, number>(); // keyIndex → reset timestamp
+const rateLimitedKeys = new Map<number, number>();
 
-/** Get the next available API key (skips rate-limited ones) */
 function getAvailableKeyIndex(): number {
   const keys = getAllApiKeys();
   if (keys.length === 0) return -1;
   const now = Date.now();
-  // Find first key that's not rate-limited
   for (let i = 0; i < keys.length; i++) {
     const resetAt = rateLimitedKeys.get(i);
     if (!resetAt || resetAt < now) {
-      rateLimitedKeys.delete(i); // expired, clean up
+      rateLimitedKeys.delete(i);
       return i;
     }
   }
-  // All keys rate-limited — return the one that resets soonest
   let soonest = 0;
   let soonestTime = Infinity;
   for (const [idx, resetAt] of rateLimitedKeys) {
@@ -129,66 +257,40 @@ function getAvailableKeyIndex(): number {
   return soonest;
 }
 
-/** Mark a key as rate-limited for X seconds */
 function markKeyRateLimited(keyIndex: number, retryAfter: number) {
   rateLimitedKeys.set(keyIndex, Date.now() + retryAfter * 1000);
-  console.log(
-    `  [KEY ROTATION] Key #${keyIndex + 1} rate-limited for ${retryAfter}s, ` +
-      `switching to next available key`
-  );
+  console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} rate-limited for ${retryAfter}s`);
 }
 
-/** Get the actual key string by index */
 function getKeyByIndex(index: number): string {
   const keys = getAllApiKeys();
   return keys[index] || "";
 }
 
-/** Get total number of configured keys */
 export function getApiKeyCount(): number {
-  return getAllApiKeys().length;
+  return getAllApiKeys().length + DEEPSEEK_KEYS.length;
 }
 
-/* ===========================================================
-   Call OpenRouter with automatic key rotation
-=========================================================== */
-
-/**
- * Call an OpenRouter chat model. Automatically rotates API keys on 429/401/403.
- * Throws OpenRouterError on failure (after all keys exhausted).
- */
-export async function callOpenRouter(
+async function callOpenRouterDirect(
   params: CallModelParams,
   timeoutMs = 120000
 ): Promise<string> {
-  // Check cache first (skip for chat — different each time)
-  if (params.temperature < 0.5) {
-    const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
-    const cached = getCachedResult(cacheKey);
-    if (cached) return cached;
-  }
-
   const keys = getAllApiKeys();
   if (keys.length === 0) {
-    throw {
-      status: 401,
-      message: "No OPENROUTER_API_KEY configured in .env",
-    } as OpenRouterError;
+    throw { status: 401, message: "No OPENROUTER_API_KEY configured" } as OpenRouterError;
   }
 
-  // Try each available key, rotating on 429/401/403
   let lastError: OpenRouterError | null = null;
 
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const keyIndex = getAvailableKeyIndex();
     if (keyIndex === -1) {
-      // All keys exhausted — wait for soonest reset
       const waitMs = Math.min(
         ...Array.from(rateLimitedKeys.values()).map((t) => Math.max(0, t - Date.now())),
         30000
       );
       if (waitMs > 0) {
-        console.log(`  [KEY ROTATION] All keys rate-limited, waiting ${Math.round(waitMs / 1000)}s...`);
+        console.log(`  [KEY ROTATION] All OpenRouter keys rate-limited, waiting ${Math.round(waitMs / 1000)}s...`);
         await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
@@ -201,6 +303,7 @@ export async function callOpenRouter(
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      console.log(`      [OpenRouter] Key #${keyIndex + 1}, model: ${params.model}`);
       const resp = await fetch(OPENROUTER_URL, {
         method: "POST",
         headers: {
@@ -223,54 +326,40 @@ export async function callOpenRouter(
 
       if (!resp.ok) {
         let errMsg = `HTTP ${resp.status}`;
-        let retryAfter: number | undefined;
         try {
           const body = await resp.json();
           errMsg = body?.error?.message || errMsg;
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
+
         const ra = resp.headers.get("retry-after");
-        if (ra) retryAfter = parseInt(ra) || undefined;
+        const retryAfter = ra ? parseInt(ra) : undefined;
+        const err: OpenRouterError = { status: resp.status, message: errMsg, retryAfter, keyIndex };
 
-        const err: OpenRouterError = {
-          status: resp.status,
-          message: errMsg,
-          retryAfter,
-          keyIndex,
-        };
-
-        // 429: rate limit — mark key and try next
         if (resp.status === 429) {
           markKeyRateLimited(keyIndex, retryAfter || 60);
           lastError = err;
-          continue; // try next key
+          continue;
         }
-
-        // 401/403: invalid key — skip this key, try next
         if (resp.status === 401 || resp.status === 403) {
-          console.log(`  [KEY ROTATION] Key #${keyIndex + 1} invalid (${resp.status}), trying next`);
+          console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} invalid (${resp.status})`);
           lastError = err;
-          continue; // try next key
+          continue;
         }
-
-        // Other errors (5xx, etc.) — throw immediately
         throw err;
       }
 
-      // Success!
       const data = await resp.json();
       const content = data?.choices?.[0]?.message?.content;
       if (!content) {
-        throw { message: "Null response from model", keyIndex } as OpenRouterError;
+        throw { message: "Null response", keyIndex } as OpenRouterError;
       }
 
-      // Track token usage (store in global for ai.ts to persist)
       const usage = data?.usage;
       if (usage) {
         lastTokenUsage = {
           model: params.model,
           keyIndex: keyIndex + 1,
+          provider: "openrouter",
           promptTokens: usage.prompt_tokens || 0,
           completionTokens: usage.completion_tokens || 0,
           totalTokens: usage.total_tokens || 0,
@@ -278,26 +367,23 @@ export async function callOpenRouter(
         totalTokensUsed += lastTokenUsage.totalTokens;
       }
 
-      // Cache result (only for low-temperature deterministic calls)
       if (params.temperature < 0.5) {
         const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
         setCachedResult(cacheKey, content);
       }
 
+      console.log(`      [OpenRouter] ✓ Success (${params.model})`);
       return content as string;
     } catch (e: unknown) {
       if (e && typeof e === "object" && "status" in e) {
-        // Already an OpenRouterError — if 429/401/403 we already continued above
-        // This is a different error (5xx, etc.) — throw it
         throw e;
       }
-      // Network / abort error — try next key
       const err: OpenRouterError = {
         code: (e as Error)?.name === "AbortError" ? "ETIMEDOUT" : "ENET",
         message: (e as Error)?.message || "Network error",
         keyIndex,
       };
-      console.log(`  [KEY ROTATION] Key #${keyIndex + 1} network error: ${err.code}, trying next`);
+      console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} network error: ${err.code}`);
       lastError = err;
       continue;
     } finally {
@@ -305,10 +391,33 @@ export async function callOpenRouter(
     }
   }
 
-  // All keys exhausted
-  throw (
-    lastError || {
-      message: "All API keys exhausted",
+  throw lastError || { message: "All OpenRouter keys exhausted" };
+}
+
+// ===========================================================
+// MAIN: callOpenRouter — tries DeepSeek first, then OpenRouter
+// ===========================================================
+export async function callOpenRouter(
+  params: CallModelParams,
+  timeoutMs = 120000
+): Promise<string> {
+  // Check cache first
+  if (params.temperature < 0.5) {
+    const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
+    const cached = getCachedResult(cacheKey);
+    if (cached) return cached;
+  }
+
+  // Step 1: Try DeepSeek API first (if model is a DeepSeek model)
+  if (DEEPSEEK_KEYS.length > 0 && DEEPSEEK_MODEL_MAP[params.model]) {
+    try {
+      return await callDeepSeek(params, timeoutMs);
+    } catch (err) {
+      const e = err as OpenRouterError;
+      console.log(`  [FALLBACK] DeepSeek failed (${e.status || e.code}): ${e.message} → trying OpenRouter`);
     }
-  );
+  }
+
+  // Step 2: Fall back to OpenRouter (multi-key rotation)
+  return callOpenRouterDirect(params, timeoutMs);
 }
