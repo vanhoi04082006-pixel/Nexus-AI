@@ -24,9 +24,11 @@ const MAX_DELAY = 30000;
    PRIMARY MODELS (safe fallbacks that are known to work)
 =========================================================== */
 // DeepSeek models (priority — cheaper + faster + smarter)
-const DS_FLASH = "deepseek/deepseek-chat:free"; // V4 Flash — fast, cheap, good for planning
-const DS_PRO = "deepseek/deepseek-chat:free"; // Use chat for structured output (reasoner is slow + unreliable for JSON)
-const DS_REASONER = "deepseek/deepseek-r1:free"; // Thinking mode for chat (plain text, not JSON)
+// V4 Flash = deepseek-chat (fast, cheap, good for planning)
+// V4 Pro = deepseek-reasoner (flagship, smart, best for coding/architecture)
+const DS_FLASH = "deepseek/deepseek-chat:free";       // V4 Flash
+const DS_PRO = "deepseek/deepseek-r1:free";            // V4 Pro (reasoner)
+const DS_REASONER = "deepseek/deepseek-r1:free";       // V4 Pro for chat (thinking mode)
 
 const SAFE_1 = "openai/gpt-oss-120b:free";
 const SAFE_2 = "cohere/north-mini-code:free";

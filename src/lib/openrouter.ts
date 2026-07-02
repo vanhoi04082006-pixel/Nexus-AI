@@ -118,6 +118,9 @@ async function callDeepSeek(
   }
 
   const dsModel = DEEPSEEK_MODEL_MAP[params.model] || "deepseek-chat";
+  const isReasoner = dsModel === "deepseek-reasoner";
+  // V4 Pro (reasoner) needs more time to think — up to 5 min
+  const effectiveTimeout = isReasoner ? Math.max(timeoutMs, 300000) : timeoutMs;
   const keyIdx = getAvailableDeepSeekKey();
   if (keyIdx === -1) {
     throw { status: 429, message: "All DeepSeek keys rate-limited" } as OpenRouterError;
@@ -125,10 +128,10 @@ async function callDeepSeek(
 
   const apiKey = DEEPSEEK_KEYS[keyIdx];
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), effectiveTimeout);
 
   try {
-    console.log(`      [DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}`);
+    console.log(`      [DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}${isReasoner ? " (V4 Pro — thinking)" : " (V4 Flash)"}`);
     const resp = await fetch(DEEPSEEK_URL, {
       method: "POST",
       headers: {
@@ -175,8 +178,23 @@ async function callDeepSeek(
     }
 
     const data = await resp.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) {
+    const message = data?.choices?.[0]?.message;
+    let content = message?.content || "";
+
+    // V4 Pro (reasoner) may have <think> tags or reasoning before JSON
+    if (isReasoner && content) {
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      // If there's text before the JSON, extract just the JSON part
+      const jsonStart = content.indexOf("{");
+      if (jsonStart > 0) {
+        const beforeJson = content.substring(0, jsonStart).trim();
+        if (beforeJson.length < 100) {
+          content = content.substring(jsonStart);
+        }
+      }
+    }
+
+    if (!content || !content.trim()) {
       throw { message: "Null response from DeepSeek", keyIndex: keyIdx } as OpenRouterError;
     }
 
@@ -194,13 +212,13 @@ async function callDeepSeek(
       totalTokensUsed += lastTokenUsage.totalTokens;
     }
 
-    // Cache
-    if (params.temperature < 0.5) {
+    // Cache (skip for reasoner — non-deterministic thinking)
+    if (params.temperature < 0.5 && !isReasoner) {
       const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
       setCachedResult(cacheKey, content);
     }
 
-    console.log(`      [DeepSeek] ✓ Success (${dsModel})`);
+    console.log(`      [DeepSeek] ✓ Success (${dsModel}${isReasoner ? " V4 Pro" : " V4 Flash"})`);
     return content as string;
   } catch (e: unknown) {
     if (e && typeof e === "object" && "status" in e) {
