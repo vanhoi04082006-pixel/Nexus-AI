@@ -130,9 +130,12 @@ start /b cloudflared.exe tunnel --url http://localhost:3000 > tunnel.log 2>&1
 REM Doi 15 giay de tunnel tao URL
 timeout /t 15 /nobreak >nul
 
-REM Dung PowerShell de parse URL tu tunnel.log
+REM Dung PowerShell de extract URL va ghi vao file tunnel-url.txt
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path tunnel.log) { $c = Get-Content tunnel.log -Raw; if ($c -match 'https://[a-z0-9-]+\.trycloudflare\.com') { $matches[0] | Out-File -FilePath tunnel-url.txt -Encoding ascii -NoNewline } }"
+
+REM Doc URL tu file tunnel-url.txt
 set "TUNNEL_URL="
-for /f "delims=" %%i in ('powershell -NoProfile -Command "if (Test-Path tunnel.log) { (Get-Content tunnel.log -Raw) -match 'https://[a-z0-9-]+\.trycloudflare\.com'; if ($matches) { $matches[0] } }" 2^>nul') do set "TUNNEL_URL=%%i"
+if exist tunnel-url.txt set /p TUNNEL_URL=<tunnel-url.txt
 
 if defined TUNNEL_URL (
     REM Ghi URL vao file .public-url
