@@ -1,12 +1,11 @@
 @echo off
-chcp 65001 >nul
 title NEXUS AI - Local Run + Cloudflare Tunnel
 
 echo.
-echo +======================================================+
-echo |   NEXUS AI - Local Run + Cloudflare Tunnel           |
-echo |   (Windows - khong can WSL)                          |
-echo +======================================================+
+echo ========================================================
+echo    NEXUS AI - Local Run + Cloudflare Tunnel
+echo    (Windows - khong can WSL)
+echo ========================================================
 echo.
 
 REM ===== Detect project directory =====
@@ -19,7 +18,7 @@ echo [0/5] Kiem tra .env...
 if not exist ".env" (
     echo.
     echo [X] Khong tim thay .env!
-    echo    Tao .env tu .env.example:
+    echo     Tao .env tu .env.example:
     copy .env.example .env
     echo.
     echo [!] Mo file .env va dien API keys, roi chay lai script nay!
@@ -36,13 +35,13 @@ where bun >nul 2>&1
 if errorlevel 1 (
     echo.
     echo [X] Bun chua cai! Cai now:
-    echo    powershell -c "irm bun.sh/install.ps1 ^| iex"
+    echo     powershell -c "irm bun.sh/install.ps1 ^| iex"
     echo.
     echo Sau khi cai, mo terminal moi va chay lai script nay.
     pause
     exit /b 1
 )
-echo [v] Bun: 
+echo [v] Bun:
 bun --version
 echo.
 
@@ -72,22 +71,24 @@ REM ===== Bước 4: Kiểm tra cloudflared =====
 echo [4/5] Kiem tra cloudflared...
 where cloudflared >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo [!] cloudflared chua cai. Dang tai...
-    echo.
-    REM Tải cloudflared cho Windows
-    powershell -Command "Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile 'cloudflared.exe'"
-    if errorlevel 1 (
-        echo [X] Khong tai duoc cloudflared!
-        echo    Tai thu cong: https://github.com/cloudflare/cloudflared/releases/latest
-        echo    Dat file cloudflared.exe vao thu muc project hoac them vao PATH
-        echo.
-        echo    Tam thoi, server se chay o localhost:3000
-        echo    (Thanh vien khong truy cap duoc tu ngoai mang)
-        echo.
-        goto :start_server_only
+    if exist ".\cloudflared.exe" (
+        echo [v] cloudflared.exe da co trong project
+    ) else (
+        echo [!] cloudflared chua cai. Dang tai...
+        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile 'cloudflared.exe'"
+        if errorlevel 1 (
+            echo [X] Khong tai duoc cloudflared!
+            echo     Tai thu cong: https://github.com/cloudflare/cloudflared/releases/latest
+            echo.
+            echo     Tam thoi, server se chay o localhost:3000
+            echo     (Thanh vien khong truy cap duoc tu ngoai mang)
+            echo.
+            goto :start_server_only
+        )
+        echo [v] cloudflared da tai
     )
-    echo [v] cloudflared da tai
+) else (
+    echo [v] cloudflared da cai
 )
 echo.
 
@@ -110,7 +111,6 @@ timeout /t 2 /nobreak >nul
 curl -s -o nul -w "%%{http_code}" http://localhost:3000/ 2>nul | find "200" >nul
 if errorlevel 1 (
     if %tries% lss 15 (
-        echo.
         goto :wait_loop
     )
     echo [X] Server khong khoi dong duoc! Kiem tra dev.log
@@ -120,7 +120,7 @@ if errorlevel 1 (
 echo [v] Server san sang tai http://localhost:3000
 echo.
 
-REM Khoi dong Cloudflare Tunnel — output vao file de parse URL
+REM Khoi dong Cloudflare Tunnel
 echo Dang tao URL public...
 echo.
 
@@ -130,13 +130,9 @@ start /b cloudflared.exe tunnel --url http://localhost:3000 > tunnel.log 2>&1
 REM Doi 15 giay de tunnel tao URL
 timeout /t 15 /nobreak >nul
 
-REM Dung PowerShell de parse URL tu tunnel.log (don gian, khong loi batch syntax)
-for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-Content tunnel.log -Raw) -match 'https://[a-z0-9-]+\.trycloudflare\.com' | Out-Null; $matches[0]" 2^>nul') do set "TUNNEL_URL=%%i"
-
-REM Neu van khong tim thay, thu lay tat ca cac dong co https
-if not defined TUNNEL_URL (
-    for /f "delims=" %%i in ('powershell -NoProfile -Command "Select-String -Path tunnel.log -Pattern 'https://' -AllMatches ^| ForEach-Object { $_.Matches } ^| ForEach-Object { $_.Value } ^| Select-Object -First 1" 2^>nul') do set "TUNNEL_URL=%%i"
-)
+REM Dung PowerShell de parse URL tu tunnel.log
+set "TUNNEL_URL="
+for /f "delims=" %%i in ('powershell -NoProfile -Command "if (Test-Path tunnel.log) { (Get-Content tunnel.log -Raw) -match 'https://[a-z0-9-]+\.trycloudflare\.com'; if ($matches) { $matches[0] } }" 2^>nul') do set "TUNNEL_URL=%%i"
 
 if defined TUNNEL_URL (
     REM Ghi URL vao file .public-url
