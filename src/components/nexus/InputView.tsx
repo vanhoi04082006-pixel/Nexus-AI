@@ -22,6 +22,7 @@ import {
   Terminal,
   Loader2,
 } from "lucide-react";
+import { AI3DBrain } from "./AI3DBrain";
 
 const STRENGTHS = [
   "Backend", "Frontend", "Database", "UI/UX", "Testing", "DevOps",
@@ -269,11 +270,14 @@ export function InputView() {
       <div className="flex-1 overflow-y-auto nexus-scroll">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="nexus-boot space-y-6">
-            {/* Premium Intro with glow */}
+            {/* Premium Intro with 3D AI Brain + glow */}
             <div className="text-center mb-8 relative">
               {/* Glow aura behind title */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[200px] bg-gradient-to-r from-cyan-500/10 via-primary/15 to-emerald-500/10 blur-[80px] rounded-full animate-pulse pointer-events-none" />
               <div className="relative">
+                <div className="flex justify-center mb-6">
+                  <AI3DBrain size={100} />
+                </div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/5 mb-4">
                   <Terminal className="w-3.5 h-3.5 text-primary nexus-spin-slow" />
                   <span className="text-[10px] font-mono text-primary tracking-wider">NEXUS_CORE // MULTI_AGENT_GATEWAY</span>

@@ -24,7 +24,10 @@ import {
   Terminal,
   Activity,
   TrendingUp,
+  Brain,
+  Zap,
 } from "lucide-react";
+import { AI3DBrain } from "./AI3DBrain";
 
 interface ProjectHistoryItem {
   id: string;
@@ -167,15 +170,12 @@ export function HomeView() {
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
               </div>
             ) : projects.length === 0 ? (
-              /* ===== Empty State ===== */
-              <div className="max-w-3xl mx-auto px-6 py-20 text-center">
-                <div className="relative inline-block mb-8">
-                  <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full animate-pulse" />
-                  <div className="relative w-20 h-20 rounded-2xl bg-primary/15 flex items-center justify-center mx-auto nexus-pulse-glow">
-                    <Sparkles className="w-10 h-10 text-primary nexus-spin-slow" />
-                  </div>
+              /* ===== Empty State with 3D AI Brain ===== */
+              <div className="max-w-3xl mx-auto px-6 py-16 text-center nexus-boot">
+                <div className="flex justify-center mb-8">
+                  <AI3DBrain size={140} />
                 </div>
-                <h2 className="text-2xl font-bold mb-3">Khởi tạo dự án với 10 AI Agent</h2>
+                <h2 className="text-2xl font-bold mb-3 nexus-text-glow">Khởi tạo dự án với 10 AI Agent</h2>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto mb-8">
                   Nhập chủ đề → 10 AI Agent tự động phân tích, thiết kế, lập sprint, sinh todolist, push GitHub và gửi email mời thành viên.
                 </p>
@@ -187,19 +187,17 @@ export function HomeView() {
               <>
                 {/* ===== Hero with 3D AI brain ===== */}
                 {heroProject && (
-                  <div className="relative h-[300px] sm:h-[360px] overflow-hidden nexus-hud">
+                  <div className="relative h-[300px] sm:h-[380px] overflow-hidden nexus-hud">
                     {/* Dynamic gradient */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${heroGradient} transition-all duration-700`} />
                     {/* Grid pattern */}
                     <div className="absolute inset-0 nexus-grid-bg opacity-30 nexus-grid-pulse" />
-                    {/* 3D AI brain image — right side */}
-                    <div className="absolute right-0 top-0 bottom-0 w-1/2 hidden sm:block">
-                      <img
-                        src="/ai-brain-hero.png"
-                        alt="AI Neural Network"
-                        className="w-full h-full object-cover opacity-60"
-                        style={{ maskImage: "linear-gradient(to left, black 30%, transparent 100%)", WebkitMaskImage: "linear-gradient(to left, black 30%, transparent 100%)" }}
-                      />
+                    {/* 3D AI Brain — right side */}
+                    <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:flex items-center justify-center">
+                      <AI3DBrain size={180} />
+                    </div>
+                    <div className="absolute right-12 top-1/2 -translate-y-1/2 hidden sm:flex lg:hidden items-center justify-center">
+                      <AI3DBrain size={120} />
                     </div>
                     {/* Floating glow orbs */}
                     <div className="absolute -top-20 -left-20 w-80 h-80 bg-primary/10 blur-[100px] rounded-full nexus-float" />
