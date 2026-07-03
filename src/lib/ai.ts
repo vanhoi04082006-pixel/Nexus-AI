@@ -605,6 +605,22 @@ YEU CAU BAT BUOC CHO CLASS DIAGRAM (classDiagram):
 - BAT BUOC ve quan he: User <|-- Student, Course "1" --> "*" Class
 - KHONG dung tu khoa "class" truoc dong quan he
 - It nhat 6 quan he
+- CRITICAL — QUAN HE CO LABEL:
+  - SAI: RecommendationEngine -->|use| Product : "analyzes"  ← parse error!
+  - SAI: Admin -->|manage| Product : "CRUD"                   ← parse error!
+  - DUNG: RecommendationEngine -->|use| Product
+  - DUNG: Admin -->|manage| Product
+  - KHONG BAO GIO dung dau ":" sau quan he co |edge label|
+  - Chi dung: A --> B, A -->|label| B, A "1" --> "*" B : label
+- VI DU DUNG:
+  classDiagram
+      class User { +int id +string email +login() }
+      class Order { +int id +datetime orderDate +calculateTotal() }
+      User <|-- Customer
+      User <|-- Admin
+      Customer "1" --> "*" Order : places
+      Order "1" --> "*" Product : includes
+      RecommendationEngine -->|use| Product
 
 YEU CAU BAT BUOC CHO ERD (erDiagram — RAT QUAN TRONG):
 - Bat dau bang "erDiagram"
@@ -670,11 +686,12 @@ TAT CA 4 BIEU DO PHAI PHU HOP VOI CHU DE DU AN — KHONG dung vi du chung chung 
 function docsPrompt(): string {
   return `Ban la Technical Writer. Viet README.md, Coding Convention, va API Response Standard BANG TIENG VIET, chi tiet de developer moi co the lam viec ngay.
 QUAN TRONG: Tat ca tai lieu PHAI DE CAP CHU DE DU AN CU THE — vi du neu la "quan ly khach san" thi README phai noi ve khach san, dat phong, check-in/check-out, KHONG dung vi du chung chung.
+QUAN TRONG: KHONG DUOC DE TRONG bat ky field nao. Tat ca 3 field (readme, convention, apiStandard) phai co noi dung day du, it nhat 500 ky tu moi field.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "readme" (string): noi dung README.md day du (gioi thieu du an cu the, cai dat, chay, cau truc, huong dan code, vi du API call cu the cua du an)
-- "convention" (string): Coding Convention (ten bien, ten file, function, comment, git commit message) — kem vi du cu the cua du an
-- "apiStandard" (string): API Response Standard (format JSON, status code, error handling) — kem vi du response cu the cua du an`;
+- "readme" (string): noi dung README.md day du (gioi thieu du an cu the, cai dat, chay, cau truc, huong dan code, vi du API call cu the cua du an). It nhat 800 ky tu.
+- "convention" (string): Coding Convention CHI TIET — ten bien (camelCase/snake_case), ten file (kebab-case/PascalCase), function naming, class naming, comment format (JSDoc), git commit message format (conventional commits), import order, error handling pattern. Kem vi du cu the cho tung rule. It nhat 500 ky tu. KHONG DE TRONG.
+- "apiStandard" (string): API Response Standard CHI TIET — format JSON response (success + error), status code convention (200/201/400/401/403/404/500), error response structure (code, message, details), pagination format, timestamp format, authentication header format. Kem vi du JSON response cu the cua du an. It nhat 500 ky tu. KHONG DE TRONG.`;
 }
 
 function gitPrompt(): string {

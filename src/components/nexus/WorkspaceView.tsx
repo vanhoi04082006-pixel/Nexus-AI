@@ -26,6 +26,7 @@ import {
   Globe,
   Copy,
   Trash2,
+  History,
 } from "lucide-react";
 import { AnalysisTab } from "./tabs/AnalysisTab";
 import { HRTab } from "./tabs/HRTab";
@@ -38,6 +39,7 @@ import { ChatTab } from "./tabs/ChatTab";
 import { MembersTab } from "./tabs/MembersTab";
 import { TasksTab } from "./tabs/TasksTab";
 import { MailboxTab } from "./tabs/MailboxTab";
+import { HistoryTab } from "./tabs/HistoryTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 
 interface NavItem {
@@ -59,6 +61,7 @@ const NAV: NavItem[] = [
   { id: "members", name: "Thanh Vien", icon: UserPlus, group: "collab" },
   { id: "tasks", name: "Todolist", icon: CheckSquare, group: "delivery" },
   { id: "mailbox", name: "Mailbox", icon: Mail, group: "delivery" },
+  { id: "history", name: "Lich Su", icon: History, group: "delivery" },
 ];
 
 export function WorkspaceView() {
@@ -333,6 +336,8 @@ export function WorkspaceView() {
         return <TasksTab />;
       case "mailbox":
         return <MailboxTab />;
+      case "history":
+        return <HistoryTab />;
       default:
         return <AnalysisTab />;
     }

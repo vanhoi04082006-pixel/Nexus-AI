@@ -211,8 +211,21 @@ export async function POST(
               provider: "pipeline",
               message: `✅ INIT COMPLETED — ${savedCount} task(s) đã lưu, email đã gửi`,
             });
+            // Save activity log
+            try {
+              await db.activityLog.create({
+                data: {
+                  projectId: id,
+                  type: "INIT",
+                  status: "SUCCESS",
+                  title: `Sinh todolist thành công`,
+                  details: `✅ ${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên. Tasks phân bổ theo vai trò: ${input.members.map((m) => `${m.name}(${tasks.filter((t) => t.assigneeName === m.name).length})`).join(", ")}`,
+                  agentId: "TASK",
+                },
+              });
+            } catch { /* non-fatal */ }
           })
-          .catch((err) => {
+          .catch(async (err) => {
             const msg = err instanceof Error ? err.message : "Task generation failed";
             console.error(`>> [INIT] Background task generation FAILED:`, msg);
             appendLog({
@@ -221,6 +234,19 @@ export async function POST(
               provider: "pipeline",
               message: `❌ INIT FAILED — ${msg}`,
             });
+            // Save activity log
+            try {
+              await db.activityLog.create({
+                data: {
+                  projectId: id,
+                  type: "INIT",
+                  status: "FAILED",
+                  title: `Sinh todolist thất bại`,
+                  details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+                  agentId: "TASK",
+                },
+              });
+            } catch { /* non-fatal */ }
             finishInitialize(id, undefined, msg);
           });
       });

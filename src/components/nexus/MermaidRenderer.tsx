@@ -34,6 +34,41 @@ function fixMermaid(code: string): string {
     s = s.replace(/^(\s*)class\s+(\w+)\s+("[^"]*"\s*[-]+[>|]*\s*"[^"]*")\s*/gm, '$1$2 $3 ');
     // Fix extra whitespace in class body (e.g. "    +int currentStudents" with leading spaces)
     s = s.replace(/^(\s*)\s{8,}(\+)/gm, "$1    $2");
+
+    // CRITICAL: Fix "A -->|label| B : text" → "A -->|label| B"
+    // Mermaid classDiagram does NOT support ": label" after a relationship with |edge label|
+    // Example: RecommendationEngine -->|use| Product : "analyzes" → RecommendationEngine -->|use| Product
+    s = s.replace(
+      /^(\s*)(\w+)\s*(--?>|<--|--|-\.\->|<-\.\-)\s*\|([^|]+)\|\s*(\w+)\s*:\s*.*$/gm,
+      (_m, indent: string, from: string, arrow: string, edgeLabel: string, to: string) => {
+        return `${indent}${from} ${arrow}|${edgeLabel}| ${to}`;
+      }
+    );
+
+    // CRITICAL: Fix 'A "1" --> "*" B : "label"' → 'A "1" --> "*" B : label'
+    // Mermaid 11 sometimes chokes on quoted labels after colon in classDiagram
+    // Strip quotes from the relationship label (keep the text)
+    // Example: Customer "1" --> "*" Cart : "has" → Customer "1" --> "*" Cart : has
+    s = s.replace(
+      /^(\s*)(\w+)\s+("[^"]*")\s*(--?>|<--|--|-\.\->)\s*("[^"]*")\s*(\w+)\s*:\s*"([^"]*)"\s*$/gm,
+      (_m, indent: string, from: string, card1: string, arrow: string, card2: string, to: string, label: string) => {
+        return `${indent}${from} ${card1} ${arrow} ${card2} ${to} : ${label}`;
+      }
+    );
+
+    // Fix <<entity>> stereotype syntax (Mermaid wants <<entity>> on its own line inside class)
+    // AI writes: class User { <<entity>> +int id ... }
+    // Mermaid wants: class User { <<entity>> \n +int id \n ... }
+    s = s.replace(
+      /\{(\s*)<<(entity|abstract|interface|enum|service)>>\s+/g,
+      "{ $1<<$2>>\n"
+    );
+
+    // Fix "class ClassName {" that has content on same line — split to next line
+    s = s.replace(
+      /class\s+(\w+)\s*\{(\s*)(\+)/g,
+      "class $1 {\n  $3"
+    );
   }
 
   // ===== Use Case (graph TD) fixes =====
