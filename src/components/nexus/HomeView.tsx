@@ -26,6 +26,8 @@ import {
   TrendingUp,
   Brain,
   Zap,
+  Search,
+  Bell,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 
@@ -84,9 +86,11 @@ const TEMPLATES = [
 export function HomeView() {
   const setView = useNexus((s) => s.setView);
   const setRoute = useNexus((s) => s.setRoute);
+  const access = useNexus((s) => s.access);
   const [projects, setProjects] = useState<ProjectHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [heroIndex, setHeroIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     loadProjects();
@@ -120,7 +124,10 @@ export function HomeView() {
 
   const heroProject = projects[heroIndex] || projects[0];
   const heroGradient = HERO_GRADIENTS[heroIndex % HERO_GRADIENTS.length];
-  const recentProjects = projects.slice(0, 10);
+  const filteredProjects = searchQuery.trim()
+    ? projects.filter(p => p.topic.toLowerCase().includes(searchQuery.toLowerCase()) || p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : projects;
+  const recentProjects = filteredProjects.slice(0, 10);
 
   function fmtDate(iso: string): string {
     return new Date(iso).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });
@@ -134,11 +141,10 @@ export function HomeView() {
 
   return (
     <main className="flex-1 flex flex-col bg-[#060b14]/95 min-h-screen nexus-boot">
-      {/* ===== Top Bar ===== */}
+      {/* ===== Top Bar with search + notifications + avatar ===== */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-[#060b14]/90 backdrop-blur-2xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* AI Logo with orbital ring */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <div className="relative">
               <div className="absolute inset-0 bg-primary/30 blur-lg rounded-lg animate-pulse" />
               <div className="relative w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center nexus-flicker">
@@ -146,16 +152,42 @@ export function HomeView() {
               </div>
               <div className="absolute -inset-1 rounded-full border border-primary/20 nexus-orbit" style={{ borderTopColor: "transparent", borderBottomColor: "transparent" }} />
             </div>
-            <div>
+            <div className="hidden sm:block">
               <h1 className="text-lg font-bold tracking-tight">
                 <span className="text-primary nexus-text-glow">NEXUS</span> AI
               </h1>
               <p className="text-[10px] text-muted-foreground tracking-wider uppercase">Multi-Agent Architect</p>
             </div>
           </div>
-          <Button onClick={newProject} className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow">
-            <Plus className="w-4 h-4" /> Dự án mới
-          </Button>
+
+          {/* Search bar */}
+          <div className="flex-1 max-w-md hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-card/40 border border-border/40 backdrop-blur-sm">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm dự án..."
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <kbd className="text-[9px] text-muted-foreground/50 font-mono px-1.5 py-0.5 rounded border border-border/40">⌘K</kbd>
+          </div>
+
+          {/* Right: notifications + new project + avatar */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Notification bell */}
+            <button className="relative w-9 h-9 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:border-primary/30 transition-colors">
+              <Bell className="w-4 h-4 text-muted-foreground" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
+            </button>
+            <Button onClick={newProject} className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow">
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Dự án mới</span>
+            </Button>
+            {/* User avatar */}
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary/20 to-cyan-500/20 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+              {access?.name?.charAt(0).toUpperCase() || "U"}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -216,10 +248,10 @@ export function HomeView() {
                             Cập nhật {fmtDate(heroProject.updatedAt)}
                           </span>
                         </div>
-                        <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold mb-2 leading-tight tracking-tight nexus-text-glow">
+                        <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold mb-2 leading-tight tracking-tight nexus-text-glow">
                           {heroProject.topic}
                         </h1>
-                        <p className="text-sm text-muted-foreground mb-5 max-w-xl line-clamp-2">
+                        <p className="text-sm text-foreground/70 mb-5 max-w-xl line-clamp-2">
                           {heroProject.description?.substring(0, 120) || "Không có mô tả"}
                         </p>
                         {/* Stats */}
@@ -278,10 +310,10 @@ export function HomeView() {
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <h2 className="text-lg font-bold">Dự án gần đây</h2>
-                          <span className="text-xs text-muted-foreground/60 font-mono">({projects.length})</span>
+                          <span className="text-xs text-muted-foreground/60 font-mono">({filteredProjects.length})</span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                         {recentProjects.map((p, i) => {
                           const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
                           const gradient = CARD_GRADIENTS[i % CARD_GRADIENTS.length];
@@ -290,7 +322,7 @@ export function HomeView() {
                           return (
                             <div
                               key={p.id}
-                              className={`nexus-card-hover rounded-xl border ${borderColor} bg-card/60 backdrop-blur-sm overflow-hidden cursor-pointer group nexus-hud`}
+                              className={`nexus-card-hover rounded-2xl border ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-shadow`}
                               onClick={() => openProject(p)}
                             >
                               {/* Card header with gradient + project image */}
@@ -316,7 +348,7 @@ export function HomeView() {
                               </div>
                               {/* Body */}
                               <div className="p-3.5">
-                                <h3 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{p.topic}</h3>
+                                <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{p.topic}</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 min-h-[16px]">
                                   {p.description?.substring(0, 60) || "Không có mô tả"}
                                 </p>
@@ -327,7 +359,7 @@ export function HomeView() {
                                 </div>
                               </div>
                               {/* Progress bar */}
-                              <div className="h-1 bg-border/30">
+                              <div className="h-1.5 bg-border/30">
                                 <div className={`h-full transition-all ${p.status === "INITIALIZED" ? "bg-emerald-400" : "bg-primary"}`} style={{ width: `${status.pct}%` }} />
                               </div>
                             </div>
@@ -349,7 +381,7 @@ export function HomeView() {
                         return (
                           <div
                             key={t.name}
-                            className={`nexus-card-hover rounded-xl border ${t.border} bg-gradient-to-br ${t.color} p-4 cursor-pointer group flex flex-col gap-3 nexus-hud`}
+                            className={`nexus-card-hover rounded-2xl border ${t.border} bg-gradient-to-br ${t.color} p-5 cursor-pointer group flex flex-col gap-3 nexus-hud backdrop-blur-xl shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-shadow min-h-[140px]`}
                             onClick={newProject}
                           >
                             <div className="w-10 h-10 rounded-lg bg-card/60 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -380,26 +412,26 @@ export function HomeView() {
               <div className="mb-6">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-3">Tổng quan</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-card/40 p-3 text-center">
+                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
                     <div className="text-xl font-bold text-primary">{projects.length}</div>
                     <div className="text-[9px] text-muted-foreground">Dự án</div>
                   </div>
-                  <div className="rounded-lg bg-card/40 p-3 text-center">
+                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
                     <div className="text-xl font-bold text-cyan-400">{totalMembers}</div>
                     <div className="text-[9px] text-muted-foreground">Thành viên</div>
                   </div>
-                  <div className="rounded-lg bg-card/40 p-3 text-center">
+                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
                     <div className="text-xl font-bold text-emerald-400">{totalTasks}</div>
                     <div className="text-[9px] text-muted-foreground">Tasks</div>
                   </div>
                 </div>
                 {/* Overall progress */}
-                <div className="mt-3 rounded-lg bg-card/40 p-3">
+                <div className="mt-3 rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] text-muted-foreground">Tiến độ tổng thể</span>
                     <span className="text-xs font-bold text-primary">{overallProgress}%</span>
                   </div>
-                  <div className="h-1.5 bg-border/40 rounded-full overflow-hidden">
+                  <div className="h-2.5 bg-border/40 rounded-full overflow-hidden shadow-inner">
                     <div className="h-full bg-gradient-to-r from-primary to-cyan-400 transition-all" style={{ width: `${overallProgress}%` }} />
                   </div>
                 </div>
@@ -411,9 +443,12 @@ export function HomeView() {
                 <div className="space-y-2">
                   {projects.slice(0, 5).map((p, i) => {
                     const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
+                    const AVATAR_COLORS = ["from-cyan-500/20 to-blue-600/10 text-cyan-400", "from-emerald-500/20 to-teal-600/10 text-emerald-400", "from-purple-500/20 to-indigo-600/10 text-purple-400", "from-amber-400/20 to-orange-600/10 text-amber-400", "from-rose-500/20 to-pink-600/10 text-rose-400"];
                     return (
                       <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-card/30 hover:bg-card/50 cursor-pointer transition-colors" onClick={() => openProject(p)}>
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${p.status === "INITIALIZED" ? "bg-emerald-400" : "bg-primary"}`} />
+                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold flex-shrink-0`}>
+                          {p.topic.charAt(0).toUpperCase()}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] font-medium truncate">{p.topic}</p>
                           <p className="text-[9px] text-muted-foreground">{status.text} · {fmtDate(p.updatedAt)}</p>
