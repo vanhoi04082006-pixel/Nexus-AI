@@ -180,7 +180,20 @@ export function TasksTab() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!resp.ok) throw new Error("Loi cap nhat");
-      toast.success(`Da chuyen sang: ${COLUMNS.find(c => c.id === newStatus)?.title}`);
+      toast.success(`Đã chuyển sang: ${COLUMNS.find(c => c.id === newStatus)?.title}`);
+
+      // Create notification for leader when task status changes
+      try {
+        await fetch(`/api/projects/${projectId}/notifications?token=${encodeURIComponent(token || "")}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: newStatus === "done" ? "TASK_COMPLETED" : "TASK_STATUS_CHANGED",
+            title: `Task: ${task.title}`,
+            message: `${access?.name || "Thành viên"} đã chuyển task sang "${COLUMNS.find(c => c.id === newStatus)?.title}"`,
+          }),
+        });
+      } catch { /* non-fatal */ }
     } catch {
       updateTaskStatus(draggableId, source.droppableId);
       toast.error("Khong cap nhat duoc");

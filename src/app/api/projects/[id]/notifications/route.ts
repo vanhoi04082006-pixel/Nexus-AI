@@ -1,6 +1,6 @@
 // NEXUS AI - GET/POST /api/projects/[id]/notifications
 // GET: List notifications for a project
-// POST: Mark all as read (body: { action: "mark_all_read" })
+// POST: Create a notification (for task status changes, proposals, etc.)
 
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const url = new URL(_req.url);
+  const url = new URL(req.url);
   const token = url.searchParams.get("token");
 
   const access = await resolveAccess(id, token);
@@ -27,19 +27,9 @@ export async function GET(
     take: 50,
   });
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unread = notifications.filter((n) => !n.read).length;
 
-  return Response.json({
-    notifications: notifications.map((n) => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      read: n.read,
-      createdAt: n.createdAt.toISOString(),
-    })),
-    unreadCount,
-  });
+  return Response.json({ notifications, unread });
 }
 
 export async function POST(
@@ -55,23 +45,25 @@ export async function POST(
     return Response.json({ error: "Access denied" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = (await req.json()) as {
+    type: string;
+    title: string;
+    message: string;
+  };
 
-  if (body.action === "mark_all_read") {
-    await db.notification.updateMany({
-      where: { projectId: id, read: false },
-      data: { read: true },
-    });
-    return Response.json({ success: true });
+  if (!body.title) {
+    return Response.json({ error: "title required" }, { status: 400 });
   }
 
-  if (body.action === "mark_read" && body.notificationId) {
-    await db.notification.update({
-      where: { id: body.notificationId },
-      data: { read: true },
-    });
-    return Response.json({ success: true });
-  }
+  const notification = await db.notification.create({
+    data: {
+      projectId: id,
+      type: body.type || "ACTIVITY",
+      title: body.title,
+      message: body.message || "",
+      read: false,
+    },
+  });
 
-  return Response.json({ error: "Unknown action" }, { status: 400 });
+  return Response.json({ success: true, notification });
 }

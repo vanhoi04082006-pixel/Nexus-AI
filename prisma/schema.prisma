@@ -38,6 +38,7 @@ model Project {
   tokenLogs     TokenLog[]
   activityLogs  ActivityLog[]
   notifications Notification[]
+  agentConfigs  AgentConfig[]
 }
 
 /// Long-term memory cache for a project.
@@ -226,4 +227,48 @@ model Notification {
 
   @@index([projectId])
   @@index([read])
+}
+
+// Agent configuration — customizable AI agents
+model AgentConfig {
+  id          String   @id @default(cuid())
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentId     String   // "01".."10" | custom
+  name        String
+  role        String   // Architect, Backend, Frontend, etc.
+  description String   @default("")
+  model       String   @default("openai/gpt-oss-120b:free")
+  provider    String   @default("openrouter")
+  temperature Float    @default(0.2)
+  maxContext  Int      @default(8000)
+  status      String   @default("online") // online | offline | busy | error
+  systemPrompt String  @default("")
+  skills      String   @default("[]") // JSON array of skill names
+  tokenUsed   Int      @default(0)
+  taskCount   Int      @default(0)
+  successRate Float    @default(0.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([agentId])
+}
+
+// Project template — blueprint for quick project creation
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  category    String   // WEB | ECOMMERCE | MANAGEMENT | MOBILE | LMS | HOTEL | HOSPITAL | WAREHOUSE | BANKING | AI_SAAS | CHAT | MICROSERVICES | K8S | DASHBOARD | CUSTOM
+  icon        String   @default("Code2")
+  color       String   @default("from-cyan-500/20 to-blue-600/5")
+  topic       String
+  purpose     String   @default("Đồ án tốt nghiệp")
+  techPrefs   String   @default("")
+  langPrefs   String   @default("")
+  isBuiltIn   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([category])
 }

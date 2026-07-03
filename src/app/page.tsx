@@ -8,6 +8,8 @@ import { InputView } from "@/components/nexus/InputView";
 import { ProcessingOverlay } from "@/components/nexus/ProcessingOverlay";
 import { WorkspaceView } from "@/components/nexus/WorkspaceView";
 import { HomeView } from "@/components/nexus/HomeView";
+import { AllProjectsView } from "@/components/nexus/AllProjectsView";
+import { AgentHubView } from "@/components/nexus/AgentHubView";
 
 function NexusApp() {
   const params = useSearchParams();
@@ -76,6 +78,8 @@ function NexusApp() {
       {view === "home" && <HomeView />}
       {view === "input" && <InputView />}
       {view === "workspace" && <WorkspaceView />}
+      {view === "all-projects" && <AllProjectsView />}
+      {view === "agent-hub" && <AgentHubView />}
       {pipelineRunning && <ProcessingOverlay />}
     </div>
   );

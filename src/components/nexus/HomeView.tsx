@@ -320,13 +320,13 @@ export function HomeView() {
               <div>
                 <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Dự án</div>
                 <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
+                  <button onClick={() => setView("all-projects" as never)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <FolderOpen className="w-4 h-4" /> Tất cả dự án
                   </button>
                   <button onClick={newProject} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Plus className="w-4 h-4" /> Tạo dự án mới
                   </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
+                  <button onClick={() => { toast.info("Templates nằm bên dưới — chọn template để tạo dự án nhanh!"); document.getElementById('templates-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Sparkles className="w-4 h-4" /> Templates
                   </button>
                 </div>
@@ -334,7 +334,7 @@ export function HomeView() {
               <div>
                 <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Công cụ</div>
                 <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
+                  <button onClick={() => setView("agent-hub" as never)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Brain className="w-4 h-4" /> Agent Hub
                   </button>
                   <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
@@ -543,7 +543,7 @@ export function HomeView() {
                   )}
 
                   {/* Templates */}
-                  <div>
+                  <div id="templates-section">
                     <div className="flex items-center gap-2 mb-4">
                       <h2 className="text-lg font-bold">Khởi tạo nhanh</h2>
                       <span className="text-xs text-muted-foreground/60">Chọn template để bắt đầu</span>
