@@ -27,6 +27,7 @@ import {
   Copy,
   Trash2,
   History,
+  Brain,
 } from "lucide-react";
 import { AnalysisTab } from "./tabs/AnalysisTab";
 import { HRTab } from "./tabs/HRTab";
@@ -40,8 +41,10 @@ import { MembersTab } from "./tabs/MembersTab";
 import { TasksTab } from "./tabs/TasksTab";
 import { MailboxTab } from "./tabs/MailboxTab";
 import { HistoryTab } from "./tabs/HistoryTab";
+import { AgentHubTab } from "./tabs/AgentHubTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
+import { NotificationBell } from "./NotificationBell";
 
 interface NavItem {
   id: string;
@@ -63,6 +66,7 @@ const NAV: NavItem[] = [
   { id: "tasks", name: "Todolist", icon: CheckSquare, group: "delivery" },
   { id: "mailbox", name: "Mailbox", icon: Mail, group: "delivery" },
   { id: "history", name: "Lich Su", icon: History, group: "delivery" },
+  { id: "agenthub", name: "Agent Hub", icon: Brain, group: "delivery" },
 ];
 
 export function WorkspaceView() {
@@ -346,6 +350,8 @@ export function WorkspaceView() {
         return <MailboxTab />;
       case "history":
         return <HistoryTab />;
+      case "agenthub":
+        return <AgentHubTab />;
       default:
         return <AnalysisTab />;
     }
@@ -575,6 +581,7 @@ export function WorkspaceView() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <NotificationBell />
             {isLeader && (
               <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">
                 <Crown className="w-2.5 h-2.5" /> Leader

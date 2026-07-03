@@ -139,7 +139,7 @@ interface NexusState {
   tasks: TaskItem[];
   emails: EmailView[];
   proposals: EditProposalView[];
-  activeTab: SectionType | "chat" | "members" | "tasks" | "mailbox" | "history";
+  activeTab: SectionType | "chat" | "members" | "tasks" | "mailbox" | "history" | "agenthub";
   loadingProject: boolean;
 
   // refine

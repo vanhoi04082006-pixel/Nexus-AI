@@ -95,6 +95,16 @@ export async function POST(
       include: { member: true },
     });
 
+    // Create notification for leader
+    await db.notification.create({
+      data: {
+        projectId: id,
+        type: "EDIT_PROPOSAL",
+        title: `${access.name} đề xuất chỉnh sửa`,
+        message: `Section "${body.section}": ${body.requestedChange.substring(0, 80)}`,
+      },
+    });
+
     return Response.json({
       proposal: {
         id: proposal.id,

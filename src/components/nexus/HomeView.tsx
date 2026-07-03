@@ -77,16 +77,25 @@ const STATUS_LABELS: Record<string, { text: string; color: string; pct: number }
 };
 
 const TEMPLATES = [
-  { name: "Fullstack Web App", desc: "Next.js + Prisma + shadcn/ui", icon: Code2, color: "from-cyan-500/20 to-blue-600/5", iconColor: "text-cyan-400", border: "border-cyan-500/30" },
-  { name: "E-commerce System", desc: "Shop + Payment + Inventory", icon: ShoppingBag, color: "from-emerald-500/20 to-teal-600/5", iconColor: "text-emerald-400", border: "border-emerald-500/30" },
-  { name: "Management System", desc: "CRM / ERP / HRM dashboard", icon: Settings, color: "from-purple-500/20 to-indigo-600/5", iconColor: "text-purple-400", border: "border-purple-500/30" },
-  { name: "Mobile App", desc: "React Native / Flutter", icon: Smartphone, color: "from-amber-400/20 to-orange-600/5", iconColor: "text-amber-400", border: "border-amber-400/30" },
+  { name: "Fullstack Web App", desc: "Next.js + Prisma + shadcn/ui", icon: Code2, color: "from-cyan-500/20 to-blue-600/5", iconColor: "text-cyan-400", border: "border-cyan-500/30",
+    topic: "Hệ thống Fullstack Web App", description: "Ứng dụng web full-stack với Next.js, Prisma, shadcn/ui, JWT auth, dashboard", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, TypeScript, Tailwind CSS, Prisma, PostgreSQL, shadcn/ui, JWT, Docker", langPrefs: "TypeScript, SQL" },
+  { name: "E-commerce System", desc: "Shop + Payment + Inventory", icon: ShoppingBag, color: "from-emerald-500/20 to-teal-600/5", iconColor: "text-emerald-400", border: "border-emerald-500/30",
+    topic: "Hệ thống Thương mại Điện tử", description: "Sàn thương mại điện tử với quản lý sản phẩm, giỏ hàng, thanh toán, đơn hàng, đánh giá, kho hàng", purpose: "Sản phẩm thực tế",
+    techPrefs: "Next.js, React, Stripe, Prisma, PostgreSQL, Redis, Tailwind CSS", langPrefs: "TypeScript, SQL" },
+  { name: "Management System", desc: "CRM / ERP / HRM dashboard", icon: Settings, color: "from-purple-500/20 to-indigo-600/5", iconColor: "text-purple-400", border: "border-purple-500/30",
+    topic: "Hệ thống Quản lý Doanh nghiệp", description: "Hệ thống quản lý CRM/ERP/HRM với dashboard, báo cáo, phân quyền, quản lý nhân sự", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, Prisma, PostgreSQL, Tailwind CSS, Chart.js, shadcn/ui", langPrefs: "TypeScript, SQL" },
+  { name: "Mobile App", desc: "React Native / Flutter", icon: Smartphone, color: "from-amber-400/20 to-orange-600/5", iconColor: "text-amber-400", border: "border-amber-400/30",
+    topic: "Ứng dụng Mobile", description: "Ứng dụng di động đa nền tảng với authentication, navigation, state management, API client", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "React Native, Expo, TypeScript, Tailwind CSS, Redux Toolkit", langPrefs: "TypeScript, JavaScript" },
 ];
 
 export function HomeView() {
   const setView = useNexus((s) => s.setView);
   const setRoute = useNexus((s) => s.setRoute);
   const access = useNexus((s) => s.access);
+  const setInput = useNexus((s) => s.setInput);
   const [projects, setProjects] = useState<ProjectHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -117,6 +126,23 @@ export function HomeView() {
   }
 
   function newProject() {
+    setRoute(null, null);
+    setView("input");
+    window.history.pushState({}, "", `/`);
+  }
+
+  function applyTemplate(template: typeof TEMPLATES[0]) {
+    setInput({
+      topic: template.topic,
+      description: template.description,
+      purpose: template.purpose,
+      extraInfo: {
+        requirements: [],
+        specialReqs: "",
+        techPrefs: template.techPrefs,
+        langPrefs: template.langPrefs,
+      },
+    });
     setRoute(null, null);
     setView("input");
     window.history.pushState({}, "", `/`);
@@ -446,7 +472,7 @@ export function HomeView() {
                           <div
                             key={t.name}
                             className={`nexus-card-hover rounded-2xl border ${t.border} bg-gradient-to-br ${t.color} p-5 cursor-pointer group flex flex-col gap-3 nexus-hud backdrop-blur-xl shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-shadow min-h-[140px]`}
-                            onClick={newProject}
+                            onClick={() => applyTemplate(t)}
                           >
                             <div className="w-10 h-10 rounded-lg bg-card/60 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
                               <Icon className={`w-5 h-5 ${t.iconColor}`} />

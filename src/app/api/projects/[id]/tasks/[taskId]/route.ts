@@ -55,6 +55,18 @@ export async function PUT(
       include: { member: true },
     });
 
+    // Create notification when task is marked done
+    if (body.status === "done") {
+      await db.notification.create({
+        data: {
+          projectId: id,
+          type: "TASK_COMPLETED",
+          title: `${access.name} hoàn thành task`,
+          message: `"${updated.title}" đã được đánh dấu hoàn thành`,
+        },
+      });
+    }
+
     return Response.json({
       task: {
         id: updated.id,
