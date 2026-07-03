@@ -118,6 +118,19 @@ export async function POST(
             provider: "pipeline",
             message: `✅ REFINE COMPLETED — tất cả section đã lưu (version bumped)`,
           });
+          // Save activity log
+          try {
+            await db.activityLog.create({
+              data: {
+                projectId: id,
+                type: "REFINE",
+                status: "SUCCESS",
+                title: `AI Refine thành công`,
+                details: `✅ Đã sinh lại tất cả 9 sections (Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security). Version bumped trong database. ${body.editRequests.length} edit request(s) + chat discussion đã được áp dụng.`,
+                agentId: "REFINE",
+              },
+            });
+          } catch { /* non-fatal */ }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Refine failed";
           console.error(`>> [REFINE] Background refine FAILED:`, msg);
@@ -127,6 +140,19 @@ export async function POST(
             provider: "pipeline",
             message: `❌ REFINE FAILED — ${msg}`,
           });
+          // Save activity log
+          try {
+            await db.activityLog.create({
+              data: {
+                projectId: id,
+                type: "REFINE",
+                status: "FAILED",
+                title: `AI Refine thất bại`,
+                details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+                agentId: "REFINE",
+              },
+            });
+          } catch { /* non-fatal */ }
           finishRefine(id, msg);
         }
       })();

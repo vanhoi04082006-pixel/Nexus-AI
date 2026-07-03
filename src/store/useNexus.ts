@@ -82,7 +82,7 @@ export interface LogEntry {
   ts: number;
   level: LogLevel;
   agentId?: string;
-  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
   model?: string;
   keyIndex?: number;
   message: string;
@@ -139,7 +139,7 @@ interface NexusState {
   tasks: TaskItem[];
   emails: EmailView[];
   proposals: EditProposalView[];
-  activeTab: SectionType | "chat" | "members" | "tasks" | "mailbox";
+  activeTab: SectionType | "chat" | "members" | "tasks" | "mailbox" | "history";
   loadingProject: boolean;
 
   // refine
@@ -279,7 +279,9 @@ export const useNexus = create<NexusState>()(
         { id: "05", name: "UML Generator", status: "pending" },
         { id: "06", name: "Technical Writer", status: "pending" },
         { id: "07", name: "Git / DevOps", status: "pending" },
-        { id: "08", name: "Quality Reviewer", status: "pending" },
+        { id: "08", name: "Software Tester", status: "pending" },
+        { id: "09", name: "Security Reviewer", status: "pending" },
+        { id: "10", name: "Quality Reviewer", status: "pending" },
       ],
     }),
   setAgentStatus: (id, status, error) =>

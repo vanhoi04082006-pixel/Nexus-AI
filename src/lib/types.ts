@@ -21,6 +21,7 @@ export interface ProjectInput {
   leaderName: string;
   leaderEmail: string;
   leaderSmtpPassword?: string; // Gmail app password for SMTP
+  parallel?: boolean; // true = run agents in parallel (fast but more 429s), false = sequential (slow but stable)
 }
 
 export type SectionType =
@@ -30,7 +31,9 @@ export type SectionType =
   | "design"
   | "uml"
   | "docs"
-  | "git";
+  | "git"
+  | "test"
+  | "security";
 
 // ===== Analysis section =====
 export interface TechStackItem {
@@ -116,6 +119,31 @@ export interface GitData {
   repoUrl: string;
 }
 
+// ===== Test section (Agent 08 - Software Tester) =====
+export interface TestData {
+  testStrategy: string;
+  unitTests: {
+    module: string;
+    cases: { name: string; desc: string; input: string; expected: string }[];
+  }[];
+  integrationTests: { name: string; desc: string; flow: string }[];
+  e2eTests: { name: string; desc: string; steps: string[] }[];
+  apiTests: { endpoint: string; method: string; cases: string }[];
+  performanceTests: { scenario: string; metric: string; target: string }[];
+  bugReportTemplate: string;
+}
+
+// ===== Security section (Agent 09 - Security Reviewer) =====
+export interface SecurityData {
+  threats: { risk: string; severity: string; mitigation: string }[];
+  authFlow: string;
+  authzModel: string;
+  dataProtection: string;
+  owaspChecklist: { category: string; status: string; note: string }[];
+  rateLimit: string;
+  secrets: string;
+}
+
 // ===== Project result (all sections) =====
 export interface ProjectResult {
   analysis: AnalysisData;
@@ -125,6 +153,8 @@ export interface ProjectResult {
   uml: UMLData;
   docs: DocsData;
   git: GitData;
+  test?: TestData;
+  security?: SecurityData;
 }
 
 // ===== Task (todolist) =====

@@ -99,7 +99,7 @@ Tài liệu đầy đủ cho NEXUS AI — Multi-Agent Project Architect.
 
 ---
 
-## 🤖 8 AI Agents
+## 🤖 10 AI Agents
 
 | # | Agent | Section | Mô tả |
 |---|---|---|---|
@@ -110,7 +110,9 @@ Tài liệu đầy đủ cho NEXUS AI — Multi-Agent Project Architect.
 | 05 | UML Generator | `uml` | 4 diagrams (Use Case, Class, ERD, Sequence) |
 | 06 | Technical Writer | `docs` | README, Convention, API Standard |
 | 07 | Git/DevOps | `git` | Git commands, branch strategy |
-| 08 | Quality Reviewer | (all) | Tổng hợp + đồng bộ |
+| 08 | Software Tester ⭐ | `test` | Unit/integration/E2E/API/performance tests + bug report |
+| 09 | Security Reviewer ⭐ | `security` | Threats, auth flow, OWASP Top 10, rate limit, secrets |
+| 10 | Quality Reviewer | (all) | Tổng hợp + đồng bộ 9 sections |
 | — | Task Generator | (Kanban) | SMART tasks + code snippets |
 | — | Chat Assistant | (chat) | AI hội thoại |
 | — | AI Refine | (all) | Re-generate sections |

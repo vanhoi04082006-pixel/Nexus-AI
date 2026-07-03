@@ -33,7 +33,6 @@ const LEVEL_STYLES: Record<LogLevel, { text: string; prefix: string }> = {
 
 const PROVIDER_BADGE: Record<string, { label: string; bg: string }> = {
   openrouter: { label: "OR", bg: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
-  deepseek: { label: "DS", bg: "bg-purple-500/20 text-purple-300 border-purple-500/40" },
   cache: { label: "CACHE", bg: "bg-slate-500/20 text-slate-300 border-slate-500/40" },
   fallback: { label: "FALLBACK", bg: "bg-rose-500/20 text-rose-300 border-rose-500/40" },
   pipeline: { label: "PIPE", bg: "bg-teal-500/20 text-teal-300 border-teal-500/40" },

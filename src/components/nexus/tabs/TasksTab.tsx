@@ -98,6 +98,7 @@ export function TasksTab() {
 
   const [selectedTask, setSelectedTask] = useState<TaskData | null>(null);
   const [showMyTasksOnly, setShowMyTasksOnly] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<string>("all");
   const [updating, setUpdating] = useState<string | null>(null);
 
   // Real-time polling
@@ -137,9 +138,12 @@ export function TasksTab() {
     );
   }
 
-  const filteredTasks = showMyTasksOnly && access?.name
-    ? tasks.filter((t) => t.assigneeName === access.name)
-    : tasks;
+  const memberNames = Array.from(new Set(tasks.map((t) => t.assigneeName).filter(Boolean)));
+  const filteredTasks = tasks.filter((t) => {
+    if (showMyTasksOnly && access?.name && t.assigneeName !== access.name) return false;
+    if (selectedMember !== "all" && t.assigneeName !== selectedMember) return false;
+    return true;
+  });
 
   const stats = {
     total: tasks.length,
@@ -217,8 +221,8 @@ export function TasksTab() {
         </CardContent>
       </Card>
 
-      {/* Filter toggle */}
-      <div className="flex items-center gap-2">
+      {/* Filter toggle + member filter */}
+      <div className="flex flex-wrap items-center gap-2">
         {!isLeader && access?.name && (
           <button
             onClick={() => setShowMyTasksOnly((v) => !v)}
@@ -228,9 +232,25 @@ export function TasksTab() {
                 : "bg-card border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            Viec cua toi ({filteredTasks.length})
+            Viec cua toi
           </button>
         )}
+        {/* Member filter dropdown */}
+        <select
+          value={selectedMember}
+          onChange={(e) => setSelectedMember(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-card text-foreground outline-none cursor-pointer hover:border-primary/50 transition-colors"
+        >
+          <option value="all">Tất cả thành viên ({tasks.length})</option>
+          {memberNames.map((name) => {
+            const count = tasks.filter((t) => t.assigneeName === name).length;
+            return (
+              <option key={name} value={name}>
+                {name} ({count})
+              </option>
+            );
+          })}
+        </select>
         <span className="text-xs text-muted-foreground ml-auto">
           {filteredTasks.length} / {tasks.length} tasks
         </span>

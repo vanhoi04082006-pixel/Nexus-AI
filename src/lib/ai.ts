@@ -3,8 +3,16 @@
 // Each Agent has a tailored model list, 2 retries per model with exponential
 // backoff, a JSON fixer, an AI self-fix pass, and graceful fallbacks.
 
-import { callOpenRouter, type OpenRouterError } from "./openrouter";
+import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter";
 import { appendLog } from "./pipeline-progress";
+import { validateSection } from "./schemas";
+import pLimit from "p-limit";
+
+// Concurrency limiter — max 3 parallel LLM calls to prevent:
+// 1. Memory blowup from too many concurrent fetch() streams
+// 2. Rate-limit spikes from hitting OpenRouter with 6+ requests at once
+// 3. DDoS-like behavior on OpenRouter's free-tier infrastructure
+const limiter = pLimit(MAX_CONCURRENCY);
 import type {
   ProjectResult,
   ProjectInput,
@@ -15,24 +23,31 @@ import type {
 /* ===========================================================
    Tunables
 =========================================================== */
-const REQ_TIMEOUT = 120000;
-const MAX_RETRIES = 2;
+const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
+const MAX_RETRIES = 3;      // 3 attempts per model
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
+const MAX_CONCURRENCY = 3;  // Max parallel LLM calls (prevents memory blowup + rate-limit spikes)
+
+/**
+ * Full Jitter backoff — prevents "Thundering Herd" DDoS on retry.
+ * Instead of all agents retrying at exactly 2s, 4s, 8s,
+ * each gets a random delay spread across the backoff window.
+ * Formula: delay = random(0, base * mult^attempt)
+ * Source: AWS Architecture Blog — "Exponential Backoff and Jitter"
+ */
+function jitteredDelay(base: number, attempt: number): number {
+  const ceiling = Math.min(base * Math.pow(BACKOFF_MULT, attempt), MAX_DELAY);
+  return Math.random() * ceiling;
+}
 
 /* ===========================================================
-   PRIMARY MODELS (safe fallbacks that are known to work)
+   PRIMARY MODELS (v2 — OpenRouter free tier, multi-model fallback)
+   Each agent has its own tailored priority list of free models.
+   Ordered by capability / availability per agent's task type.
+   Last updated: 2026-07-02 (v2)
 =========================================================== */
-// DeepSeek models (direct API only — NOT available free on OpenRouter anymore)
-// V4 Flash = deepseek-chat (fast, cheap)
-// V4 Pro = deepseek-reasoner (flagship, smart)
-const DS_FLASH = "deepseek/deepseek-chat:free";       // V4 Flash
-const DS_PRO = "deepseek/deepseek-r1:free";            // V4 Pro (reasoner)
-const DS_REASONER = "deepseek/deepseek-r1:free";       // V4 Pro for chat
-
-const SAFE_1 = "openai/gpt-oss-120b:free";
-const SAFE_2 = "cohere/north-mini-code:free";
 
 /* ===========================================================
    AGENT DEFINITIONS
@@ -54,13 +69,17 @@ const AGENTS: AgentDef[] = [
     name: "Requirement Analyst",
     key: "analysis",
     required: true,
-    temp: 0.2,
+    temp: 0.20,
     models: [
-      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
       "openai/gpt-oss-120b:free",
-      SAFE_1,
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
     ],
   },
   {
@@ -70,10 +89,14 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.25,
     models: [
-      DS_FLASH,
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
       "google/gemma-4-31b-it:free",
-      SAFE_1,
+      "google/gemma-4-26b-a4b-it:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "openai/gpt-oss-120b:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -81,12 +104,15 @@ const AGENTS: AgentDef[] = [
     name: "Sprint Planner",
     key: "sprint",
     required: false,
-    temp: 0.2,
+    temp: 0.20,
     models: [
-      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
-      SAFE_1,
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "openai/gpt-oss-120b:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "google/gemma-4-31b-it:free",
+      "nvidia/nemotron-nano-9b-v2:free",
     ],
   },
   {
@@ -96,10 +122,13 @@ const AGENTS: AgentDef[] = [
     required: true,
     temp: 0.15,
     models: [
-      DS_PRO,
       "openai/gpt-oss-120b:free",
+      "qwen/qwen3-coder:free",
+      "poolside/laguna-m.1:free",
       "cohere/north-mini-code:free",
-      SAFE_1,
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -107,12 +136,15 @@ const AGENTS: AgentDef[] = [
     name: "UML Generator",
     key: "uml",
     required: false,
-    temp: 0.1,
+    temp: 0.10,
     models: [
-      DS_PRO,
       "openai/gpt-oss-120b:free",
+      "qwen/qwen3-coder:free",
       "cohere/north-mini-code:free",
-      SAFE_2,
+      "poolside/laguna-xs-2.1:free",
+      "poolside/laguna-xs.2:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -122,10 +154,13 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.35,
     models: [
-      DS_FLASH,
       "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
       "openai/gpt-oss-120b:free",
-      SAFE_1,
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
     ],
   },
   {
@@ -135,35 +170,77 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.15,
     models: [
-      DS_PRO,
+      "cohere/north-mini-code:free",
+      "poolside/laguna-m.1:free",
+      "qwen/qwen3-coder:free",
+      "poolside/laguna-xs-2.1:free",
+      "poolside/laguna-xs.2:free",
+      "openai/gpt-oss-120b:free",
+      "openai/gpt-oss-20b:free",
+    ],
+  },
+  {
+    id: "08",
+    name: "Software Tester",
+    key: "test",
+    required: false,
+    temp: 0.20,
+    models: [
+      "qwen/qwen3-coder:free",
       "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
-      SAFE_2,
+      "poolside/laguna-m.1:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
+    ],
+  },
+  {
+    id: "09",
+    name: "Security Reviewer",
+    key: "security",
+    required: false,
+    temp: 0.15,
+    models: [
+      "openai/gpt-oss-120b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "google/gemma-4-31b-it:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
     ],
   },
 ];
 
 const REVIEWER_MODELS = [
-  DS_PRO,
   "openai/gpt-oss-120b:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "google/gemma-4-31b-it:free",
-  SAFE_1,
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
 ];
 
 const TASK_GEN_MODELS = [
-  DS_PRO,
-  DS_FLASH,
+  "qwen/qwen3-coder:free",
   "openai/gpt-oss-120b:free",
+  "poolside/laguna-m.1:free",
   "cohere/north-mini-code:free",
-  SAFE_1,
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
 ];
 
 const CHAT_MODELS = [
-  DS_REASONER,
-  DS_FLASH,
+  "qwen/qwen3-next-80b-a3b-instruct:free",
   "openai/gpt-oss-120b:free",
   "google/gemma-4-31b-it:free",
-  SAFE_1,
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "openai/gpt-oss-20b:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
 ];
 
 /* ===========================================================
@@ -177,6 +254,8 @@ const MIN_KEYS: Record<SectionType, string[]> = {
   uml: ["useCase", "classDiagram", "erd", "sequence"],
   docs: ["readme"],
   git: ["gitCommands", "branchStrategy"],
+  test: ["testStrategy", "unitTests"],
+  security: ["threats", "authFlow"],
 };
 
 function isValidSchema(d: unknown, k: SectionType): boolean {
@@ -274,7 +353,8 @@ async function callModel(
   usr: string,
   temp: number
 ): Promise<string> {
-  return callOpenRouter(
+  // Wrap in concurrency limiter — max MAX_CONCURRENCY parallel LLM calls
+  return limiter(() => callOpenRouter(
     {
       model,
       messages: [
@@ -288,7 +368,7 @@ async function callModel(
       presence_penalty: 0.1,
     },
     REQ_TIMEOUT
-  );
+  ));
 }
 
 interface ParseResult {
@@ -300,9 +380,21 @@ async function callAndParse(
   models: string[],
   sys: string,
   usr: string,
-  temp: number
+  temp: number,
+  sectionKey?: string // for Zod validation (analysis, hr, sprint, etc.)
 ): Promise<ParseResult | null> {
   for (const model of models) {
+    // Skip dead models (all keys exhausted / 404 unavailable recently)
+    // This saves significant time when many agents share the same model list
+    if (isModelDead(model)) {
+      appendLog({
+        level: "warn",
+        model,
+        message: `  ⊘ ${model} → SKIP (model marked dead — all keys exhausted recently)`,
+      });
+      console.log(`      [SKIP] ${model} (dead)`);
+      continue;
+    }
     let d = INIT_DELAY;
 
     for (let a = 1; a <= MAX_RETRIES; a++) {
@@ -316,7 +408,7 @@ async function callAndParse(
         const raw = await callModel(model, sys, usr, temp);
         let data: unknown = null;
 
-        // Parse pipeline: 4 attempts
+        // Parse pipeline: JSON.parse → JFix fallback → extract substring → AI self-fix
         try {
           data = JSON.parse(raw.trim());
         } catch {
@@ -339,7 +431,7 @@ async function callAndParse(
             }
         }
         if (!data) {
-          // AI self-fix pass
+          // AI self-fix pass — ask model to fix its own broken JSON
           console.log(`      [${a}] JSON loi, AI sua...`);
           appendLog({
             level: "warn",
@@ -355,14 +447,51 @@ async function callAndParse(
           data = JFix.parse(fix);
         }
 
+        // Zod schema validation — strict type checking replaces loose isValidSchema
+        // If data parses as JSON but doesn't match schema (missing fields, wrong types),
+        // Zod catches it and we retry with the error message fed back to AI
         if (data) {
-          console.log(`      ✓ ${model} (lan ${a})`);
-          appendLog({
-            level: "success",
-            model,
-            message: `  ✓ ${model} parsed OK (attempt ${a})`,
-          });
-          return { data, model };
+          const zodResult = validateSection(sectionKey, data);
+          if (zodResult.success) {
+            console.log(`      ✓ ${model} (lan ${a}) [Zod validated]`);
+            appendLog({
+              level: "success",
+              model,
+              message: `  ✓ ${model} parsed + Zod validated OK (attempt ${a})`,
+            });
+            return { data: zodResult.data, model };
+          } else {
+            // Zod validation failed — data is valid JSON but wrong structure
+            // Try AI self-fix with Zod error message (1 chance per attempt)
+            console.log(`      [${a}] Zod validation failed: ${zodResult.error.substring(0, 80)}`);
+            appendLog({
+              level: "warn",
+              model,
+              message: `  ⚠ [${a}] ${model} JSON valid but schema mismatch: ${zodResult.error.substring(0, 100)} — AI fixing`,
+            });
+            const fixPrompt = `JSON cua ban da parse thanh cong nhung SAI CAU TRUC. Loi: ${zodResult.error}\n\nSua lai JSON cho dung schema. Giu nguyen noi dung, chi sua cau truc:\n${JSON.stringify(data).substring(0, 5000)}`;
+            const fixRaw = await callModel(model, "JSON schema fixer. Tra JSON dung schema.", fixPrompt, 0.1);
+            let fixedData: unknown = null;
+            try { fixedData = JSON.parse(fixRaw.trim()); } catch { fixedData = JFix.parse(fixRaw); }
+            if (fixedData) {
+              const revalidate = validateSection(sectionKey, fixedData);
+              if (revalidate.success) {
+                console.log(`      ✓ ${model} (lan ${a}) [Zod re-validated after fix]`);
+                appendLog({
+                  level: "success",
+                  model,
+                  message: `  ✓ ${model} Zod validated after AI fix (attempt ${a})`,
+                });
+                return { data: revalidate.data, model };
+              }
+            }
+            // Still failed — continue to next retry attempt
+            appendLog({
+              level: "warn",
+              model,
+              message: `  ⚠ [${a}] ${model} Zod fix failed — will retry`,
+            });
+          }
         }
       } catch (err) {
         const e = err as OpenRouterError;
@@ -376,45 +505,54 @@ async function callAndParse(
           message: `  ✗ [${a}/${MAX_RETRIES}] ${model} → [${st || e.code || "NET"}] ${msg}`,
         });
 
-        // 429: rate limit — wait and retry same model
+        // 429: rate limit — wait with FULL JITTER and retry same model
         if (st === 429) {
           const ra = e.retryAfter || d;
-          console.log(`      ⏳ Rate limit, doi ${Math.min(ra, MAX_DELAY)}ms`);
+          const jittered = jitteredDelay(INIT_DELAY, a);
+          const waitMs = Math.min(ra, MAX_DELAY, jittered + 1000); // jitter + 1s floor
+          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs)}ms (jittered)`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Rate-limited — waiting ${Math.min(ra, MAX_DELAY) / 1000}s before retry`,
+            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (jittered)`,
           });
-          await wait(Math.min(ra, MAX_DELAY));
+          await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
 
         // 5xx / timeout / network: retry same model with backoff
+        // ETIMEDOUT = model is slow, not broken — retry with patience
         if (
           (st && st >= 500) ||
           e.code === "ETIMEDOUT" ||
           e.code === "ENET" ||
           e.code === "ECONNRESET"
         ) {
-          console.log(`      ⏳ Server/timeout, doi ${d}ms`);
+          const isTimeout = e.code === "ETIMEDOUT";
+          const jittered = jitteredDelay(INIT_DELAY, a);
+          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(jittered)}ms (jittered)`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Server/timeout — retrying in ${d / 1000}s`,
+            message: isTimeout
+              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(jittered / 1000)}s (jittered, attempt ${a}/${MAX_RETRIES})`
+              : `  ⏳ Server/timeout — retrying in ${Math.round(jittered / 1000)}s (jittered)`,
           });
-          await wait(d);
+          await wait(jittered);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
 
-        // 401/403: invalid API key or forbidden — FATAL, don't try other models
+        // 401/403: one key is invalid, but other keys may work — skip to next model
+        // (NOT fatal — only 1 out of N keys may be invalid, pipeline should continue)
         if (st === 401 || st === 403) {
-          throw new Error(
-            st === 401
-              ? "OPENROUTER_API_KEY khong hop le. Kiem tra file .env"
-              : "OpenRouter access forbidden (403). Kiem tra API key hoac credit."
-          );
+          appendLog({
+            level: "warn",
+            model,
+            message: `  ⚠ ${model} → skip to next model (some API keys invalid ${st})`,
+          });
+          break;
         }
 
         // 4xx (non-429, non-401/403): invalid model / bad request — skip to next model
@@ -433,7 +571,7 @@ async function callAndParse(
 /* ===========================================================
    PROMPT BUILDERS
 =========================================================== */
-const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). Tuyet doi KHONG dung markdown code block (\`\`\`json), KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong, khong dung newline that. Neu khong biet gia tri thi dung "" hoac [].`;
+const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). He thong da bat response_format: json_object — model bat buoc tra JSON hop le. Tuyet doi KHONG dung markdown code block, KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong. Neu khong biet gia tri thi dung "" hoac [].`;
 
 function analystPrompt(): string {
   return `Ban la Senior Requirement Analyst & Tech Lead. Phan tich du an KY LUONG, CHI TIET va DAY DU.
@@ -472,6 +610,7 @@ Tra object voi cac key BAT BUOC:
 
 function architectPrompt(): string {
   return `Ban la Senior Software Architect. Thiet ke database schema, API endpoints, va folder structure CHI TIET va DAY DU de developer co the code ngay KHONG can hoi them.
+QUAN TRONG: Tat ca dbTables, apiEndpoints, folderStructure PHAI PHU HOP VOI CHU DE DU AN — dung ten entity that cua du an (vd: neu la "quan ly khach san" thi co Bang Rooms, Reservations, Guests, Branches; KHONG dung User/Course chung chung).
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
 - "architectureDesc" (string): 6-8 cau mo ta kien truc he thong chi tiet. Ghi ro: cac layer (frontend-backend-db-cache), luong du lieu chinh, cach cac module giao tiep, security, scalability.
@@ -493,25 +632,62 @@ Tra object voi cac key BAT BUOC:
 }
 
 function umlPrompt(): string {
-  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do.
-QUAN TRONG:
+  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do, PHU HOP VOI CHU DE DU AN CU THE (khong dung vi du chung chung).
+QUAN TRONG — CU PHAP MERMAID CHUAN (KHONG DUOC SAI):
 - KHONG dung [("text")] - dung ["text"] hoac ("text")
 - KHONG dung markdown block ben trong string
 - Moi string phai escape newline: dung \\n thay vi newline that
-- Use Case: bat dau bang "graph TD"
-- Class: bat dau bang "classDiagram"
-- ERD: bat dau bang "erDiagram"
-- Sequence: bat dau bang "sequenceDiagram"
 
-YEU CAU BAT BUONG CHO CLASS DIAGRAM:
-- Ve TAT CA class chinh (it nhat 8 class)
+YEU CAU BAT BUOC CHO USE CASE (graph TD — CU PHAP NODE CHUAN):
+- Bat dau bang "graph TD"
+- DUNG CU PHAP NODE CHUAN:  ActorName["Tên Actor"] --> UseCaseName["Tên Use Case"]
+- KHONG DUNG: actor["Name"] --> (UseCase)  ← SAI, gay parse error
+- KHONG DUNG parentheses () cho use case trong graph TD
+- CRITICAL — INCLUDE/EXTEND SYNTAX:
+  - SAI: Register --> Login : include       ← parse error!
+  - SAI: EnrollCourse --> Payment : extend   ← parse error!
+  - DUNG: Register -->|include| Login
+  - DUNG: EnrollCourse -.->|extend| Payment
+  - Luon dung -->|include| cho include va -.->|extend| cho extend
+- VI DU DUNG:
+  graph TD
+      Admin["System Admin"] --> ManageBranches["Manage Branches"]
+      Admin --> ConfigureSystem["Configure System"]
+      Receptionist["Receptionist"] --> CreateReservation["Create Reservation"]
+      CreateReservation --> CheckIn["Check-In Guest"]
+      Register -->|include| Login
+      EnrollCourse -.->|extend| PaymentProcess
+      ManageBranches --> ConfigureSystem
+- It nhat 6 actors, moi actor co 2-4 use case
+- Ve include/extend dung cu phap -->|include| va -.->|extend|
+
+YEU CAU BAT BUOC CHO CLASS DIAGRAM (classDiagram):
+- Bat dau bang "classDiagram"
+- Ve TAT CA class chinh phu hop voi du an (it nhat 8 class)
 - Moi class co thuoc tinh + method
-- BAT BUONG ve quan he: User <|-- Student, Course "1" --> "*" Class
+- BAT BUOC ve quan he: User <|-- Student, Course "1" --> "*" Class
 - KHONG dung tu khoa "class" truoc dong quan he
 - It nhat 6 quan he
+- CRITICAL — QUAN HE CO LABEL:
+  - SAI: RecommendationEngine -->|use| Product : "analyzes"  ← parse error!
+  - SAI: Admin -->|manage| Product : "CRUD"                   ← parse error!
+  - DUNG: RecommendationEngine -->|use| Product
+  - DUNG: Admin -->|manage| Product
+  - KHONG BAO GIO dung dau ":" sau quan he co |edge label|
+  - Chi dung: A --> B, A -->|label| B, A "1" --> "*" B : label
+- VI DU DUNG:
+  classDiagram
+      class User { +int id +string email +login() }
+      class Order { +int id +datetime orderDate +calculateTotal() }
+      User <|-- Customer
+      User <|-- Admin
+      Customer "1" --> "*" Order : places
+      Order "1" --> "*" Product : includes
+      RecommendationEngine -->|use| Product
 
-YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
-- Ve TAT CA bang trong database (it nhat 8 bang)
+YEU CAU BAT BUOC CHO ERD (erDiagram — RAT QUAN TRONG):
+- Bat dau bang "erDiagram"
+- Ve TAT CA bang trong database phu hop voi du an (it nhat 8 bang)
 - Moi bang CO it nhat 4 cot voi kieu du lieu (vd: int id PK, varchar name, text description, datetime created_at)
 - BAT BUOC ve quan he giua TAT CA cac bang co lien quan (it nhat 8 quan he)
 - DUNG cu phap Mermaid ERD chuan:
@@ -519,7 +695,6 @@ YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
   A ||--|| B : "has one"       (1-1)
   A }o--o{ B : "many to many"  (n-n)
   A }o--|| B : "belongs to"    (n-1)
-- KHONG viet quan he dang text "makes", "pays" — PHAI dung cu phap Mermaid chuan
 - VI DU DUNG:
   erDiagram
       USERS {
@@ -535,32 +710,51 @@ YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
           datetime check_in
           datetime check_out
       }
-      ROOMS {
-          int id PK
-          varchar name
-          int branch_id FK
-          decimal price
-      }
       USERS ||--o{ RESERVATIONS : "makes"
       ROOMS ||--o{ RESERVATIONS : "reserved by"
-      BRANCHES ||--o{ ROOMS : "contains"
 - TAT CA bang phai co ket noi — KHONG duoc de bang nao thua don
+
+YEU CAU BAT BUOC CHO SEQUENCE (sequenceDiagram — CU PHAP CHUAN):
+- Bat dau bang "sequenceDiagram"
+- KHONG dung "participant" rieng le — khai bao participant TRUC TIEP trong arrow
+- DUNG CU PHAP:  participant Actor "Tên Actor" (khai bao o dau)
+- Sau do dung: Actor->>Frontend: "Click button"
+- Dung ->> cho request, -->> cho response
+- KHONG DUNG: --> trong sequence (dung ->> thay vi)
+- VI DU DUNG:
+  sequenceDiagram
+      participant U as "Student"
+      participant F as "Frontend"
+      participant B as "Backend"
+      participant D as "Database"
+      U->>F: Click "Đăng ký khóa học"
+      F->>B: POST /api/enrollments
+      B->>D: INSERT enrollment
+      D-->>B: Success
+      B-->>F: 201 Created
+      F-->>U: Hiển thị "Đăng ký thành công"
+- Ve it nhat 2 luong xu ly chinh cua du an
+- It nhat 5 participants
 
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "useCase" (string): mermaid code, ve day du actor + use case
-- "classDiagram" (string): mermaid code, ve class + thuoc tinh + method + QUAN HE
-- "erd" (string): mermaid code, ve TAT CA bang + TAT CA quan he
-- "sequence" (string): mermaid code, ve it nhat 2 luong xu ly`;
+- "useCase" (string): mermaid code graph TD, ve day du actor + use case (KHONG dung actor[] hay parens, dung -->|include| va -.->|extend|)
+- "classDiagram" (string): mermaid code classDiagram, ve class + thuoc tinh + method + QUAN HE
+- "erd" (string): mermaid code erDiagram, ve TAT CA bang + TAT CA quan he
+- "sequence" (string): mermaid code sequenceDiagram, ve it nhat 2 luong xu ly (dung ->> va -->>)
+
+TAT CA 4 BIEU DO PHAI PHU HOP VOI CHU DE DU AN — KHONG dung vi du chung chung (User/Course/Student) ma phai dung entity that cua du an.`;
 }
 
 function docsPrompt(): string {
   return `Ban la Technical Writer. Viet README.md, Coding Convention, va API Response Standard BANG TIENG VIET, chi tiet de developer moi co the lam viec ngay.
+QUAN TRONG: Tat ca tai lieu PHAI DE CAP CHU DE DU AN CU THE — vi du neu la "quan ly khach san" thi README phai noi ve khach san, dat phong, check-in/check-out, KHONG dung vi du chung chung.
+QUAN TRONG: KHONG DUOC DE TRONG bat ky field nao. Tat ca 3 field (readme, convention, apiStandard) phai co noi dung day du, it nhat 500 ky tu moi field.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "readme" (string): noi dung README.md day du (gioi thieu, cai dat, chay, cau truc, huong dan code)
-- "convention" (string): Coding Convention (ten bien, ten file, function, comment, git commit message)
-- "apiStandard" (string): API Response Standard (format JSON, status code, error handling)`;
+- "readme" (string): noi dung README.md day du (gioi thieu du an cu the, cai dat, chay, cau truc, huong dan code, vi du API call cu the cua du an). It nhat 800 ky tu.
+- "convention" (string): Coding Convention CHI TIET — ten bien (camelCase/snake_case), ten file (kebab-case/PascalCase), function naming, class naming, comment format (JSDoc), git commit message format (conventional commits), import order, error handling pattern. Kem vi du cu the cho tung rule. It nhat 500 ky tu. KHONG DE TRONG.
+- "apiStandard" (string): API Response Standard CHI TIET — format JSON response (success + error), status code convention (200/201/400/401/403/404/500), error response structure (code, message, details), pagination format, timestamp format, authentication header format. Kem vi du JSON response cu the cua du an. It nhat 500 ky tu. KHONG DE TRONG.`;
 }
 
 function gitPrompt(): string {
@@ -576,14 +770,42 @@ Tra object voi cac key BAT BUOC:
 - "repoUrl" (string): URL repo vi du https://github.com/org/project`;
 }
 
-function reviewerPrompt(): string {
-  return `Ban la Quality Reviewer. Ban nhan toan bo ket qua cua 7 Agent va kiem tra dong bo, bo sung thong tin thieu, sua loi sai.
+function testerPrompt(): string {
+  return `Ban la Senior QA Engineer & Software Tester. Lap ke hoach test CHI TIET cho du an: test strategy, unit tests, integration tests, E2E tests, API tests, performance tests.
 ${JSON_INSTRUCTION}
-Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, docs, git). Chi sua nhung gi can sua, giu nguyen nhung gi da dung. Dam bao:
+Tra object voi cac key BAT BUOC:
+- "testStrategy" (string): 4-6 cau mo ta chien luoc test (pyramid test, coverage target, tools su dung vd Vitest/Jest/Playwright)
+- "unitTests" (array): moi phan tu { "module" (string), "cases" (array: moi { "name", "desc", "input", "expected" }) }. It nhat 5 module, moi module it nhat 3 case.
+- "integrationTests" (array): moi phan tu { "name", "desc", "flow" }. It nhat 4 test (vd: auth flow, CRUD flow, payment flow).
+- "e2eTests" (array): moi phan tu { "name", "desc", "steps" (array string) }. It nhat 3 E2E scenario.
+- "apiTests" (array): moi phan tu { "endpoint", "method", "cases" }. It nhat 5 API test.
+- "performanceTests" (array): moi phan tu { "scenario", "metric", "target" }. It nhat 3 scenario (vd: response time, throughput, concurrent users).
+- "bugReportTemplate" (string): template bug report (title, steps, expected, actual, severity, environment)`;
+}
+
+function securityPrompt(): string {
+  return `Ban la Security Architect. Phan tich security cho du an: threats, auth flow, authorization model, data protection, OWASP checklist, rate limiting, secrets management.
+${JSON_INSTRUCTION}
+Tra object voi cac key BAT BUOC:
+- "threats" (array): moi phan tu { "risk", "severity" ("Critical"|"High"|"Medium"|"Low"), "mitigation" }. It nhat 6 threats (vd: SQL Injection, XSS, CSRF, broken auth, sensitive data exposure, missing rate limit).
+- "authFlow" (string): 4-6 cau mo ta auth flow (JWT/Session/OAuth, token generation, refresh, expiry, storage).
+- "authzModel" (string): mo ta authorization model (RBAC/ABAC, roles, permissions, checks).
+- "dataProtection" (string): mo ta data protection (encryption at rest/transit, bcrypt/argon2, HTTPS, PII handling).
+- "owaspChecklist" (array): moi phan tu { "category", "status" ("Pass"|"Warning"|"Fail"), "note" }. It nhat 8 OWASP Top 10 items (A01 Broken Access Control, A02 Crypto Failures, A03 Injection, ... A10 SSRF).
+- "rateLimit" (string): mo ta rate limiting strategy (per IP, per user, per endpoint, thresholds, 429 handling).
+- "secrets" (string): mo ta secrets management (env vars, vault, .gitignore, rotation).`;
+}
+
+function reviewerPrompt(): string {
+  return `Ban la Quality Reviewer. Ban nhan toan bo ket qua cua 9 Agent va kiem tra dong bo, bo sung thong tin thieu, sua loi sai.
+${JSON_INSTRUCTION}
+Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, docs, git, test, security). Chi sua nhung gi can sua, giu nguyen nhung gi da dung. Dam bao:
 - HR assignments phu hop voi danh sach thanh vien that
 - Sprint tasks gan dung assignee voi ten thanh vien
 - DB tables va API endpoints phu hop voi features
-- UML phu hop voi modules va actors`;
+- UML phu hop voi modules va actors
+- Test cases phu hop voi features va API endpoints
+- Security threats phu hop voi tech stack va auth flow`;
 }
 
 const TASK_GEN_PROMPT = `Ban la Senior Project Manager & Tech Lead. Ban tao todolist CHI TIET cho tung thanh vien de ho co the bat dau code ngay ma khong can hoi them.
@@ -592,16 +814,17 @@ Muc tieu: nguoi moi hoan toan khong biet gi cung hieu phai lam gi, vai tro gi, c
 NGUYEN TAC SINH TASK (SMART + ATOMIC):
 1. Moi task bat dau bang DONG TU HANH DONG (vd: "Thiet ke", "Viet", "Tao", "Cau hinh")
 2. NGUYEN TU HOA: 1 task = 1 cong vie cu the, khong the chia nho hon
-3. KHONG GIOI HAN so luong task - phan ra triet de theo layers: Database, Backend, Frontend, Testing, DevOps
-4. Moi thanh vien co 5-15 task (phan bo theo vai tro + kha nang)
+3. KHONG GIOI HAN so luong task — sinh bao nhieu task tuy theo do phuc tap du an, mien sao phu hop, ro rang, de hieu, tap trung, KHONG chung chung
+4. Moi thanh vien co nhieu task theo vai tro + kha nang (it nhat 5, khong gioi han tren)
 5. Task phai co BOI CANH file/ngu canh ro rang (vd: "Trong file src/api/users.ts")
 6. Task phai co GIAI MA KY THUAT (code snippets, SQL, config examples)
 7. Dependencies phai ro rang: task nao phai lam truoc, task nao phu thuoc task nao
+8. Task PHAI PHU HOP VOI CHU DE DU AN — dung ten entity, ten file, ten module that cua du an
 
 ${JSON_INSTRUCTION}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
-- "title" (string): ten task bat dau bang dong tu (vd: "Thiet ke Schema Prisma cho User")
+- "title" (string): ten task bat dau bang dong tu, cu the (vd: "Thiet ke Schema Prisma cho Bang Users")
 - "description" (string): mo ta chi tiet 3-5 cau. Ghi ro: muc tieu, file can sua, cach lam, Definition of Done.
 - "role" (string): vai tro (vd "Backend Developer")
 - "layer" (string): "DATABASE" | "BACKEND" | "UI" | "CONFIG" | "TESTING"
@@ -619,11 +842,12 @@ Tra object voi key "tasks" (array). Moi task co:
 
 DAM BAO:
 - Phan ra theo layers: Database, API Backend, Frontend UI, Testing, DevOps
-- Moi thanh vien co 5-15 task phu hop vai tro
+- KHONG GIOI HAN so luong task — sinh day du, triet de, phu hop voi du an
 - codeConventions + technicalHints phai CO CODE SNIPPETS cu the (SQL, Prisma schema, API response, component props)
 - Dependencies lien ket ro rang giua cac task cua cac thanh vien khac nhau
 - Deadline phan bo theo do uu tien + do kho
-- technicalHints.snippet phai la code dung de copy-paste (SQL JOIN, Prisma model, React component, etc.)`;
+- technicalHints.snippet phai la code dung de copy-paste (SQL JOIN, Prisma model, React component, etc.)
+- Tat ca task PHAI de cap entity/module that cua du an (vd: neu la "quan ly khach san" thi co task ve Rooms, Reservations, Guests, KHONG dung User/Course chung chung)`;
 
 const PROMPT_MAP: Record<SectionType, () => string> = {
   analysis: analystPrompt,
@@ -633,6 +857,8 @@ const PROMPT_MAP: Record<SectionType, () => string> = {
   uml: umlPrompt,
   docs: docsPrompt,
   git: gitPrompt,
+  test: testerPrompt,
+  security: securityPrompt,
 };
 
 /* ===========================================================
@@ -690,6 +916,26 @@ function buildCtx(
     case "git":
       c += `\n\nSlug: ${input.topic.toLowerCase().replace(/\s+/g, "-")}`;
       c += `\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
+      break;
+    case "test":
+      c += `\n\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
+      c += `\nFeatures: ${JSON.stringify(
+        (results.analysis?.features || []).map((f) => ({ name: f.name, module: f.module, pri: f.pri }))
+      )}`;
+      c += `\nAPI endpoints: ${JSON.stringify(
+        (results.design?.apiEndpoints || []).map((e) => ({ method: e.method, path: e.path }))
+      )}`;
+      c += `\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
+      break;
+    case "security":
+      c += `\n\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
+      c += `\nActors: ${JSON.stringify(
+        (results.analysis?.actors || []).map((a) => ({ name: a.name, desc: a.desc }))
+      )}`;
+      c += `\nDB tables: ${JSON.stringify((results.design?.dbTables || []).map((t) => t.name))}`;
+      c += `\nAPI endpoints: ${JSON.stringify(
+        (results.design?.apiEndpoints || []).map((e) => ({ method: e.method, path: e.path }))
+      )}`;
       break;
   }
   return c;
@@ -777,6 +1023,63 @@ function fallback(
         issueTemplate: "",
         repoUrl: "https://github.com/your-org/project",
       };
+    case "test":
+      return {
+        testStrategy: "Test pyramid: unit > integration > E2E. Coverage target 80%. Tools: Vitest/Jest (unit), Supertest (integration), Playwright (E2E).",
+        unitTests: (results.analysis?.modules || ["Core"]).slice(0, 5).map((mod) => ({
+          module: mod,
+          cases: [
+            { name: `test_${mod}_create`, desc: "Test create operation", input: "valid payload", expected: "201 created" },
+            { name: `test_${mod}_validation`, desc: "Test input validation", input: "invalid payload", expected: "400 bad request" },
+            { name: `test_${mod}_notFound`, desc: "Test not found", input: "non-existent id", expected: "404 not found" },
+          ],
+        })),
+        integrationTests: [
+          { name: "auth_flow", desc: "Test login + protected route", flow: "POST /api/auth/login → GET /api/me with token" },
+          { name: "crud_flow", desc: "Test full CRUD cycle", flow: "POST → GET → PUT → DELETE" },
+        ],
+        e2eTests: [
+          { name: "user_signup_to_dashboard", desc: "Signup → login → dashboard", steps: ["1. Visit /signup", "2. Fill form", "3. Submit", "4. Redirect to dashboard"] },
+        ],
+        apiTests: (results.design?.apiEndpoints || []).slice(0, 5).map((e) => ({
+          endpoint: e.path,
+          method: e.method,
+          cases: `Test ${e.method} ${e.path} — happy path + error cases`,
+        })),
+        performanceTests: [
+          { scenario: "API response time", metric: "p95 latency", target: "< 200ms" },
+          { scenario: "Concurrent users", metric: "throughput", target: "100 req/s" },
+        ],
+        bugReportTemplate: "## Bug Report\n**Title:** \n**Steps:**\n1. \n**Expected:** \n**Actual:** \n**Severity:** Low/Medium/High/Critical\n**Environment:** ",
+      };
+    case "security":
+      return {
+        threats: [
+          { risk: "SQL Injection", severity: "High", mitigation: "Use Prisma parameterized queries — never string concatenation" },
+          { risk: "XSS", severity: "Medium", mitigation: "Escape output, use CSP headers, avoid dangerouslySetInnerHTML" },
+          { risk: "CSRF", severity: "Medium", mitigation: "Use SameSite cookies + CSRF tokens" },
+          { risk: "Broken Authentication", severity: "High", mitigation: "JWT with short expiry + refresh token, bcrypt password hashing" },
+          { risk: "Sensitive Data Exposure", severity: "High", mitigation: "HTTPS everywhere, encrypt PII at rest, never log secrets" },
+          { risk: "Missing Rate Limiting", severity: "Medium", mitigation: "Rate limit login + API endpoints per IP/user" },
+        ],
+        authFlow: "JWT-based auth. Login → server validates credentials → issues access token (15min) + refresh token (7d). Access token in Authorization header. Refresh token in httpOnly cookie.",
+        authzModel: "RBAC (Role-Based Access Control). Roles: admin, member, guest. Middleware checks role on each protected route. Resource ownership checks for user-specific data.",
+        dataProtection: "Passwords hashed with bcrypt (cost 12). PII encrypted at rest with AES-256. HTTPS enforced. Secrets in env vars, never committed. Sensitive fields excluded from logs.",
+        owaspChecklist: [
+          { category: "A01 Broken Access Control", status: "Pass", note: "RBAC middleware on all routes" },
+          { category: "A02 Cryptographic Failures", status: "Pass", note: "bcrypt + AES-256 + HTTPS" },
+          { category: "A03 Injection", status: "Pass", note: "Prisma parameterized queries" },
+          { category: "A04 Insecure Design", status: "Warning", note: "Review threat model" },
+          { category: "A05 Security Misconfiguration", status: "Warning", note: "Verify prod config" },
+          { category: "A06 Vulnerable Components", status: "Warning", note: "Run npm audit regularly" },
+          { category: "A07 Auth Failures", status: "Pass", note: "JWT + refresh + rate limit" },
+          { category: "A08 Software/Data Integrity", status: "Pass", note: "Signed dependencies" },
+          { category: "A09 Logging Failures", status: "Warning", note: "Add audit logs" },
+          { category: "A10 SSRF", status: "Pass", note: "Validate external URLs" },
+        ],
+        rateLimit: "Per-IP rate limit: 100 req/min general, 5 req/min for login. Per-user: 1000 req/hour. Return 429 with Retry-After header. Use sliding window counter.",
+        secrets: "All secrets in .env (gitignored). Use dotenv for loading. Rotate keys quarterly. Never hardcode. Production: use secret manager (Vault/AWS Secrets Manager).",
+      };
     default:
       return null;
   }
@@ -855,88 +1158,27 @@ export async function runPipeline(
   // These must run sequentially because each depends on the previous
   const phase1Agents = AGENTS.filter((a) => ["analysis", "hr", "sprint"].includes(a.key));
   const phase2Agents = AGENTS.filter((a) => ["design", "uml", "docs", "git"].includes(a.key));
+  const phase3Agents = AGENTS.filter((a) => ["test", "security"].includes(a.key));
+  const parallel = input.parallel !== false; // default true
 
-  for (const ag of phase1Agents) {
+  // Helper: run a single agent (used by both sequential + parallel modes)
+  async function runAgent(ag: AgentDef): Promise<{ ag: AgentDef; res: ParseResult | null; failed: boolean }> {
     const i = AGENTS.indexOf(ag);
     onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
-    console.log(`\n>> [AGENT-${ag.id}] ${ag.name}`);
-    console.log(`   Models: ${ag.models.join(" → ")}`);
-    console.log(`   Temp: ${ag.temp}`);
+    const modeLabel = parallel ? "parallel" : "sequential";
+    console.log(`>> [AGENT-${ag.id}] ${ag.name} (${modeLabel})`);
     appendLog({
       level: "info",
       agentId: ag.id,
       provider: "pipeline",
-      message: `─────────────────────────────────────────────`,
-    });
-    appendLog({
-      level: "info",
-      agentId: ag.id,
-      provider: "pipeline",
-      message: `[AGENT-${ag.id}] ${ag.name} → start (models: ${ag.models.length})`,
+      message: `[AGENT-${ag.id}] ${ag.name} → start (${modeLabel})`,
     });
 
     const ctx = buildCtx(ag.key, results, input);
-    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp, ag.key);
 
     if (res && isValidSchema(res.data, ag.key)) {
       (results as Record<string, unknown>)[ag.key] = res.data;
-      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-      console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
-      appendLog({
-        level: "success",
-        agentId: ag.id,
-        provider: "pipeline",
-        model: res.model,
-        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
-      });
-    } else if (res) {
-      console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
-      (results as Record<string, unknown>)[ag.key] = res.data;
-      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-      appendLog({
-        level: "warn",
-        agentId: ag.id,
-        provider: "pipeline",
-        model: res.model,
-        message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
-      });
-    } else {
-      failed.push(ag);
-      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
-      console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
-      appendLog({
-        level: "error",
-        agentId: ag.id,
-        provider: "pipeline",
-        message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
-      });
-    }
-  }
-
-  // ===== PHASE 2: Parallel agents (design, uml, docs, git) =====
-  // These only depend on Phase 1 results, so they can run in parallel
-  console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
-  appendLog({
-    level: "info",
-    agentId: "PIPELINE",
-    provider: "pipeline",
-    message: `▶ PHASE 2: ${phase2Agents.length} agents in parallel`,
-  });
-  const phase2Promises = phase2Agents.map(async (ag) => {
-    const i = AGENTS.indexOf(ag);
-    onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
-    console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
-    appendLog({
-      level: "info",
-      agentId: ag.id,
-      provider: "pipeline",
-      message: `[AGENT-${ag.id}] ${ag.name} → start (parallel)`,
-    });
-
-    const ctx = buildCtx(ag.key, results, input);
-    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
-
-    if (res && isValidSchema(res.data, ag.key)) {
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
       appendLog({
@@ -948,6 +1190,7 @@ export async function runPipeline(
       });
       return { ag, res, failed: false };
     } else if (res) {
+      (results as Record<string, unknown>)[ag.key] = res.data;
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
       appendLog({
@@ -969,19 +1212,67 @@ export async function runPipeline(
       });
       return { ag, res: null, failed: true };
     }
-  });
+  }
 
-  // Wait for all parallel agents to complete
-  const phase2Results = await Promise.all(phase2Promises);
-  for (const r of phase2Results) {
-    if (r.failed) {
-      failed.push(r.ag);
-    } else if (r.res) {
-      (results as Record<string, unknown>)[r.ag.key] = r.res.data;
+  for (const ag of phase1Agents) {
+    appendLog({
+      level: "info",
+      agentId: ag.id,
+      provider: "pipeline",
+      message: `─────────────────────────────────────────────`,
+    });
+    const r = await runAgent(ag);
+    if (r.failed) failed.push(r.ag);
+  }
+
+  // ===== PHASE 2 + 3: design/uml/docs/git + test/security =====
+  if (parallel) {
+    // PARALLEL MODE: Phase 2 (4 agents) then Phase 3 (2 agents), each in parallel
+    console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ PHASE 2: ${phase2Agents.length} agents in parallel`,
+    });
+    const phase2Results = await Promise.all(phase2Agents.map((ag) => runAgent(ag)));
+    for (const r of phase2Results) {
+      if (r.failed) failed.push(r.ag);
+    }
+
+    console.log(`\n>> [PARALLEL] Running ${phase3Agents.length} agents in parallel (Phase 3)...`);
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ PHASE 3: ${phase3Agents.length} agents in parallel (test + security)`,
+    });
+    const phase3Results = await Promise.all(phase3Agents.map((ag) => runAgent(ag)));
+    for (const r of phase3Results) {
+      if (r.failed) failed.push(r.ag);
+    }
+  } else {
+    // SEQUENTIAL MODE: run all Phase 2 + 3 agents one at a time
+    // Avoids sending too many requests at once → fewer 429 rate-limits
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ SEQUENTIAL MODE: running agents one at a time (avoids rate-limit spikes)`,
+    });
+    for (const ag of [...phase2Agents, ...phase3Agents]) {
+      appendLog({
+        level: "info",
+        agentId: ag.id,
+        provider: "pipeline",
+        message: `─────────────────────────────────────────────`,
+      });
+      const r = await runAgent(ag);
+      if (r.failed) failed.push(r.ag);
     }
   }
 
-  // ===== PHASE 2: Retry failed agents =====
+  // ===== PHASE 4: Retry failed agents =====
   if (failed.length > 0) {
     console.log(`\n>> RETRY: ${failed.length} Agent that bai...`);
     appendLog({
@@ -1008,7 +1299,7 @@ export async function runPipeline(
       await wait(5000);
 
       const ctx = buildCtx(ag.key, results, input);
-      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp, ag.key);
 
       if (res && isValidSchema(res.data, ag.key)) {
         (results as Record<string, unknown>)[ag.key] = res.data;
@@ -1070,26 +1361,26 @@ export async function runPipeline(
     }
   }
 
-  // ===== PHASE 4: Quality Reviewer =====
+  // ===== PHASE 6: Quality Reviewer (AGENT-10) =====
   onProgress?.({
     type: "agent_start",
-    id: "08",
+    id: "10",
     name: "Quality Reviewer",
-    index: 7,
+    index: 9,
     total,
   });
-  console.log("\n>> [AGENT-08] Quality Reviewer");
+  console.log("\n>> [AGENT-10] Quality Reviewer");
   appendLog({
     level: "info",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
     message: `─────────────────────────────────────────────`,
   });
   appendLog({
     level: "info",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
-    message: `[AGENT-08] Quality Reviewer → start`,
+    message: `[AGENT-10] Quality Reviewer → start`,
   });
 
   try {
@@ -1099,8 +1390,9 @@ export async function runPipeline(
     const res = await callAndParse(
       REVIEWER_MODELS,
       reviewerPrompt(),
-      `Du an: ${input.topic}\n\nKET QA DAY DU CUA 7 AGENT (JSON):\n${fullResults}`,
-      0.1
+      `Du an: ${input.topic}\n\nKET QUA DAY DU CUA 9 AGENT (JSON):\n${fullResults}`,
+      0.1,
+      undefined // reviewer output is merged, not a single section
     );
 
     if (res && res.data && !isEmptyObj(res.data)) {
@@ -1114,36 +1406,92 @@ export async function runPipeline(
           rev[key] = results[key];
         }
       }
+
+      // Reviewer Feedback Loop — validate each section with Zod,
+      // if any fail, ask AI to fix that specific section (max 2 rounds)
+      for (let round = 1; round <= 2; round++) {
+        const invalidSections: { key: string; error: string }[] = [];
+        for (const key of Object.keys(rev) as string[]) {
+          if (key === "test" || key === "security") {
+            // Optional sections — skip Zod if not present
+            if (!rev[key]) continue;
+          }
+          const zodResult = validateSection(key, rev[key]);
+          if (!zodResult.success) {
+            invalidSections.push({ key, error: zodResult.error.substring(0, 200) });
+          }
+        }
+        if (invalidSections.length === 0) {
+          appendLog({
+            level: "success",
+            agentId: "10",
+            provider: "pipeline",
+            message: `✓ [REVIEW LOOP] Round ${round}: All sections Zod-validated ✓`,
+          });
+          break;
+        }
+        appendLog({
+          level: "warn",
+          agentId: "10",
+          provider: "pipeline",
+          message: `⚠ [REVIEW LOOP] Round ${round}: ${invalidSections.length} section(s) failed Zod — asking AI to fix`,
+        });
+        // Fix each invalid section
+        for (const { key, error } of invalidSections) {
+          const fixPrompt = `Section "${key}" that bai Zod validation: ${error}\n\nSua lai JSON cho dung schema. Giu nguyen noi dung, chi sua cau truc:\n${JSON.stringify(rev[key]).substring(0, 3000)}`;
+          const fixRes = await callAndParse(
+            REVIEWER_MODELS,
+            "JSON schema fixer. Tra JSON dung schema.",
+            fixPrompt,
+            0.1,
+            key
+          );
+          if (fixRes && fixRes.data) {
+            const revalidate = validateSection(key, fixRes.data);
+            if (revalidate.success) {
+              rev[key] = revalidate.data;
+              appendLog({
+                level: "success",
+                agentId: "10",
+                provider: "pipeline",
+                model: fixRes.model,
+                message: `  ✓ [REVIEW LOOP] Fixed "${key}" via ${fixRes.model}`,
+              });
+            }
+          }
+        }
+      }
+
       const sec = ((Date.now() - t0) / 1000).toFixed(1);
-      onProgress?.({ type: "agent_done", id: "08", name: "Quality Reviewer", index: 7, total });
-      console.log(`✓ [AGENT-08] Reviewer → ${res.model} (${sec}s tong)`);
+      onProgress?.({ type: "agent_done", id: "10", name: "Quality Reviewer", index: 9, total });
+      console.log(`✓ [AGENT-10] Reviewer → ${res.model} (${sec}s tong)`);
       appendLog({
         level: "success",
-        agentId: "08",
+        agentId: "10",
         provider: "pipeline",
         model: res.model,
-        message: `✓ [AGENT-08] Reviewer → done (${res.model}, ${sec}s total)`,
+        message: `✓ [AGENT-10] Reviewer → done (${res.model}, ${sec}s total)`,
       });
       return rev as unknown as ProjectResult;
     }
   } catch (e) {
-    console.log(`✗ [AGENT-08] Reviewer fail: ${(e as Error).message?.substring(0, 100)}`);
+    console.log(`✗ [AGENT-10] Reviewer fail: ${(e as Error).message?.substring(0, 100)}`);
     appendLog({
       level: "error",
-      agentId: "08",
+      agentId: "10",
       provider: "pipeline",
-      message: `✗ [AGENT-08] Reviewer → ${(e as Error).message?.substring(0, 100)}`,
+      message: `✗ [AGENT-10] Reviewer → ${(e as Error).message?.substring(0, 100)}`,
     });
   }
 
-  onProgress?.({ type: "agent_fail", id: "08", name: "Quality Reviewer", index: 7, total });
+  onProgress?.({ type: "agent_fail", id: "10", name: "Quality Reviewer", index: 9, total });
   const sec = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`>> Tra ket qua goc (${sec}s)\n`);
   appendLog({
     level: "warn",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
-    message: `▷ [AGENT-08] Reviewer → returning original results (${sec}s)`,
+    message: `▷ [AGENT-10] Reviewer → returning original results (${sec}s)`,
   });
   return results as ProjectResult;
 }
@@ -1225,7 +1573,7 @@ export async function refineSections(
       const user = `${base}${edits}${discussion}\n\nNOI DUNG HIEN TAI cua phan ${ag.key}:\n${JSON.stringify(
         current[ag.key]
       ).substring(0, 4000)}\n\nHay tra lai phan ${ag.key} da chinh sua (JSON day du).`;
-      const res = await callAndParse(ag.models, sys, user, ag.temp);
+      const res = await callAndParse(ag.models, sys, user, ag.temp, ag.key);
       if (res && isValidSchema(res.data, ag.key)) {
         (refined as Record<string, unknown>)[ag.key] = res.data;
         appendLog({
@@ -1347,7 +1695,7 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
   });
 
   try {
-    const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25);
+    const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25, undefined);
     onProgress?.(true);
     if (res && res.data) {
       const data = res.data as { tasks?: TaskItem[] };

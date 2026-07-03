@@ -36,6 +36,7 @@ model Project {
   editProposals EditProposal[]
   context       ProjectContext?
   tokenLogs     TokenLog[]
+  activityLogs  ActivityLog[]
 }
 
 /// Long-term memory cache for a project.
@@ -190,4 +191,23 @@ model EmailLog {
   sentAt    DateTime @default(now())
 
   @@index([projectId])
+}
+
+// Activity log: stores all pipeline/init/refine logs + success/failure events
+model ActivityLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String   // PIPELINE | INIT | REFINE | TASK_GEN | SECTION_EDIT | GITHUB_PUSH | EMAIL_SENT
+  status    String   // SUCCESS | FAILED | RUNNING | WARNING
+  title     String   // Short summary (vd: "Pipeline hoàn thành", "Sinh todolist thất bại")
+  details   String   @default("") // Long description (vd: "10 agents done, 0 failed, 25 tasks generated")
+  agentId   String?  // "01".."10" | "PIPELINE" | "TASK" | "REFINE" (nullable for non-agent events)
+  model     String?  // Last model used (nullable)
+  duration  Int?     // milliseconds (nullable)
+  logCount  Int?     // Number of log lines (nullable, for pipeline/init/refine)
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([type])
 }

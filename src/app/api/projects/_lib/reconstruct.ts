@@ -13,6 +13,8 @@ export const SECTION_KEYS: SectionType[] = [
   "uml",
   "docs",
   "git",
+  "test",
+  "security",
 ];
 
 /**

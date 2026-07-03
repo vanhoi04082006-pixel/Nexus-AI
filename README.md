@@ -4,7 +4,7 @@
 
 ### Multi-Agent Project Architect
 
-> Hệ thống AI đa tác tử — Nhập chủ đề dự án → 8 AI Agent tự động phân tích, thiết kế, lập sprint, sinh todolist Kanban, push GitHub, gửi email mời thành viên. Có Live Log Console realtime theo dõi từng model / API key.
+> Hệ thống AI đa tác tử — Nhập chủ đề dự án → 10 AI Agent tự động phân tích, thiết kế, lập sprint, sinh todolist Kanban, push GitHub, gửi email mời thành viên. Có Live Log Console realtime theo dõi từng model / API key.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
@@ -23,7 +23,7 @@
 
 ## 📖 NEXUS AI là gì?
 
-NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn local (hoặc Docker) — bạn chỉ cần nhập chủ đề + danh sách thành viên, **8 AI Agent** sẽ tự động:
+NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn local (hoặc Docker) — bạn chỉ cần nhập chủ đề + danh sách thành viên, **10 AI Agent** sẽ tự động:
 
 | # | Agent | Nhiệm vụ |
 |---|---|---|
@@ -34,9 +34,13 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 | 05 | **UML Generator** | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) |
 | 06 | **Technical Writer** | Viết README, Coding Convention, API Standard |
 | 07 | **Git / DevOps** | Git commands, branch strategy, issue template |
-| 08 | **Quality Reviewer** | Tổng hợp + đồng bộ tất cả sections |
+| 08 | **Software Tester** ⭐ | Sinh test plan: unit, integration, E2E, API, performance tests + bug report template |
+| 09 | **Security Reviewer** ⭐ | Phân tích threats, auth flow, OWASP Top 10 checklist, rate limiting, secrets |
+| 10 | **Quality Reviewer** | Tổng hợp + đồng bộ tất cả sections |
 | — | **Task Generator** | Sinh SMART tasks (Kanban) với code snippets cho từng thành viên |
 | — | **Chat Assistant** | AI Assistant tham gia chat hướng dẫn code |
+
+⭐ = **mới** (theo khuyến nghị đánh giá kiến trúc AI)
 
 **Pipeline:** Phân tích → Nhân sự → Sprint → Thiết kế → UML → Tài liệu → Git → Review → Kanban → GitHub → Email
 
@@ -259,7 +263,7 @@ APP_URL=http://localhost:3000
    - **Thông tin bổ sung** (requirements, tech prefs, lang prefs) — tùy chọn
    - **Nhóm trưởng**: tên + email + Gmail App Password
    - **Thành viên**: tên + email + ưu điểm + nhược điểm (click tag để chọn nhanh)
-3. Bấm **"Khởi tạo Dự Án"** → 8 AI Agent chạy (xem Live Log Console)
+3. Bấm **"Khởi tạo Dự Án"** → 10 AI Agent chạy (xem Live Log Console)
 
 ### 2. Workspace (11 tabs)
 
@@ -412,24 +416,28 @@ Nexus-AI/
 
 ---
 
-## 🤖 8 AI Agents — Model Priority
+## 🤖 10 AI Agents — Model Priority (v2)
+
+Mỗi agent có danh sách model ưu tiên riêng (7-9 model), fallback tự động khi model bị 429/404.
 
 | # | Agent | Models (priority order) | Temp |
 |---|---|---|---|
-| 01 | Requirement Analyst | `nemotron-3-ultra` → `nemotron-3-super` → `gpt-oss-120b` | 0.2 |
-| 02 | HR Planner | `nemotron-3-ultra` → `gemma-4-31b` → `gpt-oss-120b` | 0.25 |
-| 03 | Sprint Planner | `nemotron-3-ultra` → `nemotron-3-super` → `gpt-oss-120b` | 0.2 |
-| 04 | System Architect | `gpt-oss-120b` → `north-mini-code` | 0.15 |
-| 05 | UML Generator | `gpt-oss-120b` → `north-mini-code` | 0.1 |
-| 06 | Technical Writer | `gemma-4-31b` → `gpt-oss-120b` | 0.35 |
-| 07 | Git/DevOps | `gpt-oss-120b` → `north-mini-code` | 0.15 |
-| 08 | Quality Reviewer | `gpt-oss-120b` → `gemma-4-31b` | 0.1 |
-| — | Task Generator | `gpt-oss-120b` → `north-mini-code` → `nemotron-3-ultra` | 0.25 |
-| — | Chat Assistant | `gpt-oss-120b` → `gemma-4-31b` | 0.5 |
+| 01 | Requirement Analyst | nemotron-3-ultra → qwen3-next-80b → nemotron-3-super → gpt-oss-120b → hermes-3-405b → gemma-4-31b → gemma-4-26b → llama-3.3-70b → nemotron-3-nano-30b | 0.20 |
+| 02 | HR Planner | gemma-4-31b → gemma-4-26b → nemotron-3-ultra → qwen3-next-80b → llama-3.3-70b → gpt-oss-120b → nemotron-3-nano-30b → gpt-oss-20b | 0.25 |
+| 03 | Sprint Planner | nemotron-3-ultra → nemotron-3-super → qwen3-next-80b → gpt-oss-120b → hermes-3-405b → gemma-4-31b → nemotron-nano-9b-v2 | 0.20 |
+| 04 | System Architect | gpt-oss-120b → qwen3-coder → laguna-m.1 → north-mini-code → nemotron-3-super → gemma-4-31b → gpt-oss-20b | 0.15 |
+| 05 | UML Generator | gpt-oss-120b → qwen3-coder → north-mini-code → laguna-xs-2.1 → laguna-xs.2 → gemma-4-31b → gpt-oss-20b | 0.10 |
+| 06 | Technical Writer | gemma-4-31b → gemma-4-26b → llama-3.3-70b → qwen3-next-80b → gpt-oss-120b → hermes-3-405b → llama-3.2-3b | 0.35 |
+| 07 | Git/DevOps | north-mini-code → laguna-m.1 → qwen3-coder → laguna-xs-2.1 → laguna-xs.2 → gpt-oss-120b → gpt-oss-20b | 0.15 |
+| 08 | **Software Tester** ⭐ | qwen3-coder → gpt-oss-120b → north-mini-code → laguna-m.1 → nemotron-3-super → gemma-4-31b → gpt-oss-20b | 0.20 |
+| 09 | **Security Reviewer** ⭐ | gpt-oss-120b → qwen3-next-80b → nemotron-3-ultra → hermes-3-405b → llama-3.3-70b → gemma-4-31b → nemotron-3-nano-30b | 0.15 |
+| 10 | Quality Reviewer | gpt-oss-120b → qwen3-next-80b → nemotron-3-ultra → gemma-4-31b → hermes-3-405b → llama-3.3-70b → nemotron-3-nano-30b | 0.10 |
+| — | Task Generator | qwen3-coder → gpt-oss-120b → laguna-m.1 → north-mini-code → nemotron-3-ultra → gemma-4-31b → nemotron-3-nano-30b | 0.25 |
+| — | Chat Assistant | qwen3-next-80b → gpt-oss-120b → gemma-4-31b → llama-3.3-70b → hermes-3-405b → gpt-oss-20b → llama-3.2-3b | 0.50 |
 
 **Fallback chain:** Model 1 → Model 2 → ... → static fallback data (luôn có kết quả, không bao giờ crash)
 
-> **Note:** Mỗi agent thử 2 retries per model với exponential backoff. Khi 1 model bị 429/404, tự skip sang model tiếp theo.
+> **Note:** Mỗi agent thử 2 retries per model với exponential backoff. Khi 1 model bị 429/404, tự skip sang model tiếp theo. Tất cả models đều free tier trên OpenRouter.
 
 ---
 
@@ -448,7 +456,7 @@ Nexus-AI/
 14:23:08 [01]    ✓ [AGENT-01] Requirement Analyst → done (nvidia/nemotron-3-ultra-550b-a55b:free)
 14:23:08 [02]    [AGENT-02] HR Planner → start (models: 4)
 ...
-14:24:15 [08]    ✓ [AGENT-08] Reviewer → done (gpt-oss-120b, 73.2s total)
+14:24:15 [10]    ✓ [AGENT-10] Reviewer → done (gpt-oss-120b, 73.2s total)
 14:24:15 [PIPE]  ✅ PIPELINE COMPLETED — all sections saved, invitations sent
 ```
 
@@ -605,7 +613,7 @@ MIT License — xem [LICENSE](LICENSE).
 
 **NEXUS AI** — Multi-Agent Architect
 
-Powered by OpenRouter Multi-Key + 8 AI Agents 🤖
+Powered by OpenRouter Multi-Key + 10 AI Agents 🤖
 
 [⬆ Về đầu trang](#-nexus-ai)
 

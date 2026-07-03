@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 const CLIENT_ID = process.env.GITHUB_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || "";
+const BASE = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -17,24 +18,26 @@ export async function GET(req: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  // User denied access
-  if (error) {
-    return Response.redirect(`/?github_error=denied`);
-  }
-
-  if (!code || !state) {
-    return Response.redirect(`/?github_error=missing_params`);
-  }
-
-  // state = projectId|leaderToken
-  const [projectId, leaderToken] = state.split("|");
-  if (!projectId || !leaderToken) {
-    return Response.redirect(`/?github_error=invalid_state`);
-  }
-
-  // ===== Exchange code for access token =====
-  let accessToken: string;
   try {
+    // User denied access
+    if (error) {
+      return Response.redirect(`${BASE}/?github_error=denied`);
+    }
+
+    if (!code || !state) {
+      return Response.redirect(`${BASE}/?github_error=missing_params`);
+    }
+
+    // state = projectId|leaderToken
+    const [projectId, leaderToken] = state.split("|");
+    if (!projectId || !leaderToken) {
+      return Response.redirect(`${BASE}/?github_error=invalid_state`);
+    }
+
+    const wsBase = `${BASE}/?p=${projectId}&token=${leaderToken}`;
+
+    // ===== Exchange code for access token =====
+    const redirectUri = `${BASE}/api/github/callback`;
     const tokenResp = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: {
@@ -45,11 +48,14 @@ export async function GET(req: Request) {
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
         code,
+        redirect_uri: redirectUri,
       }),
     });
 
     if (!tokenResp.ok) {
-      throw new Error(`Token exchange failed: HTTP ${tokenResp.status}`);
+      const errText = await tokenResp.text().catch(() => "");
+      console.error("[GitHub callback] Token exchange HTTP error:", tokenResp.status, errText);
+      return Response.redirect(`${wsBase}&github_error=token_http_${tokenResp.status}`);
     }
 
     const tokenData = (await tokenResp.json()) as {
@@ -59,19 +65,12 @@ export async function GET(req: Request) {
     };
 
     if (!tokenData.access_token) {
-      throw new Error(tokenData.error_description || tokenData.error || "No access token");
+      console.error("[GitHub callback] No access token:", tokenData.error, tokenData.error_description);
+      return Response.redirect(`${wsBase}&github_error=no_token`);
     }
-    accessToken = tokenData.access_token;
-  } catch (err) {
-    console.error("[GitHub callback] Token exchange error:", err);
-    return Response.redirect(
-      `/?p=${projectId}&token=${leaderToken}&github_error=token_exchange`
-    );
-  }
+    const accessToken = tokenData.access_token;
 
-  // ===== Fetch GitHub username =====
-  let githubUsername: string;
-  try {
+    // ===== Fetch GitHub username =====
     const userResp = await fetch("https://api.github.com/user", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -81,21 +80,18 @@ export async function GET(req: Request) {
     });
 
     if (!userResp.ok) {
-      throw new Error(`User fetch failed: HTTP ${userResp.status}`);
+      console.error("[GitHub callback] User fetch HTTP error:", userResp.status);
+      return Response.redirect(`${wsBase}&github_error=user_http_${userResp.status}`);
     }
 
     const userData = (await userResp.json()) as { login?: string };
-    githubUsername = userData.login || "";
-    if (!githubUsername) throw new Error("No username in user data");
-  } catch (err) {
-    console.error("[GitHub callback] User fetch error:", err);
-    return Response.redirect(
-      `/?p=${projectId}&token=${leaderToken}&github_error=user_fetch`
-    );
-  }
+    const githubUsername = userData.login || "";
+    if (!githubUsername) {
+      console.error("[GitHub callback] No username in user data");
+      return Response.redirect(`${wsBase}&github_error=no_username`);
+    }
 
-  // ===== Store token + username in DB =====
-  try {
+    // ===== Store token + username in DB =====
     await db.project.update({
       where: { id: projectId },
       data: {
@@ -104,15 +100,12 @@ export async function GET(req: Request) {
       },
     });
     console.log(`[GitHub callback] Connected @${githubUsername} to project ${projectId}`);
-  } catch (err) {
-    console.error("[GitHub callback] DB save error:", err);
-    return Response.redirect(
-      `/?p=${projectId}&token=${leaderToken}&github_error=db_save`
-    );
-  }
 
-  // ===== Redirect back to workspace with success flag =====
-  return Response.redirect(
-    `/?p=${projectId}&token=${leaderToken}&github_connected=1`
-  );
+    // ===== Redirect back to workspace with success flag =====
+    return Response.redirect(`${wsBase}&github_connected=1`);
+  } catch (err) {
+    // Catch-all to prevent HTTP 500 — always redirect back to home with error
+    console.error("[GitHub callback] Unexpected error:", err);
+    return Response.redirect(`${BASE}/?github_error=unexpected`);
+  }
 }

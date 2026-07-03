@@ -22,7 +22,7 @@ export interface LogEntry {
   ts: number; // epoch ms
   level: LogLevel;
   agentId?: string; // "01".."08" | "PIPELINE" | "TASK" | "REVIEWER"
-  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
   model?: string;
   keyIndex?: number; // 1-based
   message: string;
@@ -126,7 +126,6 @@ type GlobalStore = {
   refineMap?: Map<string, RefineProgress>;
   initMap?: Map<string, InitProgress>;
   rateLimitedKeys?: Map<number, number>;
-  dsRateLimited?: Map<number, number>;
   aiCache?: Map<string, { result: string; timestamp: number }>;
 };
 const g = globalThis as typeof globalThis & GlobalStore;
@@ -147,7 +146,9 @@ export function initProgress(projectId: string): PipelineProgress {
       { id: "05", name: "UML Generator", status: "pending" },
       { id: "06", name: "Technical Writer", status: "pending" },
       { id: "07", name: "Git / DevOps", status: "pending" },
-      { id: "08", name: "Quality Reviewer", status: "pending" },
+      { id: "08", name: "Software Tester", status: "pending" },
+      { id: "09", name: "Security Reviewer", status: "pending" },
+      { id: "10", name: "Quality Reviewer", status: "pending" },
     ],
     logs: [],
     startedAt: Date.now(),

@@ -34,6 +34,95 @@ function fixMermaid(code: string): string {
     s = s.replace(/^(\s*)class\s+(\w+)\s+("[^"]*"\s*[-]+[>|]*\s*"[^"]*")\s*/gm, '$1$2 $3 ');
     // Fix extra whitespace in class body (e.g. "    +int currentStudents" with leading spaces)
     s = s.replace(/^(\s*)\s{8,}(\+)/gm, "$1    $2");
+
+    // CRITICAL: Fix "A -->|label| B : text" → "A -->|label| B"
+    // Mermaid classDiagram does NOT support ": label" after a relationship with |edge label|
+    // Example: RecommendationEngine -->|use| Product : "analyzes" → RecommendationEngine -->|use| Product
+    s = s.replace(
+      /^(\s*)(\w+)\s*(--?>|<--|--|-\.\->|<-\.\-)\s*\|([^|]+)\|\s*(\w+)\s*:\s*.*$/gm,
+      (_m, indent: string, from: string, arrow: string, edgeLabel: string, to: string) => {
+        return `${indent}${from} ${arrow}|${edgeLabel}| ${to}`;
+      }
+    );
+
+    // CRITICAL: Fix 'A "1" --> "*" B : "label"' → 'A "1" --> "*" B : label'
+    // Mermaid 11 sometimes chokes on quoted labels after colon in classDiagram
+    // Strip quotes from the relationship label (keep the text)
+    // Example: Customer "1" --> "*" Cart : "has" → Customer "1" --> "*" Cart : has
+    s = s.replace(
+      /^(\s*)(\w+)\s+("[^"]*")\s*(--?>|<--|--|-\.\->)\s*("[^"]*")\s*(\w+)\s*:\s*"([^"]*)"\s*$/gm,
+      (_m, indent: string, from: string, card1: string, arrow: string, card2: string, to: string, label: string) => {
+        return `${indent}${from} ${card1} ${arrow} ${card2} ${to} : ${label}`;
+      }
+    );
+
+    // Fix <<entity>> stereotype syntax (Mermaid wants <<entity>> on its own line inside class)
+    // AI writes: class User { <<entity>> +int id ... }
+    // Mermaid wants: class User { <<entity>> \n +int id \n ... }
+    s = s.replace(
+      /\{(\s*)<<(entity|abstract|interface|enum|service)>>\s+/g,
+      "{ $1<<$2>>\n"
+    );
+
+    // Fix "class ClassName {" that has content on same line — split to next line
+    s = s.replace(
+      /class\s+(\w+)\s*\{(\s*)(\+)/g,
+      "class $1 {\n  $3"
+    );
+  }
+
+  // ===== Use Case (graph TD) fixes =====
+  // AI often writes invalid use-case syntax like:
+  //   actor["System Admin"] --> (ManageBranches)
+  //   actorFoo["Name"] --> (UseCase)
+  //   Register --> Login : include
+  //   EnrollCourse --> PaymentProcess : extend
+  // Mermaid graph TD does NOT support parens () as use-case nodes, nor does
+  // it support "A --> B : label" syntax (the colon is invalid).
+  // Fixes:
+  //   (UseCaseName) → UseCaseName["UseCase Name"]
+  //   A --> B : include → A -->|include| B
+  //   A --> B : extend → A -.->|extend| B
+  if (s.includes("graph TD") || s.includes("graph LR")) {
+    // CRITICAL: Fix "A --> B : include" and "A --> B : extend" syntax
+    // Must run BEFORE the parens fixer to avoid conflicts.
+    // Pattern: NodeId["label"] --> NodeId2["label2"] : include/extend
+    // Also handles: NodeId --> NodeId2 : include/extend
+    // Also handles: NodeId["label"] --> NodeId2 : include/extend
+    s = s.replace(
+      /^(\s*)(\w+(?:\["[^"]*"\])?)\s*(--?>|-\.\->)\s*(\w+(?:\["[^"]*"\])?)\s*:\s*(include|extend|«include»|«extend»)\s*$/gmi,
+      (_m, indent: string, from: string, arrow: string, to: string, label: string) => {
+        const cleanLabel = label.replace(/«|»/g, "").toLowerCase().trim();
+        if (cleanLabel === "extend") {
+          return `${indent}${from} -.->|${cleanLabel}| ${to}`;
+        }
+        return `${indent}${from} -->|${cleanLabel}| ${to}`;
+      }
+    );
+
+    // Fix "actorId["Label"] --> (UseCaseName)" → 'actorId["Label"] --> UseCaseName["UseCaseName"]'
+    s = s.replace(
+      /(\b\w+\["[^"]*"\]\s*--?>?\s*--?)\s*\((\w+)\)/g,
+      (_m, left: string, useCaseName: string) => {
+        return `${left} ${useCaseName}["${useCaseName.replace(/([A-Z])/g, " $1").trim()}"]`;
+      }
+    );
+    // Fix standalone "(UseCaseName)" → 'UseCaseName["UseCaseName"]'
+    s = s.replace(
+      /(--?>?\s*--?)\s*\((\w+)\)/g,
+      (_m, arrow: string, useCaseName: string) => {
+        return `${arrow} ${useCaseName}["${useCaseName.replace(/([A-Z])/g, " $1").trim()}"]`;
+      }
+    );
+    // Fix "(UseCaseName) --> (OtherUseCase)" → 'UseCaseName["UseCaseName"] --> OtherUseCase["OtherUseCase"]'
+    s = s.replace(
+      /^\s*\((\w+)\)\s*(-->|---)\s*\((\w+)\)\s*$/gm,
+      (_m, from: string, arrow: string, to: string) => {
+        const fromLabel = from.replace(/([A-Z])/g, " $1").trim();
+        const toLabel = to.replace(/([A-Z])/g, " $1").trim();
+        return `${from}["${fromLabel}"] ${arrow} ${to}["${toLabel}"]`;
+      }
+    );
   }
 
   // Wrap edge labels containing special chars in double quotes.

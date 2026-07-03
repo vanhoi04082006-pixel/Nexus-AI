@@ -13,6 +13,7 @@ import {
   failProgress,
   appendLog,
   runWithProjectLog,
+  getProgress,
 } from "@/lib/pipeline-progress";
 import type { ProjectInput } from "@/lib/types";
 
@@ -249,8 +250,26 @@ export async function POST(req: Request) {
             agentId: "PIPELINE",
             message: `✅ PIPELINE COMPLETED — all sections saved, invitations sent`,
           });
+          // Save activity log
+          try {
+            const p = getProgress(project.id);
+            const doneCount = p?.agents.filter((a) => a.status === "done").length || 0;
+            const failedCount = p?.agents.filter((a) => a.status === "failed").length || 0;
+            const logCount = p?.logs.length || 0;
+            await db.activityLog.create({
+              data: {
+                projectId: project.id,
+                type: "PIPELINE",
+                status: "SUCCESS",
+                title: `Pipeline hoàn thành — 10 AI Agents`,
+                details: `✅ ${doneCount}/10 agents hoàn thành${failedCount > 0 ? `, ${failedCount} fallback` : ""}. Tất cả sections đã lưu. Email lời mời đã gửi ${memberRows.length} thành viên. ${logCount} log lines.`,
+                agentId: "PIPELINE",
+                logCount,
+              },
+            });
+          } catch { /* non-fatal */ }
         })
-        .catch((err) => {
+        .catch(async (err) => {
           const msg = err instanceof Error ? err.message : "Pipeline failed";
           console.error(`>> [PIPELINE] Background pipeline FAILED:`, msg);
           appendLog({
@@ -259,6 +278,19 @@ export async function POST(req: Request) {
             agentId: "PIPELINE",
             message: `❌ PIPELINE FAILED — ${msg}`,
           });
+          // Save activity log
+          try {
+            await db.activityLog.create({
+              data: {
+                projectId: project.id,
+                type: "PIPELINE",
+                status: "FAILED",
+                title: `Pipeline thất bại`,
+                details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+                agentId: "PIPELINE",
+              },
+            });
+          } catch { /* non-fatal */ }
           failProgress(project.id, msg);
         });
     });
