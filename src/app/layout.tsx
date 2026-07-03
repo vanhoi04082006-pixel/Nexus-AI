@@ -85,8 +85,6 @@ export default function RootLayout({
       >
         {/* Sci-fi neural network background — living AI brain visualization */}
         <NeuralBackground />
-        {/* Scanline effect — horizontal light sweep across entire app */}
-        <div className="nexus-scanline" />
         {/* Content above background */}
         <div className="relative z-10">
           {children}
