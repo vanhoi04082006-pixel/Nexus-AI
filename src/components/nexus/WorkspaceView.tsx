@@ -202,7 +202,7 @@ export function WorkspaceView() {
               status: string;
               error?: string;
               taskCount?: number;
-              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
+              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
             };
             // Sync live logs into store
             if (prog.logs) {

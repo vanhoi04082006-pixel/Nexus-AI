@@ -1,4 +1,4 @@
-// NEXUS AI - Multi-provider AI client (OpenRouter multi-key rotation)
+// NEXUS AI - AI client (OpenRouter multi-key rotation)
 // Each request tries multiple API keys + multiple models, with retry on rate-limit.
 
 import { db } from "./db";
@@ -57,7 +57,6 @@ export function resetTokenTracking(): void {
 type GlobalCacheStore = {
   aiCache?: Map<string, { result: string; timestamp: number }>;
   rateLimitedKeys?: Map<number, number>;
-  dsRateLimited?: Map<number, number>;
 };
 const gc = globalThis as typeof globalThis & GlobalCacheStore;
 const aiCache: Map<string, { result: string; timestamp: number }> = gc.aiCache ?? new Map();
@@ -92,208 +91,7 @@ export function setCachedResult(key: string, result: string): void {
 }
 
 // ===========================================================
-// DeepSeek API (direct — priority provider)
-// ===========================================================
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_KEYS: string[] = [
-  process.env.DEEPSEEK_API_KEY || "",
-  process.env.DEEPSEEK_API_KEY_2 || "",
-  process.env.DEEPSEEK_API_KEY_3 || "",
-].filter((k) => k && k.startsWith("sk-"));
-
-// Map OpenRouter model names → DeepSeek native model names
-const DEEPSEEK_MODEL_MAP: Record<string, string> = {
-  "deepseek/deepseek-chat:free": "deepseek-chat",
-  "deepseek/deepseek-r1:free": "deepseek-reasoner",
-};
-
-// Track rate-limited DeepSeek keys (globalThis to survive dev recompiles)
-const dsRateLimited: Map<number, number> = gc.dsRateLimited ?? new Map<number, number>();
-gc.dsRateLimited = dsRateLimited;
-
-function getAvailableDeepSeekKey(): number {
-  const now = Date.now();
-  for (let i = 0; i < DEEPSEEK_KEYS.length; i++) {
-    const resetAt = dsRateLimited.get(i);
-    if (!resetAt || resetAt < now) {
-      dsRateLimited.delete(i);
-      return i;
-    }
-  }
-  return -1; // all rate-limited
-}
-
-async function callDeepSeek(
-  params: CallModelParams,
-  timeoutMs = 120000
-): Promise<string> {
-  if (DEEPSEEK_KEYS.length === 0) {
-    throw { status: 401, message: "No DEEPSEEK_API_KEY configured" } as OpenRouterError;
-  }
-
-  const dsModel = DEEPSEEK_MODEL_MAP[params.model] || "deepseek-chat";
-  const isReasoner = dsModel === "deepseek-reasoner";
-  // V4 Pro (reasoner) needs more time to think — up to 5 min
-  const effectiveTimeout = isReasoner ? Math.max(timeoutMs, 300000) : timeoutMs;
-  const keyIdx = getAvailableDeepSeekKey();
-  if (keyIdx === -1) {
-    throw { status: 429, message: "All DeepSeek keys rate-limited" } as OpenRouterError;
-  }
-
-  const apiKey = DEEPSEEK_KEYS[keyIdx];
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), effectiveTimeout);
-
-  try {
-    console.log(`      [DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}${isReasoner ? " (V4 Pro — thinking)" : " (V4 Flash)"}`);
-    appendLog({
-      level: "info",
-      provider: "deepseek",
-      model: dsModel,
-      keyIndex: keyIdx + 1,
-      message: `[DeepSeek] Key #${keyIdx + 1}, model: ${dsModel}${isReasoner ? " (V4 Pro)" : " (V4 Flash)"}`,
-    });
-    const resp = await fetch(DEEPSEEK_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: dsModel,
-        messages: params.messages,
-        temperature: params.temperature,
-        max_tokens: params.max_tokens ?? 8000,
-        top_p: params.top_p ?? 0.9,
-        frequency_penalty: params.frequency_penalty ?? 0.1,
-        presence_penalty: params.presence_penalty ?? 0.1,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!resp.ok) {
-      let errMsg = `HTTP ${resp.status}`;
-      try {
-        const body = await resp.json();
-        errMsg = body?.error?.message || errMsg;
-      } catch { /* ignore */ }
-
-      const err: OpenRouterError = {
-        status: resp.status,
-        message: errMsg,
-        keyIndex: keyIdx,
-      };
-
-      if (resp.status === 429) {
-        const ra = parseInt(resp.headers.get("retry-after") || "60");
-        dsRateLimited.set(keyIdx, Date.now() + ra * 1000);
-        console.log(`  [DeepSeek] Key #${keyIdx + 1} rate-limited for ${ra}s`);
-        appendLog({
-          level: "warn",
-          provider: "deepseek",
-          model: dsModel,
-          keyIndex: keyIdx + 1,
-          message: `[KEY ROTATION] DeepSeek Key #${keyIdx + 1} rate-limited for ${ra}s`,
-        });
-        throw err;
-      }
-      if (resp.status === 401 || resp.status === 403) {
-        console.log(`  [DeepSeek] Key #${keyIdx + 1} invalid (${resp.status})`);
-        appendLog({
-          level: "error",
-          provider: "deepseek",
-          model: dsModel,
-          keyIndex: keyIdx + 1,
-          message: `✗ DeepSeek Key #${keyIdx + 1} invalid (${resp.status}) — ${errMsg}`,
-        });
-        throw err;
-      }
-      // 402 (insufficient balance) and other errors
-      appendLog({
-        level: "error",
-        provider: "deepseek",
-        model: dsModel,
-        keyIndex: keyIdx + 1,
-        message: `✗ DeepSeek Key #${keyIdx + 1} → [${resp.status}] ${errMsg}`,
-      });
-      throw err;
-    }
-
-    const data = await resp.json();
-    const message = data?.choices?.[0]?.message;
-    let content = message?.content || "";
-
-    // V4 Pro (reasoner) may have <think> tags or reasoning before JSON
-    if (isReasoner && content) {
-      content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-      // If there's text before the JSON, extract just the JSON part
-      const jsonStart = content.indexOf("{");
-      if (jsonStart > 0) {
-        const beforeJson = content.substring(0, jsonStart).trim();
-        if (beforeJson.length < 100) {
-          content = content.substring(jsonStart);
-        }
-      }
-    }
-
-    if (!content || !content.trim()) {
-      throw { message: "Null response from DeepSeek", keyIndex: keyIdx } as OpenRouterError;
-    }
-
-    // Track tokens
-    const usage = data?.usage;
-    if (usage) {
-      lastTokenUsage = {
-        model: dsModel,
-        keyIndex: keyIdx + 1,
-        provider: "deepseek",
-        promptTokens: usage.prompt_tokens || 0,
-        completionTokens: usage.completion_tokens || 0,
-        totalTokens: usage.total_tokens || 0,
-      };
-      totalTokensUsed += lastTokenUsage.totalTokens;
-    }
-
-    // Cache (skip for reasoner — non-deterministic thinking)
-    if (params.temperature < 0.5 && !isReasoner) {
-      const cacheKey = getCacheKey(params.model, params.messages, params.temperature);
-      setCachedResult(cacheKey, content);
-    }
-
-    console.log(`      [DeepSeek] ✓ Success (${dsModel}${isReasoner ? " V4 Pro" : " V4 Flash"})`);
-    appendLog({
-      level: "success",
-      provider: "deepseek",
-      model: dsModel,
-      keyIndex: keyIdx + 1,
-      message: `✓ DeepSeek ${dsModel} (Key #${keyIdx + 1})`,
-    });
-    return content as string;
-  } catch (e: unknown) {
-    if (e && typeof e === "object" && "status" in e) {
-      throw e;
-    }
-    const err: OpenRouterError = {
-      code: (e as Error)?.name === "AbortError" ? "ETIMEDOUT" : "ENET",
-      message: (e as Error)?.message || "DeepSeek network error",
-      keyIndex: keyIdx,
-    };
-    appendLog({
-      level: "error",
-      provider: "deepseek",
-      model: dsModel,
-      keyIndex: keyIdx + 1,
-      message: `✗ DeepSeek ${dsModel} → [${err.code}] ${err.message}`,
-    });
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// ===========================================================
-// OpenRouter API (fallback provider — multi-key rotation)
+// OpenRouter API (multi-key rotation)
 // ===========================================================
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -350,7 +148,7 @@ function getKeyByIndex(index: number): string {
 }
 
 export function getApiKeyCount(): number {
-  return getAllApiKeys().length + DEEPSEEK_KEYS.length;
+  return getAllApiKeys().length;
 }
 
 async function callOpenRouterDirect(
@@ -531,7 +329,7 @@ async function callOpenRouterDirect(
 }
 
 // ===========================================================
-// MAIN: callOpenRouter — tries DeepSeek first, then OpenRouter
+// MAIN: callOpenRouter — cache → OpenRouter (multi-key rotation)
 // ===========================================================
 export async function callOpenRouter(
   params: CallModelParams,
@@ -544,22 +342,6 @@ export async function callOpenRouter(
     if (cached) return cached;
   }
 
-  // Step 1: Try DeepSeek API first (if model is a DeepSeek model)
-  if (DEEPSEEK_KEYS.length > 0 && DEEPSEEK_MODEL_MAP[params.model]) {
-    try {
-      return await callDeepSeek(params, timeoutMs);
-    } catch (err) {
-      const e = err as OpenRouterError;
-      console.log(`  [FALLBACK] DeepSeek failed (${e.status || e.code}): ${e.message} → trying OpenRouter`);
-      appendLog({
-        level: "warn",
-        provider: "deepseek",
-        model: params.model,
-        message: `[FALLBACK] DeepSeek failed (${e.status || e.code}) → switching to OpenRouter`,
-      });
-    }
-  }
-
-  // Step 2: Fall back to OpenRouter (multi-key rotation)
+  // Call OpenRouter (multi-key rotation)
   return callOpenRouterDirect(params, timeoutMs);
 }

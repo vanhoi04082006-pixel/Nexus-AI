@@ -22,7 +22,7 @@ export interface LogEntry {
   ts: number; // epoch ms
   level: LogLevel;
   agentId?: string; // "01".."08" | "PIPELINE" | "TASK" | "REVIEWER"
-  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
   model?: string;
   keyIndex?: number; // 1-based
   message: string;
@@ -126,7 +126,6 @@ type GlobalStore = {
   refineMap?: Map<string, RefineProgress>;
   initMap?: Map<string, InitProgress>;
   rateLimitedKeys?: Map<number, number>;
-  dsRateLimited?: Map<number, number>;
   aiCache?: Map<string, { result: string; timestamp: number }>;
 };
 const g = globalThis as typeof globalThis & GlobalStore;

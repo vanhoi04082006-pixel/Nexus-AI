@@ -412,24 +412,26 @@ Nexus-AI/
 
 ---
 
-## 🤖 8 AI Agents — Model Priority
+## 🤖 8 AI Agents — Model Priority (v2)
+
+Mỗi agent có danh sách model ưu tiên riêng (7-9 model), fallback tự động khi model bị 429/404.
 
 | # | Agent | Models (priority order) | Temp |
 |---|---|---|---|
-| 01 | Requirement Analyst | `nemotron-3-ultra` → `nemotron-3-super` → `gpt-oss-120b` | 0.2 |
-| 02 | HR Planner | `nemotron-3-ultra` → `gemma-4-31b` → `gpt-oss-120b` | 0.25 |
-| 03 | Sprint Planner | `nemotron-3-ultra` → `nemotron-3-super` → `gpt-oss-120b` | 0.2 |
-| 04 | System Architect | `gpt-oss-120b` → `north-mini-code` | 0.15 |
-| 05 | UML Generator | `gpt-oss-120b` → `north-mini-code` | 0.1 |
-| 06 | Technical Writer | `gemma-4-31b` → `gpt-oss-120b` | 0.35 |
-| 07 | Git/DevOps | `gpt-oss-120b` → `north-mini-code` | 0.15 |
-| 08 | Quality Reviewer | `gpt-oss-120b` → `gemma-4-31b` | 0.1 |
-| — | Task Generator | `gpt-oss-120b` → `north-mini-code` → `nemotron-3-ultra` | 0.25 |
-| — | Chat Assistant | `gpt-oss-120b` → `gemma-4-31b` | 0.5 |
+| 01 | Requirement Analyst | nemotron-3-ultra → qwen3-next-80b → nemotron-3-super → gpt-oss-120b → hermes-3-405b → gemma-4-31b → gemma-4-26b → llama-3.3-70b → nemotron-3-nano-30b | 0.20 |
+| 02 | HR Planner | gemma-4-31b → gemma-4-26b → nemotron-3-ultra → qwen3-next-80b → llama-3.3-70b → gpt-oss-120b → nemotron-3-nano-30b → gpt-oss-20b | 0.25 |
+| 03 | Sprint Planner | nemotron-3-ultra → nemotron-3-super → qwen3-next-80b → gpt-oss-120b → hermes-3-405b → gemma-4-31b → nemotron-nano-9b-v2 | 0.20 |
+| 04 | System Architect | gpt-oss-120b → qwen3-coder → laguna-m.1 → north-mini-code → nemotron-3-super → gemma-4-31b → gpt-oss-20b | 0.15 |
+| 05 | UML Generator | gpt-oss-120b → qwen3-coder → north-mini-code → laguna-xs-2.1 → laguna-xs.2 → gemma-4-31b → gpt-oss-20b | 0.10 |
+| 06 | Technical Writer | gemma-4-31b → gemma-4-26b → llama-3.3-70b → qwen3-next-80b → gpt-oss-120b → hermes-3-405b → llama-3.2-3b | 0.35 |
+| 07 | Git/DevOps | north-mini-code → laguna-m.1 → qwen3-coder → laguna-xs-2.1 → laguna-xs.2 → gpt-oss-120b → gpt-oss-20b | 0.15 |
+| 08 | Quality Reviewer | gpt-oss-120b → qwen3-next-80b → nemotron-3-ultra → gemma-4-31b → hermes-3-405b → llama-3.3-70b → nemotron-3-nano-30b | 0.10 |
+| — | Task Generator | qwen3-coder → gpt-oss-120b → laguna-m.1 → north-mini-code → nemotron-3-ultra → gemma-4-31b → nemotron-3-nano-30b | 0.25 |
+| — | Chat Assistant | qwen3-next-80b → gpt-oss-120b → gemma-4-31b → llama-3.3-70b → hermes-3-405b → gpt-oss-20b → llama-3.2-3b | 0.50 |
 
 **Fallback chain:** Model 1 → Model 2 → ... → static fallback data (luôn có kết quả, không bao giờ crash)
 
-> **Note:** Mỗi agent thử 2 retries per model với exponential backoff. Khi 1 model bị 429/404, tự skip sang model tiếp theo.
+> **Note:** Mỗi agent thử 2 retries per model với exponential backoff. Khi 1 model bị 429/404, tự skip sang model tiếp theo. Tất cả models đều free tier trên OpenRouter.
 
 ---
 

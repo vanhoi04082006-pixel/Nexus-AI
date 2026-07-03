@@ -186,7 +186,7 @@ export function InputView() {
             const prog = (await pr.json()) as {
               status: string;
               agents?: { id: string; status: string; error?: string }[];
-              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
+              logs?: { id: string; ts: number; level: "info" | "success" | "warn" | "error"; agentId?: string; provider?: "openrouter" | "cache" | "fallback" | "pipeline"; model?: string; keyIndex?: number; message: string }[];
               error?: string;
             };
 

@@ -22,17 +22,11 @@ const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
 
 /* ===========================================================
-   PRIMARY MODELS (safe fallbacks that are known to work)
+   PRIMARY MODELS (v2 — OpenRouter free tier, multi-model fallback)
+   Each agent has its own tailored priority list of free models.
+   Ordered by capability / availability per agent's task type.
+   Last updated: 2026-07-02 (v2)
 =========================================================== */
-// DeepSeek models (direct API only — NOT available free on OpenRouter anymore)
-// V4 Flash = deepseek-chat (fast, cheap)
-// V4 Pro = deepseek-reasoner (flagship, smart)
-const DS_FLASH = "deepseek/deepseek-chat:free";       // V4 Flash
-const DS_PRO = "deepseek/deepseek-r1:free";            // V4 Pro (reasoner)
-const DS_REASONER = "deepseek/deepseek-r1:free";       // V4 Pro for chat
-
-const SAFE_1 = "openai/gpt-oss-120b:free";
-const SAFE_2 = "cohere/north-mini-code:free";
 
 /* ===========================================================
    AGENT DEFINITIONS
@@ -54,13 +48,17 @@ const AGENTS: AgentDef[] = [
     name: "Requirement Analyst",
     key: "analysis",
     required: true,
-    temp: 0.2,
+    temp: 0.20,
     models: [
-      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
       "openai/gpt-oss-120b:free",
-      SAFE_1,
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
     ],
   },
   {
@@ -70,10 +68,14 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.25,
     models: [
-      DS_FLASH,
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
       "google/gemma-4-31b-it:free",
-      SAFE_1,
+      "google/gemma-4-26b-a4b-it:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "openai/gpt-oss-120b:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -81,12 +83,15 @@ const AGENTS: AgentDef[] = [
     name: "Sprint Planner",
     key: "sprint",
     required: false,
-    temp: 0.2,
+    temp: 0.20,
     models: [
-      DS_FLASH,
       "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
-      SAFE_1,
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "openai/gpt-oss-120b:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "google/gemma-4-31b-it:free",
+      "nvidia/nemotron-nano-9b-v2:free",
     ],
   },
   {
@@ -96,10 +101,13 @@ const AGENTS: AgentDef[] = [
     required: true,
     temp: 0.15,
     models: [
-      DS_PRO,
       "openai/gpt-oss-120b:free",
+      "qwen/qwen3-coder:free",
+      "poolside/laguna-m.1:free",
       "cohere/north-mini-code:free",
-      SAFE_1,
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -107,12 +115,15 @@ const AGENTS: AgentDef[] = [
     name: "UML Generator",
     key: "uml",
     required: false,
-    temp: 0.1,
+    temp: 0.10,
     models: [
-      DS_PRO,
       "openai/gpt-oss-120b:free",
+      "qwen/qwen3-coder:free",
       "cohere/north-mini-code:free",
-      SAFE_2,
+      "poolside/laguna-xs-2.1:free",
+      "poolside/laguna-xs.2:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
   {
@@ -122,10 +133,13 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.35,
     models: [
-      DS_FLASH,
       "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
       "openai/gpt-oss-120b:free",
-      SAFE_1,
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
     ],
   },
   {
@@ -135,35 +149,45 @@ const AGENTS: AgentDef[] = [
     required: false,
     temp: 0.15,
     models: [
-      DS_PRO,
-      "openai/gpt-oss-120b:free",
       "cohere/north-mini-code:free",
-      SAFE_2,
+      "poolside/laguna-m.1:free",
+      "qwen/qwen3-coder:free",
+      "poolside/laguna-xs-2.1:free",
+      "poolside/laguna-xs.2:free",
+      "openai/gpt-oss-120b:free",
+      "openai/gpt-oss-20b:free",
     ],
   },
 ];
 
 const REVIEWER_MODELS = [
-  DS_PRO,
   "openai/gpt-oss-120b:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "google/gemma-4-31b-it:free",
-  SAFE_1,
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
 ];
 
 const TASK_GEN_MODELS = [
-  DS_PRO,
-  DS_FLASH,
+  "qwen/qwen3-coder:free",
   "openai/gpt-oss-120b:free",
+  "poolside/laguna-m.1:free",
   "cohere/north-mini-code:free",
-  SAFE_1,
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
 ];
 
 const CHAT_MODELS = [
-  DS_REASONER,
-  DS_FLASH,
+  "qwen/qwen3-next-80b-a3b-instruct:free",
   "openai/gpt-oss-120b:free",
   "google/gemma-4-31b-it:free",
-  SAFE_1,
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "openai/gpt-oss-20b:free",
+  "meta-llama/llama-3.2-3b-instruct:free",
 ];
 
 /* ===========================================================

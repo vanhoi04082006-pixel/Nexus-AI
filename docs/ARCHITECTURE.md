@@ -181,21 +181,21 @@ src/app/api/
 │  AGENT-01: Requirement Analyst                              │
 │  ├─ Input: topic, description, purpose, members             │
 │  ├─ Output: { desc, techStack, features, actors, modules }  │
-│  └─ Models: nemotron-ultra → nemotron-super → gpt-oss-120b  │
+│  └─ Models: nemotron-ultra → qwen3-next → gpt-oss-120b ...  │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  AGENT-02: HR Planner                                       │
 │  ├─ Input: Agent-01 output + members (strengths/weaknesses) │
 │  ├─ Output: { assignments, coverage, risks }                │
-│  └─ Models: nemotron-ultra → gemma-4 → gpt-oss-120b         │
+│  └─ Models: gemma-4-31b → gemma-4-26b → nemotron-ultra ...  │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  AGENT-03: Sprint Planner                                   │
 │  ├─ Input: Agent-01 + Agent-02 output                       │
 │  ├─ Output: { totalSprints, sprints, milestones }           │
-│  └─ Models: nemotron-ultra → nemotron-super → gpt-oss-120b  │
+│  └─ Models: nemotron-ultra → nemotron-super → qwen3-next .. │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -247,7 +247,7 @@ for each agent without result:
 │  ├─ Input: ALL 7 sections (JSON, truncated to 12000 chars)  │
 │  ├─ Task: Fix inconsistencies, sync sections                │
 │  ├─ Output: merged + fixed ProjectResult                    │
-│  └─ Models: gpt-oss-120b → gemma-4 → nemotron-ultra         │
+│  └─ Models: gpt-oss-120b → qwen3-next → nemotron-ultra ...  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -258,7 +258,7 @@ for each agent without result:
 │  TASK GENERATOR                                             │
 │  ├─ Input: ProjectResult (analysis + hr + sprint + design)  │
 │  ├─ Output: TaskItem[] (SMART tasks with code snippets)     │
-│  ├─ Models: gpt-oss-120b → north-mini-code → nemotron-ultra │
+│  ├─ Models: qwen3-coder → gpt-oss-120b → laguna-m.1 ...     │
 │  └─ Trigger: POST /api/projects/:id/initialize              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -453,7 +453,6 @@ type GlobalStore = {
   refineMap?: Map<string, RefineProgress>;
   initMap?: Map<string, InitProgress>;
   rateLimitedKeys?: Map<number, number>;
-  dsRateLimited?: Map<number, number>;
   aiCache?: Map<string, { result: string; timestamp: number }>;
 };
 const g = globalThis as typeof globalThis & GlobalStore;
@@ -515,8 +514,10 @@ const AGENTS: AgentDef[] = [
     name: "Requirement Analyst",
     models: [
       "nvidia/nemotron-3-ultra-550b-a55b:free",  // try 1st
-      "nvidia/nemotron-3-super-120b-a12b:free",  // try 2nd
+      "qwen/qwen3-next-80b-a3b-instruct:free",   // try 2nd
+      "nvidia/nemotron-3-super-120b-a12b:free",
       "openai/gpt-oss-120b:free",
+      // ... 5 more fallback models
     ],
     // ...
   },

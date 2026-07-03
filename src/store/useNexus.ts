@@ -82,7 +82,7 @@ export interface LogEntry {
   ts: number;
   level: LogLevel;
   agentId?: string;
-  provider?: "openrouter" | "deepseek" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
   model?: string;
   keyIndex?: number;
   message: string;
