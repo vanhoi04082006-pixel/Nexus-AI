@@ -19,6 +19,8 @@ import {
   Cpu,
   Mail,
   User as UserIcon,
+  Terminal,
+  Loader2,
 } from "lucide-react";
 
 const STRENGTHS = [
@@ -66,6 +68,7 @@ export function InputView() {
 
   const [showOptional, setShowOptional] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [parallel, setParallel] = useState(true); // default: parallel (fast)
 
   // Warm up the /api/projects route on page load so Turbopack compiles it
   // before the user submits. Without this, the first POST can crash the server
@@ -148,6 +151,7 @@ export function InputView() {
       leaderName: input.leaderName.trim(),
       leaderEmail: input.leaderEmail.trim(),
       leaderSmtpPassword: input.leaderSmtpPassword.trim(),
+      parallel,
     };
 
     try {
@@ -232,30 +236,32 @@ export function InputView() {
   }
 
   return (
-    <main className="flex-1 flex flex-col">
+    <main className="flex-1 flex flex-col bg-[#060b14] nexus-grid-bg">
       {/* Header */}
-      <header className="border-b border-border bg-[#0c1322]/80 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-40 border-b border-border/50 bg-[#060b14]/90 backdrop-blur-xl">
+        <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center nexus-pulse-glow">
               <Cpu className="w-5 h-5 text-primary" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">
                 <span className="text-primary">NEXUS</span> AI
               </h1>
-              <p className="text-xs text-muted-foreground">Multi-Agent Architect</p>
+              <p className="text-[10px] text-muted-foreground tracking-wider uppercase">Multi-Agent Architect</p>
             </div>
           </div>
-          <Badge className="bg-primary/10 text-primary border-primary/20">Buoc 1/8 · Nhap Du Lieu</Badge>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => useNexus.getState().setView("home")}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            ← Lịch sử
-          </Button>
+          <div className="flex items-center gap-3">
+            <Badge className="bg-primary/10 text-primary border-primary/20">Bước 1/8 · Nhập dữ liệu</Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => useNexus.getState().setView("home")}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ← Lịch sử
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -263,15 +269,23 @@ export function InputView() {
       <div className="flex-1 overflow-y-auto nexus-scroll">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="nexus-fade space-y-6">
-            {/* Intro */}
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-3">
-                Khoi tao du an cua ban
-              </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">
-                8 AI Agent se phan tich chu de, phan nhan su, lap sprint, thiet ke he thong, ve UML,
-                viet tai lieu va git workflow. Sau do email loi moi tu dong gui thanh vien.
-              </p>
+            {/* Premium Intro with glow */}
+            <div className="text-center mb-8 relative">
+              {/* Glow aura behind title */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[200px] bg-gradient-to-r from-cyan-500/10 via-primary/15 to-emerald-500/10 blur-[80px] rounded-full animate-pulse pointer-events-none" />
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/5 mb-4">
+                  <Terminal className="w-3.5 h-3.5 text-primary nexus-spin-slow" />
+                  <span className="text-[10px] font-mono text-primary tracking-wider">NEXUS_CORE // MULTI_AGENT_GATEWAY</span>
+                </div>
+                <h2 className="text-3xl font-bold mb-3">
+                  Khởi tạo dự án của bạn
+                </h2>
+                <p className="text-muted-foreground max-w-2xl mx-auto">
+                  10 AI Agent sẽ phân tích chủ đề, phân nhân sự, lập sprint, thiết kế hệ thống, vẽ UML,
+                  viết tài liệu, sinh test plan, review security và git workflow. Sau đó email lời mời tự động gửi thành viên.
+                </p>
+              </div>
             </div>
 
             {/* Basic info */}
@@ -612,16 +626,54 @@ export function InputView() {
               ))}
             </div>
 
-            {/* Submit */}
-            <div className="flex justify-end pt-4 pb-8">
+            {/* Pipeline mode toggle + Submit */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 pb-8">
+              {/* Parallel vs Sequential toggle */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Chế độ chạy pipeline</span>
+                <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setParallel(true)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      parallel
+                        ? "bg-primary text-primary-foreground nexus-glow"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Song song (nhanh)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setParallel(false)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      !parallel
+                        ? "bg-primary text-primary-foreground nexus-glow"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    🐢 Tuần tự (ổn định)
+                  </button>
+                </div>
+                <span className="text-[10px] text-muted-foreground/70">
+                  {parallel
+                    ? "Chạy nhiều agent cùng lúc — nhanh nhưng dễ bị rate-limit (429)"
+                    : "Chạy từng agent một — chậm hơn nhưng tránh dồn dập API"}
+                </span>
+              </div>
+
               <Button
                 onClick={handleSubmit}
                 disabled={submitting}
                 size="lg"
-                className="bg-primary text-primary-foreground hover:bg-primary/90 px-8"
+                className="bg-gradient-to-r from-primary to-cyan-500 text-primary-foreground hover:opacity-90 px-8 nexus-glow-strong transition-all hover:translate-x-0.5 active:translate-x-0"
               >
-                <Rocket className="w-4 h-4" />
-                Khoi tao Du An
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Rocket className="w-4 h-4" />
+                )}
+                Khởi tạo Dự Án
               </Button>
             </div>
           </div>

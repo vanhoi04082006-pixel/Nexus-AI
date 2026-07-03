@@ -327,7 +327,7 @@ export function WorkspaceView() {
   ];
 
   return (
-    <main className="flex-1 flex flex-col md:flex-row min-h-screen">
+    <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-[#060b14] nexus-grid-bg">
       {/* Mobile toggle */}
       <button
         onClick={() => setSidebarOpen((v) => !v)}

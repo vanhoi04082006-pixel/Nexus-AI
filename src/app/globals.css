@@ -286,3 +286,109 @@
   color: #e2e8f0;
   font-weight: 600;
 }
+
+/* ===== Netflix-style Premium UI animations ===== */
+
+/* Slow spin for AI icons */
+@keyframes nexus-spin-slow {
+  to { transform: rotate(360deg); }
+}
+.nexus-spin-slow {
+  animation: nexus-spin-slow 3s linear infinite;
+}
+
+/* Shimmer effect — light sweep across loading/processing elements */
+@keyframes nexus-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.nexus-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.nexus-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 212, 170, 0.08) 50%,
+    transparent 100%
+  );
+  animation: nexus-shimmer 2s infinite;
+}
+
+/* Pulse glow — neon breathing effect for premium cards */
+@keyframes nexus-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px -10px rgba(0, 212, 170, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px -5px rgba(0, 212, 170, 0.5);
+  }
+}
+.nexus-pulse-glow {
+  animation: nexus-pulse-glow 3s ease-in-out infinite;
+}
+
+/* Glow shadow utility — for premium prompt box + active cards */
+.nexus-glow {
+  box-shadow: 0 0 50px -12px rgba(0, 212, 170, 0.15);
+}
+.nexus-glow-strong {
+  box-shadow: 0 0 60px -8px rgba(0, 212, 170, 0.25);
+}
+
+/* Hero gradient — for Netflix-style backdrop */
+.nexus-hero-gradient {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(6, 11, 20, 0.5) 50%,
+    rgba(6, 11, 20, 0.95) 100%
+  );
+}
+
+/* Card hover lift — Netflix-style */
+.nexus-card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.nexus-card-hover:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 40px -10px rgba(0, 212, 170, 0.3);
+  z-index: 10;
+}
+
+/* Rail scrollbar — hidden for Netflix-style horizontal scroll */
+.nexus-rail::-webkit-scrollbar {
+  height: 4px;
+}
+.nexus-rail::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nexus-rail::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 170, 0.3);
+  border-radius: 2px;
+}
+
+/* Slide-in animation for right panel */
+@keyframes nexus-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.nexus-slide-in {
+  animation: nexus-slide-in 0.4s ease;
+}
+
+/* Typing cursor blink — for agent status */
+@keyframes nexus-cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.nexus-cursor::after {
+  content: "▊";
+  animation: nexus-cursor-blink 1s infinite;
+  color: var(--primary);
+  margin-left: 2px;
+}
