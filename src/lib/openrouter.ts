@@ -185,7 +185,7 @@ export function getApiKeyCount(): number {
 
 async function callOpenRouterDirect(
   params: CallModelParams,
-  timeoutMs = 120000
+  timeoutMs = 300000
 ): Promise<string> {
   const keys = getAllApiKeys();
   if (keys.length === 0) {
@@ -193,6 +193,7 @@ async function callOpenRouterDirect(
   }
 
   let lastError: OpenRouterError | null = null;
+  let etimedoutCount = 0; // Track consecutive ETIMEDOUT — don't try all 19 keys if model is slow
 
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const keyIndex = getAvailableKeyIndex();
@@ -348,6 +349,20 @@ async function callOpenRouterDirect(
         message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${err.code}] ${err.message}`,
       });
       lastError = err;
+      // ETIMEDOUT = model is slow, not broken. Don't try all 19 keys (would take 95 min).
+      // Break after 2 consecutive ETIMEDOUTs — caller (callAndParse) will retry the model.
+      if (err.code === "ETIMEDOUT") {
+        etimedoutCount++;
+        if (etimedoutCount >= 2) {
+          appendLog({
+            level: "warn",
+            provider: "openrouter",
+            model: params.model,
+            message: `⏳ ${params.model} timed out on ${etimedoutCount} keys — model may be slow, will retry`,
+          });
+          break;
+        }
+      }
       continue;
     } finally {
       clearTimeout(timer);
@@ -358,16 +373,17 @@ async function callOpenRouterDirect(
     level: "error",
     provider: "openrouter",
     model: params.model,
-    message: `✗ All ${keys.length} OpenRouter keys exhausted for ${params.model}`,
+    message: `✗ All available OpenRouter keys exhausted for ${params.model}`,
   });
-  // Mark this model as dead so other agents skip it instantly
-  // (avoid wasting time retrying the same rate-limited/unavailable model)
-  const reason = lastError?.status === 404
-    ? "model unavailable (404)"
-    : lastError?.status === 429
-    ? "all keys rate-limited (429)"
-    : lastError?.code || "all keys exhausted";
-  markModelDead(params.model, reason);
+  // Only mark model dead on 429 (rate-limited) or 404 (unavailable).
+  // Do NOT mark dead on ETIMEDOUT/ENET — model may just be slow, not broken.
+  // Caller (callAndParse) will retry the model with backoff.
+  if (lastError?.status === 404) {
+    markModelDead(params.model, "model unavailable (404)");
+  } else if (lastError?.status === 429) {
+    markModelDead(params.model, "all keys rate-limited (429)");
+  }
+  // ETIMEDOUT/ENET → don't mark dead, just throw so caller retries
   throw lastError || { message: "All OpenRouter keys exhausted" };
 }
 
@@ -376,7 +392,7 @@ async function callOpenRouterDirect(
 // ===========================================================
 export async function callOpenRouter(
   params: CallModelParams,
-  timeoutMs = 120000
+  timeoutMs = 300000
 ): Promise<string> {
   // Check cache first
   if (params.temperature < 0.5) {

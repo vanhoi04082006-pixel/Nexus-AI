@@ -15,8 +15,8 @@ import type {
 /* ===========================================================
    Tunables
 =========================================================== */
-const REQ_TIMEOUT = 120000;
-const MAX_RETRIES = 2;
+const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
+const MAX_RETRIES = 3;      // 3 attempts per model (was 2) — give slow models more chances
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
@@ -460,17 +460,21 @@ async function callAndParse(
         }
 
         // 5xx / timeout / network: retry same model with backoff
+        // ETIMEDOUT = model is slow, not broken — retry with patience
         if (
           (st && st >= 500) ||
           e.code === "ETIMEDOUT" ||
           e.code === "ENET" ||
           e.code === "ECONNRESET"
         ) {
-          console.log(`      ⏳ Server/timeout, doi ${d}ms`);
+          const isTimeout = e.code === "ETIMEDOUT";
+          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${d}ms`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Server/timeout — retrying in ${d / 1000}s`,
+            message: isTimeout
+              ? `  ⏳ Timeout — model is slow, retrying in ${d / 1000}s (attempt ${a}/${MAX_RETRIES})`
+              : `  ⏳ Server/timeout — retrying in ${d / 1000}s`,
           });
           await wait(d);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
