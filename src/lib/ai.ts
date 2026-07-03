@@ -5,6 +5,13 @@
 
 import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter";
 import { appendLog } from "./pipeline-progress";
+import pLimit from "p-limit";
+
+// Concurrency limiter — max 3 parallel LLM calls to prevent:
+// 1. Memory blowup from too many concurrent fetch() streams
+// 2. Rate-limit spikes from hitting OpenRouter with 6+ requests at once
+// 3. DDoS-like behavior on OpenRouter's free-tier infrastructure
+const limiter = pLimit(MAX_CONCURRENCY);
 import type {
   ProjectResult,
   ProjectInput,
@@ -16,10 +23,23 @@ import type {
    Tunables
 =========================================================== */
 const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
-const MAX_RETRIES = 3;      // 3 attempts per model (was 2) — give slow models more chances
+const MAX_RETRIES = 3;      // 3 attempts per model
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
+const MAX_CONCURRENCY = 3;  // Max parallel LLM calls (prevents memory blowup + rate-limit spikes)
+
+/**
+ * Full Jitter backoff — prevents "Thundering Herd" DDoS on retry.
+ * Instead of all agents retrying at exactly 2s, 4s, 8s,
+ * each gets a random delay spread across the backoff window.
+ * Formula: delay = random(0, base * mult^attempt)
+ * Source: AWS Architecture Blog — "Exponential Backoff and Jitter"
+ */
+function jitteredDelay(base: number, attempt: number): number {
+  const ceiling = Math.min(base * Math.pow(BACKOFF_MULT, attempt), MAX_DELAY);
+  return Math.random() * ceiling;
+}
 
 /* ===========================================================
    PRIMARY MODELS (v2 — OpenRouter free tier, multi-model fallback)
@@ -332,7 +352,8 @@ async function callModel(
   usr: string,
   temp: number
 ): Promise<string> {
-  return callOpenRouter(
+  // Wrap in concurrency limiter — max MAX_CONCURRENCY parallel LLM calls
+  return limiter(() => callOpenRouter(
     {
       model,
       messages: [
@@ -346,7 +367,7 @@ async function callModel(
       presence_penalty: 0.1,
     },
     REQ_TIMEOUT
-  );
+  ));
 }
 
 interface ParseResult {
@@ -445,16 +466,18 @@ async function callAndParse(
           message: `  ✗ [${a}/${MAX_RETRIES}] ${model} → [${st || e.code || "NET"}] ${msg}`,
         });
 
-        // 429: rate limit — wait and retry same model
+        // 429: rate limit — wait with FULL JITTER and retry same model
         if (st === 429) {
           const ra = e.retryAfter || d;
-          console.log(`      ⏳ Rate limit, doi ${Math.min(ra, MAX_DELAY)}ms`);
+          const jittered = jitteredDelay(INIT_DELAY, a);
+          const waitMs = Math.min(ra, MAX_DELAY, jittered + 1000); // jitter + 1s floor
+          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs)}ms (jittered)`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Rate-limited — waiting ${Math.min(ra, MAX_DELAY) / 1000}s before retry`,
+            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (jittered)`,
           });
-          await wait(Math.min(ra, MAX_DELAY));
+          await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
@@ -468,15 +491,16 @@ async function callAndParse(
           e.code === "ECONNRESET"
         ) {
           const isTimeout = e.code === "ETIMEDOUT";
-          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${d}ms`);
+          const jittered = jitteredDelay(INIT_DELAY, a);
+          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(jittered)}ms (jittered)`);
           appendLog({
             level: "warn",
             model,
             message: isTimeout
-              ? `  ⏳ Timeout — model is slow, retrying in ${d / 1000}s (attempt ${a}/${MAX_RETRIES})`
-              : `  ⏳ Server/timeout — retrying in ${d / 1000}s`,
+              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(jittered / 1000)}s (jittered, attempt ${a}/${MAX_RETRIES})`
+              : `  ⏳ Server/timeout — retrying in ${Math.round(jittered / 1000)}s (jittered)`,
           });
-          await wait(d);
+          await wait(jittered);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
@@ -508,7 +532,7 @@ async function callAndParse(
 /* ===========================================================
    PROMPT BUILDERS
 =========================================================== */
-const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). Tuyet doi KHONG dung markdown code block (\`\`\`json), KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong, khong dung newline that. Neu khong biet gia tri thi dung "" hoac [].`;
+const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). He thong da bat response_format: json_object — model bat buoc tra JSON hop le. Tuyet doi KHONG dung markdown code block, KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong. Neu khong biet gia tri thi dung "" hoac [].`;
 
 function analystPrompt(): string {
   return `Ban la Senior Requirement Analyst & Tech Lead. Phan tich du an KY LUONG, CHI TIET va DAY DU.

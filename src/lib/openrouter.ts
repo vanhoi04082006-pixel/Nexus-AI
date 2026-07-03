@@ -246,6 +246,14 @@ async function callOpenRouterDirect(
           top_p: params.top_p ?? 0.9,
           frequency_penalty: params.frequency_penalty ?? 0.1,
           presence_penalty: params.presence_penalty ?? 0.1,
+          // Structured Outputs: force JSON response format
+          // This tells the inference server to use constrained decoding,
+          // making it physically impossible to generate invalid JSON.
+          response_format: { type: "json_object" },
+          // Response healing plugin: OpenRouter gateway auto-strips markdown
+          // fences, fixes missing commas/brackets before sending to client.
+          // Reduces JSON parse errors by 80-99.8%.
+          plugins: [{ id: "response-healing" }],
         }),
         signal: controller.signal,
       });
