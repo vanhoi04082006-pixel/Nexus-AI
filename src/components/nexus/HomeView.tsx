@@ -165,7 +165,7 @@ export function HomeView() {
             <Search className="w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Tìm kiếm dự án..."
+              placeholder="Tìm kiếm dự án, tasks, thành viên..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -191,9 +191,64 @@ export function HomeView() {
         </div>
       </header>
 
-      {/* ===== Body — 3 column layout ===== */}
+      {/* ===== Body — 3 column layout with left sidebar ===== */}
       <div className="flex-1 overflow-hidden">
-        <div className="max-w-7xl mx-auto flex gap-0 h-[calc(100vh-65px)]">
+        <div className="flex h-[calc(100vh-65px)]">
+
+          {/* ===== Left Sidebar ===== */}
+          <aside className="hidden md:flex w-56 flex-col bg-[#080d18]/60 backdrop-blur-xl border-r border-border/30 py-4 px-3 flex-shrink-0">
+            {/* Nav groups */}
+            <div className="flex-1 space-y-5">
+              <div>
+                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Tổng quan</div>
+                <div className="space-y-0.5">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm bg-primary/12 text-primary transition-colors relative">
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
+                    <Activity className="w-4 h-4" /> Tổng quan
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Dự án</div>
+                <div className="space-y-0.5">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <FolderOpen className="w-4 h-4" /> Tất cả dự án
+                  </button>
+                  <button onClick={newProject} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Plus className="w-4 h-4" /> Tạo dự án mới
+                  </button>
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Sparkles className="w-4 h-4" /> Templates
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Công cụ</div>
+                <div className="space-y-0.5">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Brain className="w-4 h-4" /> Agent Hub
+                  </button>
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Terminal className="w-4 h-4" /> Knowledge Base
+                  </button>
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Zap className="w-4 h-4" /> Workflow
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Cài đặt</div>
+                <div className="space-y-0.5">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Settings className="w-4 h-4" /> Cài đặt chung
+                  </button>
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                    <Cpu className="w-4 h-4" /> Tích hợp
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
 
           {/* ===== Main Content (center) ===== */}
           <div className="flex-1 overflow-y-auto nexus-scroll">
@@ -219,7 +274,7 @@ export function HomeView() {
               <>
                 {/* ===== Hero with 3D AI brain ===== */}
                 {heroProject && (
-                  <div className="relative h-[300px] sm:h-[380px] overflow-hidden nexus-hud">
+                  <div className="relative h-[340px] sm:h-[420px] overflow-hidden nexus-hud">
                     {/* Dynamic gradient */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${heroGradient} transition-all duration-700`} />
                     {/* Grid pattern */}
@@ -244,7 +299,7 @@ export function HomeView() {
                           <Badge className={`text-xs border-0 ${STATUS_LABELS[heroProject.status]?.color || STATUS_LABELS.DRAFT.color}`}>
                             {STATUS_LABELS[heroProject.status]?.text || heroProject.status}
                           </Badge>
-                          <span className="text-[10px] text-muted-foreground/60 font-mono">
+                          <span className="text-[10px] text-muted-foreground/80 font-mono">
                             Cập nhật {fmtDate(heroProject.updatedAt)}
                           </span>
                         </div>
@@ -255,7 +310,7 @@ export function HomeView() {
                           {heroProject.description?.substring(0, 120) || "Không có mô tả"}
                         </p>
                         {/* Stats */}
-                        <div className="flex items-center gap-5 mb-5 text-sm">
+                        <div className="flex items-center gap-5 mb-6 text-sm">
                           <div className="flex items-center gap-1.5">
                             <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
                               <Users className="w-3.5 h-3.5 text-primary" />
@@ -272,14 +327,21 @@ export function HomeView() {
                               <span className="text-muted-foreground text-xs">tasks</span>
                             </div>
                           )}
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-7 h-7 rounded-md bg-amber-500/10 flex items-center justify-center">
+                              <Clock className="w-3.5 h-3.5 text-amber-400" />
+                            </div>
+                            <span className="font-semibold">{fmtDate(heroProject.updatedAt)}</span>
+                            <span className="text-muted-foreground text-xs">deadline</span>
+                          </div>
                         </div>
                         {/* CTA */}
-                        <div className="flex items-center gap-3">
-                          <Button onClick={() => openProject(heroProject)} className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow">
-                            <Rocket className="w-4 h-4" /> Tiếp tục làm việc
+                        <div className="flex items-center gap-3 mb-2">
+                          <Button onClick={() => openProject(heroProject)} size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow-strong rounded-2xl px-6 py-3 text-base">
+                            <Rocket className="w-5 h-5" /> Tiếp tục làm việc
                           </Button>
-                          <Button onClick={newProject} variant="secondary" className="border-border/50 bg-card/50 backdrop-blur-sm">
-                            <Plus className="w-4 h-4" /> Dự án mới
+                          <Button onClick={newProject} variant="secondary" size="lg" className="border-border/50 bg-card/50 backdrop-blur-sm rounded-2xl px-6 py-3 text-base">
+                            <Plus className="w-5 h-5" /> Dự án mới
                           </Button>
                         </div>
                       </div>
@@ -322,11 +384,11 @@ export function HomeView() {
                           return (
                             <div
                               key={p.id}
-                              className={`nexus-card-hover rounded-2xl border ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-shadow`}
+                              className={`nexus-card-hover rounded-2xl border ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/20 hover:-translate-y-1 transition-all border-white/5`}
                               onClick={() => openProject(p)}
                             >
                               {/* Card header with gradient + project image */}
-                              <div className={`h-24 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
+                              <div className={`h-28 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
                                 <div className="absolute inset-0 nexus-grid-bg opacity-30" />
                                 {/* Project bg image */}
                                 <img
@@ -360,7 +422,7 @@ export function HomeView() {
                               </div>
                               {/* Progress bar */}
                               <div className="h-1.5 bg-border/30">
-                                <div className={`h-full transition-all ${p.status === "INITIALIZED" ? "bg-emerald-400" : "bg-primary"}`} style={{ width: `${status.pct}%` }} />
+                                <div className={`h-full transition-all ${p.status === "INITIALIZED" ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-primary shadow-[0_0_8px_rgba(0,212,170,0.6)]"}`} style={{ width: `${status.pct}%` }} />
                               </div>
                             </div>
                           );
@@ -412,27 +474,27 @@ export function HomeView() {
               <div className="mb-6">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-3">Tổng quan</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
                     <div className="text-xl font-bold text-primary">{projects.length}</div>
                     <div className="text-[9px] text-muted-foreground">Dự án</div>
                   </div>
-                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
                     <div className="text-xl font-bold text-cyan-400">{totalMembers}</div>
                     <div className="text-[9px] text-muted-foreground">Thành viên</div>
                   </div>
-                  <div className="rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
                     <div className="text-xl font-bold text-emerald-400">{totalTasks}</div>
                     <div className="text-[9px] text-muted-foreground">Tasks</div>
                   </div>
                 </div>
                 {/* Overall progress */}
-                <div className="mt-3 rounded-xl bg-card/30 backdrop-blur-sm border border-border/20 p-3 shadow-sm">
+                <div className="mt-3 rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] text-muted-foreground">Tiến độ tổng thể</span>
                     <span className="text-xs font-bold text-primary">{overallProgress}%</span>
                   </div>
                   <div className="h-2.5 bg-border/40 rounded-full overflow-hidden shadow-inner">
-                    <div className="h-full bg-gradient-to-r from-primary to-cyan-400 transition-all" style={{ width: `${overallProgress}%` }} />
+                    <div className="h-full bg-gradient-to-r from-primary to-cyan-400 transition-all shadow-[0_0_12px_rgba(0,212,170,0.5)]" style={{ width: `${overallProgress}%` }} />
                   </div>
                 </div>
               </div>
@@ -443,7 +505,7 @@ export function HomeView() {
                 <div className="space-y-2">
                   {projects.slice(0, 5).map((p, i) => {
                     const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
-                    const AVATAR_COLORS = ["from-cyan-500/20 to-blue-600/10 text-cyan-400", "from-emerald-500/20 to-teal-600/10 text-emerald-400", "from-purple-500/20 to-indigo-600/10 text-purple-400", "from-amber-400/20 to-orange-600/10 text-amber-400", "from-rose-500/20 to-pink-600/10 text-rose-400"];
+                    const AVATAR_COLORS = ["from-cyan-500/30 to-blue-600/15 text-cyan-300", "from-emerald-500/30 to-teal-600/15 text-emerald-300", "from-purple-500/30 to-indigo-600/15 text-purple-300", "from-amber-400/30 to-orange-600/15 text-amber-300", "from-rose-500/30 to-pink-600/15 text-rose-300"];
                     return (
                       <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-card/30 hover:bg-card/50 cursor-pointer transition-colors" onClick={() => openProject(p)}>
                         <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold flex-shrink-0`}>
