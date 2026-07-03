@@ -86,9 +86,21 @@ const TEMPLATES = [
   { name: "Management System", desc: "CRM / ERP / HRM dashboard", icon: Settings, color: "from-purple-500/20 to-indigo-600/5", iconColor: "text-purple-400", border: "border-purple-500/30",
     topic: "Hệ thống Quản lý Doanh nghiệp", description: "Hệ thống quản lý CRM/ERP/HRM với dashboard, báo cáo, phân quyền, quản lý nhân sự", purpose: "Đồ án tốt nghiệp",
     techPrefs: "Next.js, React, Prisma, PostgreSQL, Tailwind CSS, Chart.js, shadcn/ui", langPrefs: "TypeScript, SQL" },
+  { name: "Hotel Management", desc: "Quản lý khách sạn đa chi nhánh", icon: Settings, color: "from-amber-400/20 to-orange-600/5", iconColor: "text-amber-400", border: "border-amber-400/30",
+    topic: "Hệ thống Quản lý Khách sạn", description: "Quản lý đặt phòng, check-in/check-out, thanh toán, đa chi nhánh, báo cáo doanh thu", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, Prisma, PostgreSQL, Redis, Tailwind CSS, shadcn/ui", langPrefs: "TypeScript, SQL" },
+  { name: "Learning Management", desc: "LMS / E-learning Platform", icon: Code2, color: "from-cyan-500/20 to-teal-600/5", iconColor: "text-cyan-300", border: "border-cyan-500/30",
+    topic: "Hệ thống Quản lý Học trực tuyến", description: "LMS với khóa học, video, bài giảng, đăng ký học phần, theo dõi tiến độ, chứng chỉ", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, Prisma, PostgreSQL, Tailwind CSS, shadcn/ui, AWS S3", langPrefs: "TypeScript, SQL" },
   { name: "Mobile App", desc: "React Native / Flutter", icon: Smartphone, color: "from-amber-400/20 to-orange-600/5", iconColor: "text-amber-400", border: "border-amber-400/30",
     topic: "Ứng dụng Mobile", description: "Ứng dụng di động đa nền tảng với authentication, navigation, state management, API client", purpose: "Đồ án tốt nghiệp",
     techPrefs: "React Native, Expo, TypeScript, Tailwind CSS, Redux Toolkit", langPrefs: "TypeScript, JavaScript" },
+  { name: "Hospital Management", desc: "Quản lý bệnh viện / phòng khám", icon: Settings, color: "from-rose-500/20 to-pink-600/5", iconColor: "text-rose-400", border: "border-rose-500/30",
+    topic: "Hệ thống Quản lý Bệnh viện", description: "Quản lý bệnh nhân, bác sĩ, lịch hẹn, khám bệnh, toa thuốc, hóa viện, báo cáo y tế", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, Prisma, PostgreSQL, Tailwind CSS, shadcn/ui", langPrefs: "TypeScript, SQL" },
+  { name: "Warehouse & Inventory", desc: "Quản lý kho bãi, nhập xuất", icon: ShoppingBag, color: "from-emerald-500/20 to-green-600/5", iconColor: "text-emerald-300", border: "border-emerald-500/30",
+    topic: "Hệ thống Quản lý Kho bãi", description: "Quản lý nhập xuất tồn kho, sản phẩm, nhà cung cấp, đơn hàng, báo cáo tồn, cảnh báo hết hàng", purpose: "Đồ án tốt nghiệp",
+    techPrefs: "Next.js, React, Prisma, PostgreSQL, Redis, Tailwind CSS, shadcn/ui", langPrefs: "TypeScript, SQL" },
 ];
 
 export function HomeView() {
@@ -100,10 +112,42 @@ export function HomeView() {
   const [loading, setLoading] = useState(true);
   const [heroIndex, setHeroIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<{ id: string; type: string; title: string; desc: string; time: string; projectId?: string }[]>([]);
 
   useEffect(() => {
     loadProjects();
+    loadNotifications();
+    // Poll notifications every 30s
+    const notifInterval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(notifInterval);
   }, []);
+
+  async function loadNotifications() {
+    try {
+      // Fetch recent activity logs from all projects
+      const notifs: { id: string; type: string; title: string; desc: string; time: string; projectId?: string }[] = [];
+      for (const p of projects.slice(0, 5)) {
+        try {
+          const resp = await fetch(`/api/projects/${p.id}/history?token=${p.leaderToken}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            for (const log of (data.logs || []).slice(0, 3)) {
+              notifs.push({
+                id: log.id,
+                type: log.type === "SECTION_EDIT" ? "PROPOSAL" : log.type === "INIT" ? "TASK_DONE" : "ACTIVITY",
+                title: log.title,
+                desc: log.details?.substring(0, 80) || "",
+                time: new Date(log.createdAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }),
+                projectId: p.id,
+              });
+            }
+          }
+        } catch { /* ignore individual project errors */ }
+      }
+      setNotifications(notifs.sort((a, b) => b.time.localeCompare(a.time)).slice(0, 20));
+    } catch { /* ignore */ }
+  }
 
   async function loadProjects() {
     setLoading(true);
@@ -123,6 +167,11 @@ export function HomeView() {
     setRoute(project.id, project.leaderToken);
     setView("workspace");
     window.history.pushState({}, "", `/?p=${project.id}&token=${project.leaderToken}`);
+  }
+
+  function openProjectById(projectId: string) {
+    const p = projects.find((x) => x.id === projectId);
+    if (p) openProject(p);
   }
 
   function newProject() {
@@ -201,11 +250,45 @@ export function HomeView() {
 
           {/* Right: notifications + new project + avatar */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Notification bell */}
-            <button className="relative w-9 h-9 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:border-primary/30 transition-colors">
-              <Bell className="w-4 h-4 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary animate-pulse" />
-            </button>
+            {/* Notification bell with real data */}
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative w-9 h-9 rounded-lg bg-card/40 border border-white/8 flex items-center justify-center hover:border-primary/30 transition-colors"
+              >
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-[8px] font-bold text-primary-foreground flex items-center justify-center">
+                    {notifications.length > 9 ? "9+" : notifications.length}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div className="absolute right-0 top-11 w-80 max-h-96 overflow-y-auto nexus-scroll rounded-2xl bg-[#080d18]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-primary/10 p-2 z-50">
+                  <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground/60 border-b border-border/30 mb-2">
+                    Thông báo
+                  </div>
+                  {notifications.length === 0 ? (
+                    <div className="px-3 py-8 text-center text-xs text-muted-foreground/60">
+                      Không có thông báo mới
+                    </div>
+                  ) : (
+                    notifications.slice(0, 10).map((n) => (
+                      <div key={n.id} className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-card/40 transition-colors cursor-pointer" onClick={() => { if (n.projectId) openProjectById(n.projectId); setNotifOpen(false); }}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.type === "PROPOSAL" ? "bg-amber-500/15" : n.type === "TASK_DONE" ? "bg-emerald-500/15" : "bg-primary/15"}`}>
+                          {n.type === "PROPOSAL" ? <Sparkles className="w-4 h-4 text-amber-400" /> : <CheckSquare className="w-4 h-4 text-emerald-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{n.title}</p>
+                          <p className="text-[10px] text-muted-foreground line-clamp-2">{n.desc}</p>
+                          <p className="text-[9px] text-muted-foreground/50 mt-0.5">{n.time}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <Button onClick={newProject} className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow">
               <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Dự án mới</span>
             </Button>
