@@ -66,6 +66,7 @@ export function InputView() {
 
   const [showOptional, setShowOptional] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [parallel, setParallel] = useState(true); // default: parallel (fast)
 
   // Warm up the /api/projects route on page load so Turbopack compiles it
   // before the user submits. Without this, the first POST can crash the server
@@ -148,6 +149,7 @@ export function InputView() {
       leaderName: input.leaderName.trim(),
       leaderEmail: input.leaderEmail.trim(),
       leaderSmtpPassword: input.leaderSmtpPassword.trim(),
+      parallel,
     };
 
     try {
@@ -612,8 +614,42 @@ export function InputView() {
               ))}
             </div>
 
-            {/* Submit */}
-            <div className="flex justify-end pt-4 pb-8">
+            {/* Pipeline mode toggle + Submit */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 pb-8">
+              {/* Parallel vs Sequential toggle */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Chế độ chạy pipeline</span>
+                <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/30 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setParallel(true)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      parallel
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Song song (nhanh)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setParallel(false)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      !parallel
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    🐢 Tuần tự (ổn định)
+                  </button>
+                </div>
+                <span className="text-[10px] text-muted-foreground/70">
+                  {parallel
+                    ? "Chạy nhiều agent cùng lúc — nhanh nhưng dễ bị rate-limit (429)"
+                    : "Chạy từng agent một — chậm hơn nhưng tránh dồn dập API"}
+                </span>
+              </div>
+
               <Button
                 onClick={handleSubmit}
                 disabled={submitting}

@@ -1054,24 +1054,19 @@ export async function runPipeline(
   const phase1Agents = AGENTS.filter((a) => ["analysis", "hr", "sprint"].includes(a.key));
   const phase2Agents = AGENTS.filter((a) => ["design", "uml", "docs", "git"].includes(a.key));
   const phase3Agents = AGENTS.filter((a) => ["test", "security"].includes(a.key));
+  const parallel = input.parallel !== false; // default true
 
-  for (const ag of phase1Agents) {
+  // Helper: run a single agent (used by both sequential + parallel modes)
+  async function runAgent(ag: AgentDef): Promise<{ ag: AgentDef; res: ParseResult | null; failed: boolean }> {
     const i = AGENTS.indexOf(ag);
     onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
-    console.log(`\n>> [AGENT-${ag.id}] ${ag.name}`);
-    console.log(`   Models: ${ag.models.join(" → ")}`);
-    console.log(`   Temp: ${ag.temp}`);
+    const modeLabel = parallel ? "parallel" : "sequential";
+    console.log(`>> [AGENT-${ag.id}] ${ag.name} (${modeLabel})`);
     appendLog({
       level: "info",
       agentId: ag.id,
       provider: "pipeline",
-      message: `─────────────────────────────────────────────`,
-    });
-    appendLog({
-      level: "info",
-      agentId: ag.id,
-      provider: "pipeline",
-      message: `[AGENT-${ag.id}] ${ag.name} → start (models: ${ag.models.length})`,
+      message: `[AGENT-${ag.id}] ${ag.name} → start (${modeLabel})`,
     });
 
     const ctx = buildCtx(ag.key, results, input);
@@ -1079,63 +1074,6 @@ export async function runPipeline(
 
     if (res && isValidSchema(res.data, ag.key)) {
       (results as Record<string, unknown>)[ag.key] = res.data;
-      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-      console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
-      appendLog({
-        level: "success",
-        agentId: ag.id,
-        provider: "pipeline",
-        model: res.model,
-        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
-      });
-    } else if (res) {
-      console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
-      (results as Record<string, unknown>)[ag.key] = res.data;
-      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-      appendLog({
-        level: "warn",
-        agentId: ag.id,
-        provider: "pipeline",
-        model: res.model,
-        message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
-      });
-    } else {
-      failed.push(ag);
-      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
-      console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
-      appendLog({
-        level: "error",
-        agentId: ag.id,
-        provider: "pipeline",
-        message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
-      });
-    }
-  }
-
-  // ===== PHASE 2: Parallel agents (design, uml, docs, git) =====
-  // These only depend on Phase 1 results, so they can run in parallel
-  console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
-  appendLog({
-    level: "info",
-    agentId: "PIPELINE",
-    provider: "pipeline",
-    message: `▶ PHASE 2: ${phase2Agents.length} agents in parallel`,
-  });
-  const phase2Promises = phase2Agents.map(async (ag) => {
-    const i = AGENTS.indexOf(ag);
-    onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
-    console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
-    appendLog({
-      level: "info",
-      agentId: ag.id,
-      provider: "pipeline",
-      message: `[AGENT-${ag.id}] ${ag.name} → start (parallel)`,
-    });
-
-    const ctx = buildCtx(ag.key, results, input);
-    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
-
-    if (res && isValidSchema(res.data, ag.key)) {
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
       appendLog({
@@ -1147,6 +1085,7 @@ export async function runPipeline(
       });
       return { ag, res, failed: false };
     } else if (res) {
+      (results as Record<string, unknown>)[ag.key] = res.data;
       onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
       console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
       appendLog({
@@ -1168,21 +1107,34 @@ export async function runPipeline(
       });
       return { ag, res: null, failed: true };
     }
-  });
-
-  // Wait for all parallel agents to complete
-  const phase2Results = await Promise.all(phase2Promises);
-  for (const r of phase2Results) {
-    if (r.failed) {
-      failed.push(r.ag);
-    } else if (r.res) {
-      (results as Record<string, unknown>)[r.ag.key] = r.res.data;
-    }
   }
 
-  // ===== PHASE 3: Parallel agents (test, security) =====
-  // These depend on Phase 2 (design: DB tables + API endpoints), so they run after Phase 2.
-  if (phase3Agents.length > 0) {
+  for (const ag of phase1Agents) {
+    appendLog({
+      level: "info",
+      agentId: ag.id,
+      provider: "pipeline",
+      message: `─────────────────────────────────────────────`,
+    });
+    const r = await runAgent(ag);
+    if (r.failed) failed.push(r.ag);
+  }
+
+  // ===== PHASE 2 + 3: design/uml/docs/git + test/security =====
+  if (parallel) {
+    // PARALLEL MODE: Phase 2 (4 agents) then Phase 3 (2 agents), each in parallel
+    console.log(`\n>> [PARALLEL] Running ${phase2Agents.length} agents in parallel...`);
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ PHASE 2: ${phase2Agents.length} agents in parallel`,
+    });
+    const phase2Results = await Promise.all(phase2Agents.map((ag) => runAgent(ag)));
+    for (const r of phase2Results) {
+      if (r.failed) failed.push(r.ag);
+    }
+
     console.log(`\n>> [PARALLEL] Running ${phase3Agents.length} agents in parallel (Phase 3)...`);
     appendLog({
       level: "info",
@@ -1190,62 +1142,28 @@ export async function runPipeline(
       provider: "pipeline",
       message: `▶ PHASE 3: ${phase3Agents.length} agents in parallel (test + security)`,
     });
-    const phase3Promises = phase3Agents.map(async (ag) => {
-      const i = AGENTS.indexOf(ag);
-      onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
-      console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
+    const phase3Results = await Promise.all(phase3Agents.map((ag) => runAgent(ag)));
+    for (const r of phase3Results) {
+      if (r.failed) failed.push(r.ag);
+    }
+  } else {
+    // SEQUENTIAL MODE: run all Phase 2 + 3 agents one at a time
+    // Avoids sending too many requests at once → fewer 429 rate-limits
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ SEQUENTIAL MODE: running agents one at a time (avoids rate-limit spikes)`,
+    });
+    for (const ag of [...phase2Agents, ...phase3Agents]) {
       appendLog({
         level: "info",
         agentId: ag.id,
         provider: "pipeline",
-        message: `[AGENT-${ag.id}] ${ag.name} → start (parallel)`,
+        message: `─────────────────────────────────────────────`,
       });
-
-      const ctx = buildCtx(ag.key, results, input);
-      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
-
-      if (res && isValidSchema(res.data, ag.key)) {
-        onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-        console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
-        appendLog({
-          level: "success",
-          agentId: ag.id,
-          provider: "pipeline",
-          model: res.model,
-          message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
-        });
-        return { ag, res, failed: false };
-      } else if (res) {
-        onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
-        console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
-        appendLog({
-          level: "warn",
-          agentId: ag.id,
-          provider: "pipeline",
-          model: res.model,
-          message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
-        });
-        return { ag, res, failed: false };
-      } else {
-        onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
-        console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
-        appendLog({
-          level: "error",
-          agentId: ag.id,
-          provider: "pipeline",
-          message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
-        });
-        return { ag, res: null, failed: true };
-      }
-    });
-
-    const phase3Results = await Promise.all(phase3Promises);
-    for (const r of phase3Results) {
-      if (r.failed) {
-        failed.push(r.ag);
-      } else if (r.res) {
-        (results as Record<string, unknown>)[r.ag.key] = r.res.data;
-      }
+      const r = await runAgent(ag);
+      if (r.failed) failed.push(r.ag);
     }
   }
 

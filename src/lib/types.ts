@@ -21,6 +21,7 @@ export interface ProjectInput {
   leaderName: string;
   leaderEmail: string;
   leaderSmtpPassword?: string; // Gmail app password for SMTP
+  parallel?: boolean; // true = run agents in parallel (fast but more 429s), false = sequential (slow but stable)
 }
 
 export type SectionType =
