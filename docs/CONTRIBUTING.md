@@ -438,7 +438,7 @@ bun run dev
 
 ### 3. (Optional) Update README model table
 
-Update the "8 AI Agents — Model Priority" table in [README.md](../README.md) to reflect the new model order.
+Update the "10 AI Agents — Model Priority" table in [README.md](../README.md) to reflect the new model order.
 
 ---
 
@@ -637,7 +637,7 @@ Hiện tại project chưa có automated tests. Khi thêm feature mới:
 
 ### Manual test checklist
 
-- [ ] Tạo project mới → pipeline chạy → tất cả 8 agents done/failed
+- [ ] Tạo project mới → pipeline chạy → tất cả 10 agents done/failed
 - [ ] Check Live Log Console hiện đủ logs
 - [ ] Workspace load đúng data (11 tabs)
 - [ ] Edit section → save → version bumped

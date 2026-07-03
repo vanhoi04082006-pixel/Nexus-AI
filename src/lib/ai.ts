@@ -158,6 +158,38 @@ const AGENTS: AgentDef[] = [
       "openai/gpt-oss-20b:free",
     ],
   },
+  {
+    id: "08",
+    name: "Software Tester",
+    key: "test",
+    required: false,
+    temp: 0.20,
+    models: [
+      "qwen/qwen3-coder:free",
+      "openai/gpt-oss-120b:free",
+      "cohere/north-mini-code:free",
+      "poolside/laguna-m.1:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
+    ],
+  },
+  {
+    id: "09",
+    name: "Security Reviewer",
+    key: "security",
+    required: false,
+    temp: 0.15,
+    models: [
+      "openai/gpt-oss-120b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "google/gemma-4-31b-it:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+    ],
+  },
 ];
 
 const REVIEWER_MODELS = [
@@ -201,6 +233,8 @@ const MIN_KEYS: Record<SectionType, string[]> = {
   uml: ["useCase", "classDiagram", "erd", "sequence"],
   docs: ["readme"],
   git: ["gitCommands", "branchStrategy"],
+  test: ["testStrategy", "unitTests"],
+  security: ["threats", "authFlow"],
 };
 
 function isValidSchema(d: unknown, k: SectionType): boolean {
@@ -600,14 +634,42 @@ Tra object voi cac key BAT BUOC:
 - "repoUrl" (string): URL repo vi du https://github.com/org/project`;
 }
 
-function reviewerPrompt(): string {
-  return `Ban la Quality Reviewer. Ban nhan toan bo ket qua cua 7 Agent va kiem tra dong bo, bo sung thong tin thieu, sua loi sai.
+function testerPrompt(): string {
+  return `Ban la Senior QA Engineer & Software Tester. Lap ke hoach test CHI TIET cho du an: test strategy, unit tests, integration tests, E2E tests, API tests, performance tests.
 ${JSON_INSTRUCTION}
-Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, docs, git). Chi sua nhung gi can sua, giu nguyen nhung gi da dung. Dam bao:
+Tra object voi cac key BAT BUOC:
+- "testStrategy" (string): 4-6 cau mo ta chien luoc test (pyramid test, coverage target, tools su dung vd Vitest/Jest/Playwright)
+- "unitTests" (array): moi phan tu { "module" (string), "cases" (array: moi { "name", "desc", "input", "expected" }) }. It nhat 5 module, moi module it nhat 3 case.
+- "integrationTests" (array): moi phan tu { "name", "desc", "flow" }. It nhat 4 test (vd: auth flow, CRUD flow, payment flow).
+- "e2eTests" (array): moi phan tu { "name", "desc", "steps" (array string) }. It nhat 3 E2E scenario.
+- "apiTests" (array): moi phan tu { "endpoint", "method", "cases" }. It nhat 5 API test.
+- "performanceTests" (array): moi phan tu { "scenario", "metric", "target" }. It nhat 3 scenario (vd: response time, throughput, concurrent users).
+- "bugReportTemplate" (string): template bug report (title, steps, expected, actual, severity, environment)`;
+}
+
+function securityPrompt(): string {
+  return `Ban la Security Architect. Phan tich security cho du an: threats, auth flow, authorization model, data protection, OWASP checklist, rate limiting, secrets management.
+${JSON_INSTRUCTION}
+Tra object voi cac key BAT BUOC:
+- "threats" (array): moi phan tu { "risk", "severity" ("Critical"|"High"|"Medium"|"Low"), "mitigation" }. It nhat 6 threats (vd: SQL Injection, XSS, CSRF, broken auth, sensitive data exposure, missing rate limit).
+- "authFlow" (string): 4-6 cau mo ta auth flow (JWT/Session/OAuth, token generation, refresh, expiry, storage).
+- "authzModel" (string): mo ta authorization model (RBAC/ABAC, roles, permissions, checks).
+- "dataProtection" (string): mo ta data protection (encryption at rest/transit, bcrypt/argon2, HTTPS, PII handling).
+- "owaspChecklist" (array): moi phan tu { "category", "status" ("Pass"|"Warning"|"Fail"), "note" }. It nhat 8 OWASP Top 10 items (A01 Broken Access Control, A02 Crypto Failures, A03 Injection, ... A10 SSRF).
+- "rateLimit" (string): mo ta rate limiting strategy (per IP, per user, per endpoint, thresholds, 429 handling).
+- "secrets" (string): mo ta secrets management (env vars, vault, .gitignore, rotation).`;
+}
+
+function reviewerPrompt(): string {
+  return `Ban la Quality Reviewer. Ban nhan toan bo ket qua cua 9 Agent va kiem tra dong bo, bo sung thong tin thieu, sua loi sai.
+${JSON_INSTRUCTION}
+Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, docs, git, test, security). Chi sua nhung gi can sua, giu nguyen nhung gi da dung. Dam bao:
 - HR assignments phu hop voi danh sach thanh vien that
 - Sprint tasks gan dung assignee voi ten thanh vien
 - DB tables va API endpoints phu hop voi features
-- UML phu hop voi modules va actors`;
+- UML phu hop voi modules va actors
+- Test cases phu hop voi features va API endpoints
+- Security threats phu hop voi tech stack va auth flow`;
 }
 
 const TASK_GEN_PROMPT = `Ban la Senior Project Manager & Tech Lead. Ban tao todolist CHI TIET cho tung thanh vien de ho co the bat dau code ngay ma khong can hoi them.
@@ -657,6 +719,8 @@ const PROMPT_MAP: Record<SectionType, () => string> = {
   uml: umlPrompt,
   docs: docsPrompt,
   git: gitPrompt,
+  test: testerPrompt,
+  security: securityPrompt,
 };
 
 /* ===========================================================
@@ -714,6 +778,26 @@ function buildCtx(
     case "git":
       c += `\n\nSlug: ${input.topic.toLowerCase().replace(/\s+/g, "-")}`;
       c += `\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
+      break;
+    case "test":
+      c += `\n\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
+      c += `\nFeatures: ${JSON.stringify(
+        (results.analysis?.features || []).map((f) => ({ name: f.name, module: f.module, pri: f.pri }))
+      )}`;
+      c += `\nAPI endpoints: ${JSON.stringify(
+        (results.design?.apiEndpoints || []).map((e) => ({ method: e.method, path: e.path }))
+      )}`;
+      c += `\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
+      break;
+    case "security":
+      c += `\n\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
+      c += `\nActors: ${JSON.stringify(
+        (results.analysis?.actors || []).map((a) => ({ name: a.name, desc: a.desc }))
+      )}`;
+      c += `\nDB tables: ${JSON.stringify((results.design?.dbTables || []).map((t) => t.name))}`;
+      c += `\nAPI endpoints: ${JSON.stringify(
+        (results.design?.apiEndpoints || []).map((e) => ({ method: e.method, path: e.path }))
+      )}`;
       break;
   }
   return c;
@@ -801,6 +885,63 @@ function fallback(
         issueTemplate: "",
         repoUrl: "https://github.com/your-org/project",
       };
+    case "test":
+      return {
+        testStrategy: "Test pyramid: unit > integration > E2E. Coverage target 80%. Tools: Vitest/Jest (unit), Supertest (integration), Playwright (E2E).",
+        unitTests: (results.analysis?.modules || ["Core"]).slice(0, 5).map((mod) => ({
+          module: mod,
+          cases: [
+            { name: `test_${mod}_create`, desc: "Test create operation", input: "valid payload", expected: "201 created" },
+            { name: `test_${mod}_validation`, desc: "Test input validation", input: "invalid payload", expected: "400 bad request" },
+            { name: `test_${mod}_notFound`, desc: "Test not found", input: "non-existent id", expected: "404 not found" },
+          ],
+        })),
+        integrationTests: [
+          { name: "auth_flow", desc: "Test login + protected route", flow: "POST /api/auth/login → GET /api/me with token" },
+          { name: "crud_flow", desc: "Test full CRUD cycle", flow: "POST → GET → PUT → DELETE" },
+        ],
+        e2eTests: [
+          { name: "user_signup_to_dashboard", desc: "Signup → login → dashboard", steps: ["1. Visit /signup", "2. Fill form", "3. Submit", "4. Redirect to dashboard"] },
+        ],
+        apiTests: (results.design?.apiEndpoints || []).slice(0, 5).map((e) => ({
+          endpoint: e.path,
+          method: e.method,
+          cases: `Test ${e.method} ${e.path} — happy path + error cases`,
+        })),
+        performanceTests: [
+          { scenario: "API response time", metric: "p95 latency", target: "< 200ms" },
+          { scenario: "Concurrent users", metric: "throughput", target: "100 req/s" },
+        ],
+        bugReportTemplate: "## Bug Report\n**Title:** \n**Steps:**\n1. \n**Expected:** \n**Actual:** \n**Severity:** Low/Medium/High/Critical\n**Environment:** ",
+      };
+    case "security":
+      return {
+        threats: [
+          { risk: "SQL Injection", severity: "High", mitigation: "Use Prisma parameterized queries — never string concatenation" },
+          { risk: "XSS", severity: "Medium", mitigation: "Escape output, use CSP headers, avoid dangerouslySetInnerHTML" },
+          { risk: "CSRF", severity: "Medium", mitigation: "Use SameSite cookies + CSRF tokens" },
+          { risk: "Broken Authentication", severity: "High", mitigation: "JWT with short expiry + refresh token, bcrypt password hashing" },
+          { risk: "Sensitive Data Exposure", severity: "High", mitigation: "HTTPS everywhere, encrypt PII at rest, never log secrets" },
+          { risk: "Missing Rate Limiting", severity: "Medium", mitigation: "Rate limit login + API endpoints per IP/user" },
+        ],
+        authFlow: "JWT-based auth. Login → server validates credentials → issues access token (15min) + refresh token (7d). Access token in Authorization header. Refresh token in httpOnly cookie.",
+        authzModel: "RBAC (Role-Based Access Control). Roles: admin, member, guest. Middleware checks role on each protected route. Resource ownership checks for user-specific data.",
+        dataProtection: "Passwords hashed with bcrypt (cost 12). PII encrypted at rest with AES-256. HTTPS enforced. Secrets in env vars, never committed. Sensitive fields excluded from logs.",
+        owaspChecklist: [
+          { category: "A01 Broken Access Control", status: "Pass", note: "RBAC middleware on all routes" },
+          { category: "A02 Cryptographic Failures", status: "Pass", note: "bcrypt + AES-256 + HTTPS" },
+          { category: "A03 Injection", status: "Pass", note: "Prisma parameterized queries" },
+          { category: "A04 Insecure Design", status: "Warning", note: "Review threat model" },
+          { category: "A05 Security Misconfiguration", status: "Warning", note: "Verify prod config" },
+          { category: "A06 Vulnerable Components", status: "Warning", note: "Run npm audit regularly" },
+          { category: "A07 Auth Failures", status: "Pass", note: "JWT + refresh + rate limit" },
+          { category: "A08 Software/Data Integrity", status: "Pass", note: "Signed dependencies" },
+          { category: "A09 Logging Failures", status: "Warning", note: "Add audit logs" },
+          { category: "A10 SSRF", status: "Pass", note: "Validate external URLs" },
+        ],
+        rateLimit: "Per-IP rate limit: 100 req/min general, 5 req/min for login. Per-user: 1000 req/hour. Return 429 with Retry-After header. Use sliding window counter.",
+        secrets: "All secrets in .env (gitignored). Use dotenv for loading. Rotate keys quarterly. Never hardcode. Production: use secret manager (Vault/AWS Secrets Manager).",
+      };
     default:
       return null;
   }
@@ -879,6 +1020,7 @@ export async function runPipeline(
   // These must run sequentially because each depends on the previous
   const phase1Agents = AGENTS.filter((a) => ["analysis", "hr", "sprint"].includes(a.key));
   const phase2Agents = AGENTS.filter((a) => ["design", "uml", "docs", "git"].includes(a.key));
+  const phase3Agents = AGENTS.filter((a) => ["test", "security"].includes(a.key));
 
   for (const ag of phase1Agents) {
     const i = AGENTS.indexOf(ag);
@@ -1005,7 +1147,76 @@ export async function runPipeline(
     }
   }
 
-  // ===== PHASE 2: Retry failed agents =====
+  // ===== PHASE 3: Parallel agents (test, security) =====
+  // These depend on Phase 2 (design: DB tables + API endpoints), so they run after Phase 2.
+  if (phase3Agents.length > 0) {
+    console.log(`\n>> [PARALLEL] Running ${phase3Agents.length} agents in parallel (Phase 3)...`);
+    appendLog({
+      level: "info",
+      agentId: "PIPELINE",
+      provider: "pipeline",
+      message: `▶ PHASE 3: ${phase3Agents.length} agents in parallel (test + security)`,
+    });
+    const phase3Promises = phase3Agents.map(async (ag) => {
+      const i = AGENTS.indexOf(ag);
+      onProgress?.({ type: "agent_start", id: ag.id, name: ag.name, index: i, total });
+      console.log(`>> [AGENT-${ag.id}] ${ag.name} (parallel)`);
+      appendLog({
+        level: "info",
+        agentId: ag.id,
+        provider: "pipeline",
+        message: `[AGENT-${ag.id}] ${ag.name} → start (parallel)`,
+      });
+
+      const ctx = buildCtx(ag.key, results, input);
+      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+
+      if (res && isValidSchema(res.data, ag.key)) {
+        onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+        console.log(`✓ [AGENT-${ag.id}] ${ag.name} → ${res.model}`);
+        appendLog({
+          level: "success",
+          agentId: ag.id,
+          provider: "pipeline",
+          model: res.model,
+          message: `✓ [AGENT-${ag.id}] ${ag.name} → done (${res.model})`,
+        });
+        return { ag, res, failed: false };
+      } else if (res) {
+        onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+        console.log(`⚠ [AGENT-${ag.id}] ${ag.name} → Schema loi, van luu`);
+        appendLog({
+          level: "warn",
+          agentId: ag.id,
+          provider: "pipeline",
+          model: res.model,
+          message: `⚠ [AGENT-${ag.id}] ${ag.name} → schema invalid, saved anyway`,
+        });
+        return { ag, res, failed: false };
+      } else {
+        onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
+        console.log(`✗ [AGENT-${ag.id}] ${ag.name} → TAT CA MODEL FAIL`);
+        appendLog({
+          level: "error",
+          agentId: ag.id,
+          provider: "pipeline",
+          message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED`,
+        });
+        return { ag, res: null, failed: true };
+      }
+    });
+
+    const phase3Results = await Promise.all(phase3Promises);
+    for (const r of phase3Results) {
+      if (r.failed) {
+        failed.push(r.ag);
+      } else if (r.res) {
+        (results as Record<string, unknown>)[r.ag.key] = r.res.data;
+      }
+    }
+  }
+
+  // ===== PHASE 4: Retry failed agents =====
   if (failed.length > 0) {
     console.log(`\n>> RETRY: ${failed.length} Agent that bai...`);
     appendLog({
@@ -1094,26 +1305,26 @@ export async function runPipeline(
     }
   }
 
-  // ===== PHASE 4: Quality Reviewer =====
+  // ===== PHASE 6: Quality Reviewer (AGENT-10) =====
   onProgress?.({
     type: "agent_start",
-    id: "08",
+    id: "10",
     name: "Quality Reviewer",
-    index: 7,
+    index: 9,
     total,
   });
-  console.log("\n>> [AGENT-08] Quality Reviewer");
+  console.log("\n>> [AGENT-10] Quality Reviewer");
   appendLog({
     level: "info",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
     message: `─────────────────────────────────────────────`,
   });
   appendLog({
     level: "info",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
-    message: `[AGENT-08] Quality Reviewer → start`,
+    message: `[AGENT-10] Quality Reviewer → start`,
   });
 
   try {
@@ -1123,7 +1334,7 @@ export async function runPipeline(
     const res = await callAndParse(
       REVIEWER_MODELS,
       reviewerPrompt(),
-      `Du an: ${input.topic}\n\nKET QA DAY DU CUA 7 AGENT (JSON):\n${fullResults}`,
+      `Du an: ${input.topic}\n\nKET QUA DAY DU CUA 9 AGENT (JSON):\n${fullResults}`,
       0.1
     );
 
@@ -1139,35 +1350,35 @@ export async function runPipeline(
         }
       }
       const sec = ((Date.now() - t0) / 1000).toFixed(1);
-      onProgress?.({ type: "agent_done", id: "08", name: "Quality Reviewer", index: 7, total });
-      console.log(`✓ [AGENT-08] Reviewer → ${res.model} (${sec}s tong)`);
+      onProgress?.({ type: "agent_done", id: "10", name: "Quality Reviewer", index: 9, total });
+      console.log(`✓ [AGENT-10] Reviewer → ${res.model} (${sec}s tong)`);
       appendLog({
         level: "success",
-        agentId: "08",
+        agentId: "10",
         provider: "pipeline",
         model: res.model,
-        message: `✓ [AGENT-08] Reviewer → done (${res.model}, ${sec}s total)`,
+        message: `✓ [AGENT-10] Reviewer → done (${res.model}, ${sec}s total)`,
       });
       return rev as unknown as ProjectResult;
     }
   } catch (e) {
-    console.log(`✗ [AGENT-08] Reviewer fail: ${(e as Error).message?.substring(0, 100)}`);
+    console.log(`✗ [AGENT-10] Reviewer fail: ${(e as Error).message?.substring(0, 100)}`);
     appendLog({
       level: "error",
-      agentId: "08",
+      agentId: "10",
       provider: "pipeline",
-      message: `✗ [AGENT-08] Reviewer → ${(e as Error).message?.substring(0, 100)}`,
+      message: `✗ [AGENT-10] Reviewer → ${(e as Error).message?.substring(0, 100)}`,
     });
   }
 
-  onProgress?.({ type: "agent_fail", id: "08", name: "Quality Reviewer", index: 7, total });
+  onProgress?.({ type: "agent_fail", id: "10", name: "Quality Reviewer", index: 9, total });
   const sec = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`>> Tra ket qua goc (${sec}s)\n`);
   appendLog({
     level: "warn",
-    agentId: "08",
+    agentId: "10",
     provider: "pipeline",
-    message: `▷ [AGENT-08] Reviewer → returning original results (${sec}s)`,
+    message: `▷ [AGENT-10] Reviewer → returning original results (${sec}s)`,
   });
   return results as ProjectResult;
 }

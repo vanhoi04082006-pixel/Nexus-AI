@@ -62,7 +62,7 @@ NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local 
 │                              │                                   │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  Background Pipeline (process.nextTick)                    │ │
-│  │  ├─ 8 AI Agents (ai.ts)                                    │ │
+│  │  ├─ 10 AI Agents (ai.ts)                                   │ │
 │  │  ├─ OpenRouter multi-key (openrouter.ts)                   │ │
 │  │  └─ AsyncLocalStorage log context                          │ │
 │  └────────────────────────────────────────────────────────────┘ │
@@ -239,12 +239,12 @@ for each agent without result:
   → returns static placeholder JSON
 ```
 
-### Phase 5: Quality Reviewer (AGENT-08)
+### Phase 5: Quality Reviewer (AGENT-10)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  AGENT-08: Quality Reviewer                                 │
-│  ├─ Input: ALL 7 sections (JSON, truncated to 12000 chars)  │
+│  AGENT-10: Quality Reviewer                                 │
+│  ├─ Input: ALL 9 sections (JSON, truncated to 12000 chars)  │
 │  ├─ Task: Fix inconsistencies, sync sections                │
 │  ├─ Output: merged + fixed ProjectResult                    │
 │  └─ Models: gpt-oss-120b → qwen3-next → nemotron-ultra ...  │
@@ -300,7 +300,7 @@ for each agent without result:
    ├─ Phase 2: Agent-04,05,06,07 (parallel via Promise.all)
    ├─ Phase 3: Retry failed agents
    ├─ Phase 4: Static fallback for missing sections
-   └─ Phase 5: Agent-08 Quality Reviewer
+   └─ Phase 5: Agent-10 Quality Reviewer
    ↓
 6. Pipeline done:
    ├─ Save sections to DB (Analysis with version)
