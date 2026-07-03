@@ -5,6 +5,7 @@
 
 import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter";
 import { appendLog } from "./pipeline-progress";
+import { validateSection } from "./schemas";
 import pLimit from "p-limit";
 
 // Concurrency limiter — max 3 parallel LLM calls to prevent:
@@ -379,7 +380,8 @@ async function callAndParse(
   models: string[],
   sys: string,
   usr: string,
-  temp: number
+  temp: number,
+  sectionKey?: string // for Zod validation (analysis, hr, sprint, etc.)
 ): Promise<ParseResult | null> {
   for (const model of models) {
     // Skip dead models (all keys exhausted / 404 unavailable recently)
@@ -406,7 +408,7 @@ async function callAndParse(
         const raw = await callModel(model, sys, usr, temp);
         let data: unknown = null;
 
-        // Parse pipeline: 4 attempts
+        // Parse pipeline: JSON.parse → JFix fallback → extract substring → AI self-fix
         try {
           data = JSON.parse(raw.trim());
         } catch {
@@ -429,7 +431,7 @@ async function callAndParse(
             }
         }
         if (!data) {
-          // AI self-fix pass
+          // AI self-fix pass — ask model to fix its own broken JSON
           console.log(`      [${a}] JSON loi, AI sua...`);
           appendLog({
             level: "warn",
@@ -445,14 +447,51 @@ async function callAndParse(
           data = JFix.parse(fix);
         }
 
+        // Zod schema validation — strict type checking replaces loose isValidSchema
+        // If data parses as JSON but doesn't match schema (missing fields, wrong types),
+        // Zod catches it and we retry with the error message fed back to AI
         if (data) {
-          console.log(`      ✓ ${model} (lan ${a})`);
-          appendLog({
-            level: "success",
-            model,
-            message: `  ✓ ${model} parsed OK (attempt ${a})`,
-          });
-          return { data, model };
+          const zodResult = validateSection(sectionKey, data);
+          if (zodResult.success) {
+            console.log(`      ✓ ${model} (lan ${a}) [Zod validated]`);
+            appendLog({
+              level: "success",
+              model,
+              message: `  ✓ ${model} parsed + Zod validated OK (attempt ${a})`,
+            });
+            return { data: zodResult.data, model };
+          } else {
+            // Zod validation failed — data is valid JSON but wrong structure
+            // Try AI self-fix with Zod error message (1 chance per attempt)
+            console.log(`      [${a}] Zod validation failed: ${zodResult.error.substring(0, 80)}`);
+            appendLog({
+              level: "warn",
+              model,
+              message: `  ⚠ [${a}] ${model} JSON valid but schema mismatch: ${zodResult.error.substring(0, 100)} — AI fixing`,
+            });
+            const fixPrompt = `JSON cua ban da parse thanh cong nhung SAI CAU TRUC. Loi: ${zodResult.error}\n\nSua lai JSON cho dung schema. Giu nguyen noi dung, chi sua cau truc:\n${JSON.stringify(data).substring(0, 5000)}`;
+            const fixRaw = await callModel(model, "JSON schema fixer. Tra JSON dung schema.", fixPrompt, 0.1);
+            let fixedData: unknown = null;
+            try { fixedData = JSON.parse(fixRaw.trim()); } catch { fixedData = JFix.parse(fixRaw); }
+            if (fixedData) {
+              const revalidate = validateSection(sectionKey, fixedData);
+              if (revalidate.success) {
+                console.log(`      ✓ ${model} (lan ${a}) [Zod re-validated after fix]`);
+                appendLog({
+                  level: "success",
+                  model,
+                  message: `  ✓ ${model} Zod validated after AI fix (attempt ${a})`,
+                });
+                return { data: revalidate.data, model };
+              }
+            }
+            // Still failed — continue to next retry attempt
+            appendLog({
+              level: "warn",
+              model,
+              message: `  ⚠ [${a}] ${model} Zod fix failed — will retry`,
+            });
+          }
         }
       } catch (err) {
         const e = err as OpenRouterError;
@@ -1136,7 +1175,7 @@ export async function runPipeline(
     });
 
     const ctx = buildCtx(ag.key, results, input);
-    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+    const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp, ag.key);
 
     if (res && isValidSchema(res.data, ag.key)) {
       (results as Record<string, unknown>)[ag.key] = res.data;
@@ -1260,7 +1299,7 @@ export async function runPipeline(
       await wait(5000);
 
       const ctx = buildCtx(ag.key, results, input);
-      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp);
+      const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp, ag.key);
 
       if (res && isValidSchema(res.data, ag.key)) {
         (results as Record<string, unknown>)[ag.key] = res.data;
@@ -1352,7 +1391,8 @@ export async function runPipeline(
       REVIEWER_MODELS,
       reviewerPrompt(),
       `Du an: ${input.topic}\n\nKET QUA DAY DU CUA 9 AGENT (JSON):\n${fullResults}`,
-      0.1
+      0.1,
+      undefined // reviewer output is merged, not a single section
     );
 
     if (res && res.data && !isEmptyObj(res.data)) {
@@ -1366,6 +1406,62 @@ export async function runPipeline(
           rev[key] = results[key];
         }
       }
+
+      // Reviewer Feedback Loop — validate each section with Zod,
+      // if any fail, ask AI to fix that specific section (max 2 rounds)
+      for (let round = 1; round <= 2; round++) {
+        const invalidSections: { key: string; error: string }[] = [];
+        for (const key of Object.keys(rev) as string[]) {
+          if (key === "test" || key === "security") {
+            // Optional sections — skip Zod if not present
+            if (!rev[key]) continue;
+          }
+          const zodResult = validateSection(key, rev[key]);
+          if (!zodResult.success) {
+            invalidSections.push({ key, error: zodResult.error.substring(0, 200) });
+          }
+        }
+        if (invalidSections.length === 0) {
+          appendLog({
+            level: "success",
+            agentId: "10",
+            provider: "pipeline",
+            message: `✓ [REVIEW LOOP] Round ${round}: All sections Zod-validated ✓`,
+          });
+          break;
+        }
+        appendLog({
+          level: "warn",
+          agentId: "10",
+          provider: "pipeline",
+          message: `⚠ [REVIEW LOOP] Round ${round}: ${invalidSections.length} section(s) failed Zod — asking AI to fix`,
+        });
+        // Fix each invalid section
+        for (const { key, error } of invalidSections) {
+          const fixPrompt = `Section "${key}" that bai Zod validation: ${error}\n\nSua lai JSON cho dung schema. Giu nguyen noi dung, chi sua cau truc:\n${JSON.stringify(rev[key]).substring(0, 3000)}`;
+          const fixRes = await callAndParse(
+            REVIEWER_MODELS,
+            "JSON schema fixer. Tra JSON dung schema.",
+            fixPrompt,
+            0.1,
+            key
+          );
+          if (fixRes && fixRes.data) {
+            const revalidate = validateSection(key, fixRes.data);
+            if (revalidate.success) {
+              rev[key] = revalidate.data;
+              appendLog({
+                level: "success",
+                agentId: "10",
+                provider: "pipeline",
+                model: fixRes.model,
+                message: `  ✓ [REVIEW LOOP] Fixed "${key}" via ${fixRes.model}`,
+              });
+            }
+          }
+        }
+      }
+
       const sec = ((Date.now() - t0) / 1000).toFixed(1);
       onProgress?.({ type: "agent_done", id: "10", name: "Quality Reviewer", index: 9, total });
       console.log(`✓ [AGENT-10] Reviewer → ${res.model} (${sec}s tong)`);
@@ -1477,7 +1573,7 @@ export async function refineSections(
       const user = `${base}${edits}${discussion}\n\nNOI DUNG HIEN TAI cua phan ${ag.key}:\n${JSON.stringify(
         current[ag.key]
       ).substring(0, 4000)}\n\nHay tra lai phan ${ag.key} da chinh sua (JSON day du).`;
-      const res = await callAndParse(ag.models, sys, user, ag.temp);
+      const res = await callAndParse(ag.models, sys, user, ag.temp, ag.key);
       if (res && isValidSchema(res.data, ag.key)) {
         (refined as Record<string, unknown>)[ag.key] = res.data;
         appendLog({
@@ -1599,7 +1695,7 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
   });
 
   try {
-    const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25);
+    const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25, undefined);
     onProgress?.(true);
     if (res && res.data) {
       const data = res.data as { tasks?: TaskItem[] };
