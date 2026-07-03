@@ -57,11 +57,43 @@ export function resetTokenTracking(): void {
 type GlobalCacheStore = {
   aiCache?: Map<string, { result: string; timestamp: number }>;
   rateLimitedKeys?: Map<number, number>;
+  deadModels?: Map<string, number>; // model -> expiry timestamp (ms)
 };
 const gc = globalThis as typeof globalThis & GlobalCacheStore;
 const aiCache: Map<string, { result: string; timestamp: number }> = gc.aiCache ?? new Map();
 gc.aiCache = aiCache;
 const CACHE_TTL = 3600000;
+
+// ===== Dead-model cache =====
+// When a model exhausts ALL API keys with 429 (rate-limited) or 404 (unavailable),
+// we mark it "dead" for a cooldown period so other agents skip it instantly
+// instead of wasting time retrying the same dead model.
+const deadModels: Map<string, number> = gc.deadModels ?? new Map<string, number>();
+gc.deadModels = deadModels;
+const DEAD_MODEL_COOLDOWN_MS = 120000; // 2 minutes — enough for rate-limit to ease
+
+/** Check if a model is currently dead (all keys exhausted recently). */
+export function isModelDead(model: string): boolean {
+  const expiry = deadModels.get(model);
+  if (!expiry) return false;
+  if (Date.now() > expiry) {
+    deadModels.delete(model);
+    return false;
+  }
+  return true;
+}
+
+/** Mark a model as dead for the cooldown period. */
+function markModelDead(model: string, reason: string): void {
+  deadModels.set(model, Date.now() + DEAD_MODEL_COOLDOWN_MS);
+  console.log(`  [DEAD MODEL] ${model} marked dead for ${DEAD_MODEL_COOLDOWN_MS / 1000}s (${reason})`);
+  appendLog({
+    level: "warn",
+    provider: "openrouter",
+    model,
+    message: `[DEAD MODEL] ${model} marked dead for ${DEAD_MODEL_COOLDOWN_MS / 1000}s — other agents will skip it (${reason})`,
+  });
+}
 
 function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
   const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
@@ -251,7 +283,10 @@ async function callOpenRouterDirect(
           lastError = err;
           continue;
         }
-        // 4xx (non-429, non-401/403): invalid model / bad request — log and skip to next model
+        // 4xx (non-429, non-401/403): invalid model / bad request — mark dead + skip to next model
+        if (resp.status === 404) {
+          markModelDead(params.model, "model unavailable (404)");
+        }
         appendLog({
           level: "error",
           provider: "openrouter",
@@ -325,6 +360,14 @@ async function callOpenRouterDirect(
     model: params.model,
     message: `✗ All ${keys.length} OpenRouter keys exhausted for ${params.model}`,
   });
+  // Mark this model as dead so other agents skip it instantly
+  // (avoid wasting time retrying the same rate-limited/unavailable model)
+  const reason = lastError?.status === 404
+    ? "model unavailable (404)"
+    : lastError?.status === 429
+    ? "all keys rate-limited (429)"
+    : lastError?.code || "all keys exhausted";
+  markModelDead(params.model, reason);
   throw lastError || { message: "All OpenRouter keys exhausted" };
 }
 

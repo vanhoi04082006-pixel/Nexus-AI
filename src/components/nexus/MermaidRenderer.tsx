@@ -36,6 +36,40 @@ function fixMermaid(code: string): string {
     s = s.replace(/^(\s*)\s{8,}(\+)/gm, "$1    $2");
   }
 
+  // ===== Use Case (graph TD) fixes =====
+  // AI often writes invalid use-case syntax like:
+  //   actor["System Admin"] --> (ManageBranches)
+  //   actorFoo["Name"] --> (UseCase)
+  // Mermaid graph TD does NOT support parens () as use-case nodes — causes parse error.
+  // Fix: convert "(UseCaseName)" → 'UseCaseName["UseCaseName"]' (valid node with label)
+  // Also strip the "actor" prefix from node IDs (actor["X"] → Actor["X"]) since
+  // "actor" is not a reserved word in graph TD and just looks like a node id.
+  if (s.includes("graph TD") || s.includes("graph LR")) {
+    // Fix "actorId["Label"] --> (UseCaseName)" → 'actorId["Label"] --> UseCaseName["UseCaseName"]'
+    s = s.replace(
+      /(\b\w+\["[^"]*"\]\s*--?>?\s*--?)\s*\((\w+)\)/g,
+      (_m, left: string, useCaseName: string) => {
+        return `${left} ${useCaseName}["${useCaseName.replace(/([A-Z])/g, " $1").trim()}"]`;
+      }
+    );
+    // Fix standalone "(UseCaseName)" → 'UseCaseName["UseCaseName"]'
+    s = s.replace(
+      /(--?>?\s*--?)\s*\((\w+)\)/g,
+      (_m, arrow: string, useCaseName: string) => {
+        return `${arrow} ${useCaseName}["${useCaseName.replace(/([A-Z])/g, " $1").trim()}"]`;
+      }
+    );
+    // Fix "(UseCaseName) --> (OtherUseCase)" → 'UseCaseName["UseCaseName"] --> OtherUseCase["OtherUseCase"]'
+    s = s.replace(
+      /^\s*\((\w+)\)\s*(-->|---)\s*\((\w+)\)\s*$/gm,
+      (_m, from: string, arrow: string, to: string) => {
+        const fromLabel = from.replace(/([A-Z])/g, " $1").trim();
+        const toLabel = to.replace(/([A-Z])/g, " $1").trim();
+        return `${from}["${fromLabel}"] ${arrow} ${to}["${toLabel}"]`;
+      }
+    );
+  }
+
   // Wrap edge labels containing special chars in double quotes.
   s = s.replace(/-->\|([^|]+)\|/g, (_m, label: string) => {
     const trimmed = label.trim();

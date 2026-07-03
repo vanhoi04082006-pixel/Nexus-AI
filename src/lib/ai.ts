@@ -3,7 +3,7 @@
 // Each Agent has a tailored model list, 2 retries per model with exponential
 // backoff, a JSON fixer, an AI self-fix pass, and graceful fallbacks.
 
-import { callOpenRouter, type OpenRouterError } from "./openrouter";
+import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter";
 import { appendLog } from "./pipeline-progress";
 import type {
   ProjectResult,
@@ -361,6 +361,17 @@ async function callAndParse(
   temp: number
 ): Promise<ParseResult | null> {
   for (const model of models) {
+    // Skip dead models (all keys exhausted / 404 unavailable recently)
+    // This saves significant time when many agents share the same model list
+    if (isModelDead(model)) {
+      appendLog({
+        level: "warn",
+        model,
+        message: `  ⊘ ${model} → SKIP (model marked dead — all keys exhausted recently)`,
+      });
+      console.log(`      [SKIP] ${model} (dead)`);
+      continue;
+    }
     let d = INIT_DELAY;
 
     for (let a = 1; a <= MAX_RETRIES; a++) {
@@ -530,6 +541,7 @@ Tra object voi cac key BAT BUOC:
 
 function architectPrompt(): string {
   return `Ban la Senior Software Architect. Thiet ke database schema, API endpoints, va folder structure CHI TIET va DAY DU de developer co the code ngay KHONG can hoi them.
+QUAN TRONG: Tat ca dbTables, apiEndpoints, folderStructure PHAI PHU HOP VOI CHU DE DU AN — dung ten entity that cua du an (vd: neu la "quan ly khach san" thi co Bang Rooms, Reservations, Guests, Branches; KHONG dung User/Course chung chung).
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
 - "architectureDesc" (string): 6-8 cau mo ta kien truc he thong chi tiet. Ghi ro: cac layer (frontend-backend-db-cache), luong du lieu chinh, cach cac module giao tiep, security, scalability.
@@ -551,25 +563,39 @@ Tra object voi cac key BAT BUOC:
 }
 
 function umlPrompt(): string {
-  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do.
-QUAN TRONG:
+  return `Ban la UML Expert. Viet code Mermaid.js CHI TIET va DAY DU cho 4 bieu do, PHU HOP VOI CHU DE DU AN CU THE (khong dung vi du chung chung).
+QUAN TRONG — CU PHAP MERMAID CHUAN (KHONG DUOC SAI):
 - KHONG dung [("text")] - dung ["text"] hoac ("text")
 - KHONG dung markdown block ben trong string
 - Moi string phai escape newline: dung \\n thay vi newline that
-- Use Case: bat dau bang "graph TD"
-- Class: bat dau bang "classDiagram"
-- ERD: bat dau bang "erDiagram"
-- Sequence: bat dau bang "sequenceDiagram"
 
-YEU CAU BAT BUONG CHO CLASS DIAGRAM:
-- Ve TAT CA class chinh (it nhat 8 class)
+YEU CAU BAT BUOC CHO USE CASE (graph TD — CU PHAP NODE CHUAN):
+- Bat dau bang "graph TD"
+- DUNG CU PHAP NODE CHUAN:  ActorName["Tên Actor"] --> UseCaseName["Tên Use Case"]
+- KHONG DUNG: actor["Name"] --> (UseCase)  ← SAI, gay parse error
+- KHONG DUNG parentheses () cho use case trong graph TD
+- VI DU DUNG:
+  graph TD
+      Admin["System Admin"] --> ManageBranches["Manage Branches"]
+      Admin --> ConfigureSystem["Configure System"]
+      Manager["Branch Manager"] --> ManageRooms["Manage Rooms"]
+      Receptionist["Receptionist"] --> CreateReservation["Create Reservation"]
+      CreateReservation --> CheckIn["Check-In Guest"]
+      ManageBranches --> ConfigureSystem
+- It nhat 6 actors, moi actor co 2-4 use case
+- Ve include/extend (mui ten noi giua use case)
+
+YEU CAU BAT BUOC CHO CLASS DIAGRAM (classDiagram):
+- Bat dau bang "classDiagram"
+- Ve TAT CA class chinh phu hop voi du an (it nhat 8 class)
 - Moi class co thuoc tinh + method
-- BAT BUONG ve quan he: User <|-- Student, Course "1" --> "*" Class
+- BAT BUOC ve quan he: User <|-- Student, Course "1" --> "*" Class
 - KHONG dung tu khoa "class" truoc dong quan he
 - It nhat 6 quan he
 
-YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
-- Ve TAT CA bang trong database (it nhat 8 bang)
+YEU CAU BAT BUOC CHO ERD (erDiagram — RAT QUAN TRONG):
+- Bat dau bang "erDiagram"
+- Ve TAT CA bang trong database phu hop voi du an (it nhat 8 bang)
 - Moi bang CO it nhat 4 cot voi kieu du lieu (vd: int id PK, varchar name, text description, datetime created_at)
 - BAT BUOC ve quan he giua TAT CA cac bang co lien quan (it nhat 8 quan he)
 - DUNG cu phap Mermaid ERD chuan:
@@ -577,7 +603,6 @@ YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
   A ||--|| B : "has one"       (1-1)
   A }o--o{ B : "many to many"  (n-n)
   A }o--|| B : "belongs to"    (n-1)
-- KHONG viet quan he dang text "makes", "pays" — PHAI dung cu phap Mermaid chuan
 - VI DU DUNG:
   erDiagram
       USERS {
@@ -593,32 +618,34 @@ YEU CAU BAT BUOC CHO ERD (RAT QUAN TRONG):
           datetime check_in
           datetime check_out
       }
-      ROOMS {
-          int id PK
-          varchar name
-          int branch_id FK
-          decimal price
-      }
       USERS ||--o{ RESERVATIONS : "makes"
       ROOMS ||--o{ RESERVATIONS : "reserved by"
-      BRANCHES ||--o{ ROOMS : "contains"
 - TAT CA bang phai co ket noi — KHONG duoc de bang nao thua don
+
+YEU CAU BAT BUOC CHO SEQUENCE (sequenceDiagram):
+- Bat dau bang "sequenceDiagram"
+- Ve it nhat 2 luong xu ly chinh cua du an
+- It nhat 5 participants (Actor, Frontend, Backend, Database, Email)
+- Dung --> cho sync, ->> cho async, -->> cho response
 
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "useCase" (string): mermaid code, ve day du actor + use case
-- "classDiagram" (string): mermaid code, ve class + thuoc tinh + method + QUAN HE
-- "erd" (string): mermaid code, ve TAT CA bang + TAT CA quan he
-- "sequence" (string): mermaid code, ve it nhat 2 luong xu ly`;
+- "useCase" (string): mermaid code graph TD, ve day du actor + use case (KHONG dung actor[] hay parens)
+- "classDiagram" (string): mermaid code classDiagram, ve class + thuoc tinh + method + QUAN HE
+- "erd" (string): mermaid code erDiagram, ve TAT CA bang + TAT CA quan he
+- "sequence" (string): mermaid code sequenceDiagram, ve it nhat 2 luong xu ly
+
+TAT CA 4 BIEU DO PHAI PHU HOP VOI CHU DE DU AN — KHONG dung vi du chung chung (User/Course/Student) ma phai dung entity that cua du an.`;
 }
 
 function docsPrompt(): string {
   return `Ban la Technical Writer. Viet README.md, Coding Convention, va API Response Standard BANG TIENG VIET, chi tiet de developer moi co the lam viec ngay.
+QUAN TRONG: Tat ca tai lieu PHAI DE CAP CHU DE DU AN CU THE — vi du neu la "quan ly khach san" thi README phai noi ve khach san, dat phong, check-in/check-out, KHONG dung vi du chung chung.
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "readme" (string): noi dung README.md day du (gioi thieu, cai dat, chay, cau truc, huong dan code)
-- "convention" (string): Coding Convention (ten bien, ten file, function, comment, git commit message)
-- "apiStandard" (string): API Response Standard (format JSON, status code, error handling)`;
+- "readme" (string): noi dung README.md day du (gioi thieu du an cu the, cai dat, chay, cau truc, huong dan code, vi du API call cu the cua du an)
+- "convention" (string): Coding Convention (ten bien, ten file, function, comment, git commit message) — kem vi du cu the cua du an
+- "apiStandard" (string): API Response Standard (format JSON, status code, error handling) — kem vi du response cu the cua du an`;
 }
 
 function gitPrompt(): string {
