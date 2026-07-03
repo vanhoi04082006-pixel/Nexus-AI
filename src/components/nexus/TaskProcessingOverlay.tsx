@@ -101,7 +101,7 @@ export function TaskProcessingOverlay({
 
   return (
     <div className="fixed inset-0 bg-background/95 backdrop-blur-xl z-50 flex items-center justify-center p-3 sm:p-4 nexus-shimmer">
-      <div className="w-full max-w-5xl max-h-[94vh] bg-[#0c1322] border border-primary/30 rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 flex flex-col">
+      <div className="w-full max-w-5xl max-h-[94vh] bg-[#0c1322] border border-primary/30 rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 flex flex-col nexus-hud nexus-neon-border nexus-boot">
         {/* Header */}
         <div className="px-5 sm:px-6 py-3.5 border-b border-border flex items-center gap-3">
           <div

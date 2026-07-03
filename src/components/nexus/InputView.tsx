@@ -268,7 +268,7 @@ export function InputView() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto nexus-scroll">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="nexus-fade space-y-6">
+          <div className="nexus-boot space-y-6">
             {/* Premium Intro with glow */}
             <div className="text-center mb-8 relative">
               {/* Glow aura behind title */}
@@ -278,7 +278,7 @@ export function InputView() {
                   <Terminal className="w-3.5 h-3.5 text-primary nexus-spin-slow" />
                   <span className="text-[10px] font-mono text-primary tracking-wider">NEXUS_CORE // MULTI_AGENT_GATEWAY</span>
                 </div>
-                <h2 className="text-3xl font-bold mb-3">
+                <h2 className="text-3xl font-bold mb-3 nexus-text-glow">
                   Khởi tạo dự án của bạn
                 </h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">

@@ -392,3 +392,167 @@
   color: var(--primary);
   margin-left: 2px;
 }
+
+/* ===== Sci-Fi AI Command Center Effects ===== */
+
+/* Scanline — horizontal light sweep like in sci-fi HUDs */
+@keyframes nexus-scanline {
+  0% { transform: translateY(-100vh); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.nexus-scanline {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,170,0.6), transparent);
+  animation: nexus-scanline 8s linear infinite;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Boot sequence — fade in with scale on page load */
+@keyframes nexus-boot {
+  0% { opacity: 0; transform: scale(0.95) translateY(10px); filter: blur(10px); }
+  50% { opacity: 0.5; filter: blur(3px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+.nexus-boot {
+  animation: nexus-boot 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Neon border glow — pulsing border for premium cards */
+@keyframes nexus-neon-border {
+  0%, 100% { border-color: rgba(0,212,170,0.15); box-shadow: 0 0 20px -10px rgba(0,212,170,0.2); }
+  50% { border-color: rgba(0,212,170,0.4); box-shadow: 0 0 40px -5px rgba(0,212,170,0.35); }
+}
+.nexus-neon-border {
+  animation: nexus-neon-border 3s ease-in-out infinite;
+}
+
+/* Floating orbs — slow drifting background blobs */
+@keyframes nexus-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+.nexus-float {
+  animation: nexus-float 15s ease-in-out infinite;
+}
+.nexus-float-slow {
+  animation: nexus-float 25s ease-in-out infinite;
+}
+
+/* Data rain — vertical falling dots (Matrix-style but teal) */
+@keyframes nexus-data-rain {
+  0% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.6; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.nexus-data-rain {
+  position: absolute;
+  width: 1px;
+  height: 60px;
+  background: linear-gradient(180deg, transparent, rgba(0,212,170,0.4), transparent);
+  animation: nexus-data-rain 4s linear infinite;
+}
+
+/* Grid pulse — background grid that breathes */
+@keyframes nexus-grid-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.35; }
+}
+.nexus-grid-pulse {
+  animation: nexus-grid-pulse 4s ease-in-out infinite;
+}
+
+/* Holographic shimmer — rainbow sweep for AI elements */
+@keyframes nexus-holographic {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.nexus-holographic {
+  background: linear-gradient(90deg,
+    rgba(0,212,170,0.1) 0%,
+    rgba(56,189,248,0.15) 25%,
+    rgba(167,139,250,0.1) 50%,
+    rgba(56,189,248,0.15) 75%,
+    rgba(0,212,170,0.1) 100%
+  );
+  background-size: 200% auto;
+  animation: nexus-holographic 3s linear infinite;
+}
+
+/* AI text glow — text with pulsing teal glow */
+@keyframes nexus-text-glow {
+  0%, 100% { text-shadow: 0 0 8px rgba(0,212,170,0.3); }
+  50% { text-shadow: 0 0 20px rgba(0,212,170,0.6), 0 0 40px rgba(0,212,170,0.2); }
+}
+.nexus-text-glow {
+  animation: nexus-text-glow 3s ease-in-out infinite;
+}
+
+/* Hologram flicker — subtle opacity jitter for AI elements */
+@keyframes nexus-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.7; }
+  94% { opacity: 1; }
+  96% { opacity: 0.85; }
+  97% { opacity: 1; }
+}
+.nexus-flicker {
+  animation: nexus-flicker 6s linear infinite;
+}
+
+/* Orbital ring — rotating ring around AI icons */
+@keyframes nexus-orbit {
+  to { transform: rotate(360deg); }
+}
+.nexus-orbit {
+  animation: nexus-orbit 8s linear infinite;
+}
+
+/* Progress beam — sweeping light for loading states */
+@keyframes nexus-beam {
+  0% { left: -30%; }
+  100% { left: 100%; }
+}
+.nexus-beam {
+  position: relative;
+  overflow: hidden;
+}
+.nexus-beam::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, rgba(0,212,170,0.3), transparent);
+  animation: nexus-beam 1.5s infinite;
+}
+
+/* HUD corner brackets — sci-fi corners for cards */
+.nexus-hud {
+  position: relative;
+}
+.nexus-hud::before,
+.nexus-hud::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(0,212,170,0.4);
+  pointer-events: none;
+}
+.nexus-hud::before {
+  top: -1px; left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+.nexus-hud::after {
+  bottom: -1px; right: -1px;
+  border-left: none;
+  border-top: none;
+}

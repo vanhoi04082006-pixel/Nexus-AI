@@ -357,7 +357,7 @@ export function WorkspaceView() {
   ];
 
   return (
-    <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-[#060b14] nexus-grid-bg">
+    <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-[#060b14]/95 nexus-grid-bg nexus-boot">
       {/* Mobile toggle */}
       <button
         onClick={() => setSidebarOpen((v) => !v)}
@@ -376,10 +376,12 @@ export function WorkspaceView() {
         <div className="px-4 py-4 border-b border-border/40">
           <div className="flex items-center gap-2.5">
             <div className="relative">
-              <div className="absolute inset-0 bg-primary/30 blur-md rounded-lg" />
-              <div className="relative w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+              <div className="absolute inset-0 bg-primary/30 blur-md rounded-lg animate-pulse" />
+              <div className="relative w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center nexus-flicker">
                 <Cpu className="w-5 h-5 text-primary" />
               </div>
+              {/* Orbital ring */}
+              <div className="absolute -inset-1 rounded-full border border-primary/15 nexus-orbit" style={{ borderTopColor: "transparent", borderBottomColor: "transparent" }} />
             </div>
             <div>
               <h1 className="text-base font-bold tracking-tight">

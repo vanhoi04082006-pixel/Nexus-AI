@@ -116,20 +116,23 @@ export function HomeView() {
   }
 
   return (
-    <main className="flex-1 flex flex-col bg-[#060b14] min-h-screen">
+    <main className="flex-1 flex flex-col bg-[#060b14]/95 min-h-screen nexus-boot">
       {/* ===== Top Bar ===== */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-[#060b14]/90 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* AI Logo with orbital ring */}
             <div className="relative">
-              <div className="absolute inset-0 bg-primary/30 blur-lg rounded-lg" />
-              <div className="relative w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+              <div className="absolute inset-0 bg-primary/30 blur-lg rounded-lg animate-pulse" />
+              <div className="relative w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center nexus-flicker">
                 <Cpu className="w-5 h-5 text-primary" />
               </div>
+              {/* Orbital ring */}
+              <div className="absolute -inset-1 rounded-full border border-primary/20 nexus-orbit" style={{ borderTopColor: "transparent", borderBottomColor: "transparent" }} />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-primary">NEXUS</span> AI
+                <span className="text-primary nexus-text-glow">NEXUS</span> AI
               </h1>
               <p className="text-[10px] text-muted-foreground tracking-wider uppercase">Multi-Agent Architect</p>
             </div>
@@ -165,17 +168,17 @@ export function HomeView() {
           </div>
         ) : (
           <>
-            {/* ===== Hero Banner (Cinematic) ===== */}
+            {/* ===== Hero Banner (Cinematic AI Command Center) ===== */}
             {heroProject && (
-              <div className="relative h-[280px] sm:h-[360px] lg:h-[420px] overflow-hidden">
+              <div className="relative h-[280px] sm:h-[360px] lg:h-[420px] overflow-hidden nexus-hud">
                 {/* Dynamic gradient backdrop */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${heroGradient} transition-all duration-700`} />
-                {/* Grid pattern overlay */}
-                <div className="absolute inset-0 nexus-grid-bg opacity-40" />
-                {/* Glow orb top-left */}
-                <div className="absolute -top-20 -left-20 w-80 h-80 bg-primary/10 blur-[100px] rounded-full" />
-                {/* Glow orb bottom-right */}
-                <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-cyan-500/8 blur-[100px] rounded-full" />
+                {/* Grid pattern overlay — breathing */}
+                <div className="absolute inset-0 nexus-grid-bg opacity-40 nexus-grid-pulse" />
+                {/* Glow orb top-left — floating */}
+                <div className="absolute -top-20 -left-20 w-80 h-80 bg-primary/10 blur-[100px] rounded-full nexus-float" />
+                {/* Glow orb bottom-right — floating slow */}
+                <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-cyan-500/8 blur-[100px] rounded-full nexus-float-slow" />
                 {/* Bottom fade to background */}
                 <div className="absolute inset-0 nexus-hero-gradient" />
 
@@ -191,7 +194,7 @@ export function HomeView() {
                       </span>
                     </div>
 
-                    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold mb-2 leading-tight tracking-tight">
+                    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold mb-2 leading-tight tracking-tight nexus-text-glow">
                       {heroProject.topic}
                     </h1>
 
