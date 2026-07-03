@@ -283,11 +283,17 @@ export function ChatTab() {
       });
 
       await reload();
-      toast.success("AI da dong bo lai tat ca phan dua tren cuoc thao luan!");
+      toast.success(
+        "✅ AI Refine thành công!\n🔄 Đã sinh lại tất cả 9 sections\n📋 Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security\n💡 Xem tab tương ứng để kiểm tra thay đổi",
+        { duration: 8000 }
+      );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Loi AI refine";
+      const msg = err instanceof Error ? err.message : "Lỗi AI refine";
       setRefineError(msg);
-      toast.error(msg);
+      toast.error(
+        `❌ AI Refine thất bại!\n📋 Lý do: ${msg}\n🔧 Kiểm tra Live Log Console để xem chi tiết`,
+        { duration: 10000 }
+      );
     } finally {
       setRefining(false);
     }

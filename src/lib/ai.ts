@@ -580,16 +580,23 @@ YEU CAU BAT BUOC CHO USE CASE (graph TD — CU PHAP NODE CHUAN):
 - DUNG CU PHAP NODE CHUAN:  ActorName["Tên Actor"] --> UseCaseName["Tên Use Case"]
 - KHONG DUNG: actor["Name"] --> (UseCase)  ← SAI, gay parse error
 - KHONG DUNG parentheses () cho use case trong graph TD
+- CRITICAL — INCLUDE/EXTEND SYNTAX:
+  - SAI: Register --> Login : include       ← parse error!
+  - SAI: EnrollCourse --> Payment : extend   ← parse error!
+  - DUNG: Register -->|include| Login
+  - DUNG: EnrollCourse -.->|extend| Payment
+  - Luon dung -->|include| cho include va -.->|extend| cho extend
 - VI DU DUNG:
   graph TD
       Admin["System Admin"] --> ManageBranches["Manage Branches"]
       Admin --> ConfigureSystem["Configure System"]
-      Manager["Branch Manager"] --> ManageRooms["Manage Rooms"]
       Receptionist["Receptionist"] --> CreateReservation["Create Reservation"]
       CreateReservation --> CheckIn["Check-In Guest"]
+      Register -->|include| Login
+      EnrollCourse -.->|extend| PaymentProcess
       ManageBranches --> ConfigureSystem
 - It nhat 6 actors, moi actor co 2-4 use case
-- Ve include/extend (mui ten noi giua use case)
+- Ve include/extend dung cu phap -->|include| va -.->|extend|
 
 YEU CAU BAT BUOC CHO CLASS DIAGRAM (classDiagram):
 - Bat dau bang "classDiagram"
@@ -628,18 +635,34 @@ YEU CAU BAT BUOC CHO ERD (erDiagram — RAT QUAN TRONG):
       ROOMS ||--o{ RESERVATIONS : "reserved by"
 - TAT CA bang phai co ket noi — KHONG duoc de bang nao thua don
 
-YEU CAU BAT BUOC CHO SEQUENCE (sequenceDiagram):
+YEU CAU BAT BUOC CHO SEQUENCE (sequenceDiagram — CU PHAP CHUAN):
 - Bat dau bang "sequenceDiagram"
+- KHONG dung "participant" rieng le — khai bao participant TRUC TIEP trong arrow
+- DUNG CU PHAP:  participant Actor "Tên Actor" (khai bao o dau)
+- Sau do dung: Actor->>Frontend: "Click button"
+- Dung ->> cho request, -->> cho response
+- KHONG DUNG: --> trong sequence (dung ->> thay vi)
+- VI DU DUNG:
+  sequenceDiagram
+      participant U as "Student"
+      participant F as "Frontend"
+      participant B as "Backend"
+      participant D as "Database"
+      U->>F: Click "Đăng ký khóa học"
+      F->>B: POST /api/enrollments
+      B->>D: INSERT enrollment
+      D-->>B: Success
+      B-->>F: 201 Created
+      F-->>U: Hiển thị "Đăng ký thành công"
 - Ve it nhat 2 luong xu ly chinh cua du an
-- It nhat 5 participants (Actor, Frontend, Backend, Database, Email)
-- Dung --> cho sync, ->> cho async, -->> cho response
+- It nhat 5 participants
 
 ${JSON_INSTRUCTION}
 Tra object voi cac key BAT BUOC:
-- "useCase" (string): mermaid code graph TD, ve day du actor + use case (KHONG dung actor[] hay parens)
+- "useCase" (string): mermaid code graph TD, ve day du actor + use case (KHONG dung actor[] hay parens, dung -->|include| va -.->|extend|)
 - "classDiagram" (string): mermaid code classDiagram, ve class + thuoc tinh + method + QUAN HE
 - "erd" (string): mermaid code erDiagram, ve TAT CA bang + TAT CA quan he
-- "sequence" (string): mermaid code sequenceDiagram, ve it nhat 2 luong xu ly
+- "sequence" (string): mermaid code sequenceDiagram, ve it nhat 2 luong xu ly (dung ->> va -->>)
 
 TAT CA 4 BIEU DO PHAI PHU HOP VOI CHU DE DU AN — KHONG dung vi du chung chung (User/Course/Student) ma phai dung entity that cua du an.`;
 }
@@ -711,16 +734,17 @@ Muc tieu: nguoi moi hoan toan khong biet gi cung hieu phai lam gi, vai tro gi, c
 NGUYEN TAC SINH TASK (SMART + ATOMIC):
 1. Moi task bat dau bang DONG TU HANH DONG (vd: "Thiet ke", "Viet", "Tao", "Cau hinh")
 2. NGUYEN TU HOA: 1 task = 1 cong vie cu the, khong the chia nho hon
-3. KHONG GIOI HAN so luong task - phan ra triet de theo layers: Database, Backend, Frontend, Testing, DevOps
-4. Moi thanh vien co 5-15 task (phan bo theo vai tro + kha nang)
+3. KHONG GIOI HAN so luong task — sinh bao nhieu task tuy theo do phuc tap du an, mien sao phu hop, ro rang, de hieu, tap trung, KHONG chung chung
+4. Moi thanh vien co nhieu task theo vai tro + kha nang (it nhat 5, khong gioi han tren)
 5. Task phai co BOI CANH file/ngu canh ro rang (vd: "Trong file src/api/users.ts")
 6. Task phai co GIAI MA KY THUAT (code snippets, SQL, config examples)
 7. Dependencies phai ro rang: task nao phai lam truoc, task nao phu thuoc task nao
+8. Task PHAI PHU HOP VOI CHU DE DU AN — dung ten entity, ten file, ten module that cua du an
 
 ${JSON_INSTRUCTION}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
-- "title" (string): ten task bat dau bang dong tu (vd: "Thiet ke Schema Prisma cho User")
+- "title" (string): ten task bat dau bang dong tu, cu the (vd: "Thiet ke Schema Prisma cho Bang Users")
 - "description" (string): mo ta chi tiet 3-5 cau. Ghi ro: muc tieu, file can sua, cach lam, Definition of Done.
 - "role" (string): vai tro (vd "Backend Developer")
 - "layer" (string): "DATABASE" | "BACKEND" | "UI" | "CONFIG" | "TESTING"
@@ -738,11 +762,12 @@ Tra object voi key "tasks" (array). Moi task co:
 
 DAM BAO:
 - Phan ra theo layers: Database, API Backend, Frontend UI, Testing, DevOps
-- Moi thanh vien co 5-15 task phu hop vai tro
+- KHONG GIOI HAN so luong task — sinh day du, triet de, phu hop voi du an
 - codeConventions + technicalHints phai CO CODE SNIPPETS cu the (SQL, Prisma schema, API response, component props)
 - Dependencies lien ket ro rang giua cac task cua cac thanh vien khac nhau
 - Deadline phan bo theo do uu tien + do kho
-- technicalHints.snippet phai la code dung de copy-paste (SQL JOIN, Prisma model, React component, etc.)`;
+- technicalHints.snippet phai la code dung de copy-paste (SQL JOIN, Prisma model, React component, etc.)
+- Tat ca task PHAI de cap entity/module that cua du an (vd: neu la "quan ly khach san" thi co task ve Rooms, Reservations, Guests, KHONG dung User/Course chung chung)`;
 
 const PROMPT_MAP: Record<SectionType, () => string> = {
   analysis: analystPrompt,

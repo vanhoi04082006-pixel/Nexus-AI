@@ -40,11 +40,31 @@ function fixMermaid(code: string): string {
   // AI often writes invalid use-case syntax like:
   //   actor["System Admin"] --> (ManageBranches)
   //   actorFoo["Name"] --> (UseCase)
-  // Mermaid graph TD does NOT support parens () as use-case nodes — causes parse error.
-  // Fix: convert "(UseCaseName)" → 'UseCaseName["UseCaseName"]' (valid node with label)
-  // Also strip the "actor" prefix from node IDs (actor["X"] → Actor["X"]) since
-  // "actor" is not a reserved word in graph TD and just looks like a node id.
+  //   Register --> Login : include
+  //   EnrollCourse --> PaymentProcess : extend
+  // Mermaid graph TD does NOT support parens () as use-case nodes, nor does
+  // it support "A --> B : label" syntax (the colon is invalid).
+  // Fixes:
+  //   (UseCaseName) → UseCaseName["UseCase Name"]
+  //   A --> B : include → A -->|include| B
+  //   A --> B : extend → A -.->|extend| B
   if (s.includes("graph TD") || s.includes("graph LR")) {
+    // CRITICAL: Fix "A --> B : include" and "A --> B : extend" syntax
+    // Must run BEFORE the parens fixer to avoid conflicts.
+    // Pattern: NodeId["label"] --> NodeId2["label2"] : include/extend
+    // Also handles: NodeId --> NodeId2 : include/extend
+    // Also handles: NodeId["label"] --> NodeId2 : include/extend
+    s = s.replace(
+      /^(\s*)(\w+(?:\["[^"]*"\])?)\s*(--?>|-\.\->)\s*(\w+(?:\["[^"]*"\])?)\s*:\s*(include|extend|«include»|«extend»)\s*$/gmi,
+      (_m, indent: string, from: string, arrow: string, to: string, label: string) => {
+        const cleanLabel = label.replace(/«|»/g, "").toLowerCase().trim();
+        if (cleanLabel === "extend") {
+          return `${indent}${from} -.->|${cleanLabel}| ${to}`;
+        }
+        return `${indent}${from} -->|${cleanLabel}| ${to}`;
+      }
+    );
+
     // Fix "actorId["Label"] --> (UseCaseName)" → 'actorId["Label"] --> UseCaseName["UseCaseName"]'
     s = s.replace(
       /(\b\w+\["[^"]*"\]\s*--?>?\s*--?)\s*\((\w+)\)/g,

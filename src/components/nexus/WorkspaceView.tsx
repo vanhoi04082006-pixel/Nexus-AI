@@ -230,13 +230,31 @@ export function WorkspaceView() {
         setTimeout(poll, 1500);
       });
 
-      toast.success("Todolist da duoc sinh ra! Email thong bao da gui thanh vien.");
+      // Reload project data to get fresh tasks
       await loadProject();
       setActiveTab("tasks");
+
+      // Show detailed success notification
+      const projResp = await fetch(`/api/projects/${projectId}/tasks?token=${encodeURIComponent(token)}`);
+      if (projResp.ok) {
+        const taskData = await projResp.json();
+        const taskCount = taskData.tasks?.length || 0;
+        const memberCount = new Set(taskData.tasks?.map((t: { assigneeName: string }) => t.assigneeName).filter(Boolean)).size;
+        const p0Count = taskData.tasks?.filter((t: { priority: string }) => t.priority === "P0").length || 0;
+        toast.success(
+          `✅ Sinh todolist thành công!\n📊 ${taskCount} task cho ${memberCount} thành viên\n🔴 ${p0Count} task P0 (bat buoc)\n📧 Email thông báo đã gửi`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.success("✅ Sinh todolist thành công! Email thông báo đã gửi thành viên.");
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Loi khoi tao";
+      const msg = err instanceof Error ? err.message : "Lỗi khởi tạo";
       setInitError(msg);
-      toast.error(msg);
+      toast.error(
+        `❌ Sinh todolist thất bại!\n📋 Lý do: ${msg}\n🔧 Kiểm tra Live Log Console để xem chi tiết model nào fail`,
+        { duration: 10000 }
+      );
     } finally {
       setInitializing(false);
       setInitRunning(false);
