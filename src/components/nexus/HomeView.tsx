@@ -161,8 +161,8 @@ export function HomeView() {
           </div>
 
           {/* Search bar */}
-          <div className="flex-1 max-w-md hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-card/40 border border-border/40 backdrop-blur-sm">
-            <Search className="w-4 h-4 text-muted-foreground" />
+          <div className="flex-1 max-w-md hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-white/8 backdrop-blur-md">
+            <Search className="w-4 h-4 text-muted-foreground/60" />
             <input
               type="text"
               placeholder="Tìm kiếm dự án, tasks, thành viên..."
@@ -211,13 +211,13 @@ export function HomeView() {
               <div>
                 <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Dự án</div>
                 <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <FolderOpen className="w-4 h-4" /> Tất cả dự án
                   </button>
-                  <button onClick={newProject} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={newProject} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Plus className="w-4 h-4" /> Tạo dự án mới
                   </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Sparkles className="w-4 h-4" /> Templates
                   </button>
                 </div>
@@ -225,13 +225,13 @@ export function HomeView() {
               <div>
                 <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Công cụ</div>
                 <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Brain className="w-4 h-4" /> Agent Hub
                   </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Terminal className="w-4 h-4" /> Knowledge Base
                   </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Zap className="w-4 h-4" /> Workflow
                   </button>
                 </div>
@@ -239,10 +239,10 @@ export function HomeView() {
               <div>
                 <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Cài đặt</div>
                 <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Settings className="w-4 h-4" /> Cài đặt chung
                   </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary/30 hover:text-foreground transition-colors">
+                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
                     <Cpu className="w-4 h-4" /> Tích hợp
                   </button>
                 </div>
@@ -274,9 +274,11 @@ export function HomeView() {
               <>
                 {/* ===== Hero with 3D AI brain ===== */}
                 {heroProject && (
-                  <div className="relative h-[340px] sm:h-[420px] overflow-hidden nexus-hud">
-                    {/* Dynamic gradient */}
+                  <div className="relative h-[380px] sm:h-[460px] overflow-hidden nexus-hud">
+                    {/* Dynamic gradient + radial */}
                     <div className={`absolute inset-0 bg-gradient-to-br ${heroGradient} transition-all duration-700`} />
+                    {/* Radial gradient overlay — light from top-left */}
+                    <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 20% 30%, rgba(0,212,170,0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 70%, rgba(56,189,248,0.06) 0%, transparent 50%)" }} />
                     {/* Grid pattern */}
                     <div className="absolute inset-0 nexus-grid-bg opacity-30 nexus-grid-pulse" />
                     {/* 3D AI Brain — right side */}
@@ -337,10 +339,10 @@ export function HomeView() {
                         </div>
                         {/* CTA */}
                         <div className="flex items-center gap-3 mb-2">
-                          <Button onClick={() => openProject(heroProject)} size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 nexus-glow-strong rounded-2xl px-6 py-3 text-base">
+                          <Button onClick={() => openProject(heroProject)} size="lg" className="bg-gradient-to-r from-primary to-cyan-400 text-primary-foreground hover:opacity-90 nexus-glow-strong rounded-2xl px-6 py-3 text-base shadow-[0_0_30px_rgba(0,212,170,0.3)]">
                             <Rocket className="w-5 h-5" /> Tiếp tục làm việc
                           </Button>
-                          <Button onClick={newProject} variant="secondary" size="lg" className="border-border/50 bg-card/50 backdrop-blur-sm rounded-2xl px-6 py-3 text-base">
+                          <Button onClick={newProject} variant="secondary" size="lg" className="border-white/10 bg-card/50 backdrop-blur-md rounded-2xl px-6 py-3 text-base">
                             <Plus className="w-5 h-5" /> Dự án mới
                           </Button>
                         </div>
@@ -384,11 +386,11 @@ export function HomeView() {
                           return (
                             <div
                               key={p.id}
-                              className={`nexus-card-hover rounded-2xl border ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/20 hover:-translate-y-1 transition-all border-white/5`}
+                              className={`nexus-card-hover rounded-2xl border border-white/5 ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1.5 transition-all`}
                               onClick={() => openProject(p)}
                             >
                               {/* Card header with gradient + project image */}
-                              <div className={`h-28 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
+                              <div className={`h-32 bg-gradient-to-br ${gradient} relative overflow-hidden`}>
                                 <div className="absolute inset-0 nexus-grid-bg opacity-30" />
                                 {/* Project bg image */}
                                 <img
@@ -474,15 +476,15 @@ export function HomeView() {
               <div className="mb-6">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-3">Tổng quan</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-primary">{projects.length}</div>
                     <div className="text-[9px] text-muted-foreground">Dự án</div>
                   </div>
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-cyan-400">{totalMembers}</div>
                     <div className="text-[9px] text-muted-foreground">Thành viên</div>
                   </div>
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-emerald-400">{totalTasks}</div>
                     <div className="text-[9px] text-muted-foreground">Tasks</div>
                   </div>
@@ -508,7 +510,7 @@ export function HomeView() {
                     const AVATAR_COLORS = ["from-cyan-500/30 to-blue-600/15 text-cyan-300", "from-emerald-500/30 to-teal-600/15 text-emerald-300", "from-purple-500/30 to-indigo-600/15 text-purple-300", "from-amber-400/30 to-orange-600/15 text-amber-300", "from-rose-500/30 to-pink-600/15 text-rose-300"];
                     return (
                       <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-card/30 hover:bg-card/50 cursor-pointer transition-colors" onClick={() => openProject(p)}>
-                        <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-[10px] font-bold flex-shrink-0`}>
+                        <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
                           {p.topic.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -521,8 +523,8 @@ export function HomeView() {
                 </div>
               </div>
 
-              {/* Quick stats card */}
-              <div className="mt-auto rounded-xl bg-gradient-to-br from-primary/10 to-cyan-500/5 border border-primary/20 p-4 nexus-hud">
+              {/* NEXUS AI Status */}
+              <div className="mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-cyan-500/5 border border-white/8 p-4 nexus-hud backdrop-blur-md shadow-lg shadow-primary/5">
                 <div className="flex items-center gap-2 mb-2">
                   <Activity className="w-4 h-4 text-primary" />
                   <span className="text-xs font-semibold text-primary">NEXUS AI Status</span>
@@ -544,6 +546,28 @@ export function HomeView() {
                   </div>
                 </div>
               </div>
+
+              {/* Tasks đang làm */}
+              {heroProject && heroProject.taskCount > 0 && (
+                <div className="mt-auto rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckSquare className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-semibold text-primary">Tasks đang làm</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{heroProject.taskCount} total</span>
+                  </div>
+                  <div className="space-y-2">
+                    {["Database", "API Endpoints", "Frontend UI", "Testing"].map((task, i) => (
+                      <div key={task} className="flex items-center gap-2 text-xs">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${i < 2 ? "bg-emerald-500/20 border-emerald-500/40" : "border-border/40"}`}>
+                          {i < 2 && <CheckSquare className="w-2.5 h-2.5 text-emerald-400" />}
+                        </div>
+                        <span className={i < 2 ? "text-muted-foreground line-through" : "text-foreground/80"}>{task}</span>
+                        {i < 2 && <span className="ml-auto text-[9px] text-emerald-400 font-mono">done</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </aside>
           )}
         </div>
