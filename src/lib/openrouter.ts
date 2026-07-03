@@ -194,6 +194,7 @@ async function callOpenRouterDirect(
 
   let lastError: OpenRouterError | null = null;
   let etimedoutCount = 0; // Track consecutive ETIMEDOUT — don't try all 19 keys if model is slow
+  let saw429 = false; // Track if any key got 429 — used to mark model dead even if last error is 401
 
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const keyIndex = getAvailableKeyIndex();
@@ -261,6 +262,7 @@ async function callOpenRouterDirect(
         const err: OpenRouterError = { status: resp.status, message: errMsg, retryAfter, keyIndex };
 
         if (resp.status === 429) {
+          saw429 = true;
           appendLog({
             level: "error",
             provider: "openrouter",
@@ -273,14 +275,17 @@ async function callOpenRouterDirect(
           continue;
         }
         if (resp.status === 401 || resp.status === 403) {
-          console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} invalid (${resp.status})`);
+          console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} invalid (${resp.status}) — disabling for 24h`);
           appendLog({
             level: "error",
             provider: "openrouter",
             model: params.model,
             keyIndex: keyIndex + 1,
-            message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${resp.status}] invalid key — ${errMsg}`,
+            message: `✗ [Key #${keyIndex + 1}] ${params.model} → [${resp.status}] invalid key — disabling for 24h — ${errMsg}`,
           });
+          // Mark invalid key as rate-limited for 24h so getAvailableKeyIndex skips it
+          // (prevents infinite retry loop on the same invalid key)
+          markKeyRateLimited(keyIndex, 86400);
           lastError = err;
           continue;
         }
@@ -377,13 +382,13 @@ async function callOpenRouterDirect(
   });
   // Only mark model dead on 429 (rate-limited) or 404 (unavailable).
   // Do NOT mark dead on ETIMEDOUT/ENET — model may just be slow, not broken.
-  // Caller (callAndParse) will retry the model with backoff.
+  // Also mark dead if saw429 is true (some keys got 429) even if last error was 401.
   if (lastError?.status === 404) {
     markModelDead(params.model, "model unavailable (404)");
-  } else if (lastError?.status === 429) {
+  } else if (lastError?.status === 429 || saw429) {
     markModelDead(params.model, "all keys rate-limited (429)");
   }
-  // ETIMEDOUT/ENET → don't mark dead, just throw so caller retries
+  // ETIMEDOUT/ENET/401 → don't mark dead, just throw so caller retries
   throw lastError || { message: "All OpenRouter keys exhausted" };
 }
 

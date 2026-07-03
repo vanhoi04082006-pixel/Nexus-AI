@@ -481,13 +481,15 @@ async function callAndParse(
           continue;
         }
 
-        // 401/403: invalid API key or forbidden — FATAL, don't try other models
+        // 401/403: one key is invalid, but other keys may work — skip to next model
+        // (NOT fatal — only 1 out of N keys may be invalid, pipeline should continue)
         if (st === 401 || st === 403) {
-          throw new Error(
-            st === 401
-              ? "OPENROUTER_API_KEY khong hop le. Kiem tra file .env"
-              : "OpenRouter access forbidden (403). Kiem tra API key hoac credit."
-          );
+          appendLog({
+            level: "warn",
+            model,
+            message: `  ⚠ ${model} → skip to next model (some API keys invalid ${st})`,
+          });
+          break;
         }
 
         // 4xx (non-429, non-401/403): invalid model / bad request — skip to next model
