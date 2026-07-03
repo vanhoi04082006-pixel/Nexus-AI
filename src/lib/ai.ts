@@ -7,12 +7,6 @@ import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter"
 import { appendLog } from "./pipeline-progress";
 import { validateSection } from "./schemas";
 import pLimit from "p-limit";
-
-// Concurrency limiter — max 3 parallel LLM calls to prevent:
-// 1. Memory blowup from too many concurrent fetch() streams
-// 2. Rate-limit spikes from hitting OpenRouter with 6+ requests at once
-// 3. DDoS-like behavior on OpenRouter's free-tier infrastructure
-const limiter = pLimit(MAX_CONCURRENCY);
 import type {
   ProjectResult,
   ProjectInput,
@@ -29,6 +23,12 @@ const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
 const MAX_CONCURRENCY = 3;  // Max parallel LLM calls (prevents memory blowup + rate-limit spikes)
+
+// Concurrency limiter — max 3 parallel LLM calls to prevent:
+// 1. Memory blowup from too many concurrent fetch() streams
+// 2. Rate-limit spikes from hitting OpenRouter with 6+ requests at once
+// 3. DDoS-like behavior on OpenRouter's free-tier infrastructure
+const limiter = pLimit(MAX_CONCURRENCY);
 
 /**
  * Full Jitter backoff — prevents "Thundering Herd" DDoS on retry.
