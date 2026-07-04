@@ -63,6 +63,16 @@ export function ProcessingOverlay() {
     }
   }, [logs]);
 
+  // Lock body scroll so the overlay is always fully visible + scroll to top on mount
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
   // Derived stats for the log header
   const logStats = useMemo(() => {
     const success = logs.filter((l) => l.level === "success").length;
@@ -72,7 +82,10 @@ export function ProcessingOverlay() {
   }, [logs]);
 
   return (
-    <div className="fixed inset-0 bg-background/95 backdrop-blur-xl z-50 flex items-center justify-center p-3 sm:p-4 nexus-shimmer">
+    <div
+      className="fixed inset-0 bg-background/95 backdrop-blur-xl z-[100] flex items-center justify-center p-3 sm:p-4 nexus-shimmer"
+      style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}
+    >
       <div className="w-full max-w-5xl max-h-[94vh] bg-nexus-surface-2 border border-primary/30 rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 flex flex-col nexus-hud nexus-neon-border nexus-boot">
         {/* Header */}
         <div className="px-5 sm:px-6 py-3.5 border-b border-border flex items-center gap-3">

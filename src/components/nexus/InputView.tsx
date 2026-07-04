@@ -125,6 +125,8 @@ export function InputView() {
     if (!validate()) return;
     setSubmitting(true);
     startPipeline();
+    // Scroll to top so the ProcessingOverlay is immediately visible
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
     // Build the payload
     const validMembers = input.members
