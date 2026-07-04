@@ -33,7 +33,16 @@ export async function GET() {
         description: true,
         status: true,
         leaderName: true,
+        leaderEmail: true,
         leaderToken: true,
+        purpose: true,
+        isFavorite: true,
+        isArchived: true,
+        priority: true,
+        deadline: true,
+        techStack: true,
+        tags: true,
+        coverColor: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -43,24 +52,53 @@ export async function GET() {
             analyses: true,
           },
         },
+        members: {
+          select: { id: true, name: true, email: true, role: true },
+          take: 8,
+        },
+        tasks: {
+          select: { status: true },
+        },
       },
-      take: 50,
+      take: 100,
     });
 
     return Response.json({
-      projects: projects.map((p) => ({
-        id: p.id,
-        topic: p.topic,
-        description: p.description,
-        status: p.status,
-        leaderName: p.leaderName,
-        leaderToken: p.leaderToken,
-        memberCount: p._count.members,
-        taskCount: p._count.tasks,
-        hasAnalysis: p._count.analyses > 0,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      })),
+      projects: projects.map((p) => {
+        const totalTasks = p.tasks.length;
+        const doneTasks = p.tasks.filter((t) => t.status === "done").length;
+        const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+        let techStack: string[] = [];
+        let tags: string[] = [];
+        try { techStack = JSON.parse(p.techStack); } catch { /* keep default */ }
+        try { tags = JSON.parse(p.tags); } catch { /* keep default */ }
+        return {
+          id: p.id,
+          topic: p.topic,
+          description: p.description,
+          status: p.status,
+          leaderName: p.leaderName,
+          leaderEmail: p.leaderEmail,
+          leaderToken: p.leaderToken,
+          purpose: p.purpose,
+          isFavorite: p.isFavorite,
+          isArchived: p.isArchived,
+          priority: p.priority,
+          deadline: p.deadline?.toISOString() || null,
+          techStack,
+          tags,
+          coverColor: p.coverColor,
+          memberCount: p._count.members,
+          taskCount: p._count.tasks,
+          doneTaskCount: doneTasks,
+          totalTaskCount: totalTasks,
+          progress,
+          hasAnalysis: p._count.analyses > 0,
+          members: p.members,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        };
+      }),
     });
   } catch (err) {
     return Response.json(

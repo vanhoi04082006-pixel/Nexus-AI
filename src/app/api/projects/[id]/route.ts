@@ -184,3 +184,71 @@ export async function DELETE(
     );
   }
 }
+
+// ===== PATCH: Update project metadata (favorite, archive, rename, priority, deadline, tags, techStack, coverColor) =====
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const url = new URL(req.url);
+    const token = url.searchParams.get("token");
+
+    const access = await resolveAccess(id, token);
+    if (!requireLeader(access)) {
+      return Response.json({ error: "Leader access required" }, { status: 403 });
+    }
+
+    const body = (await req.json()) as {
+      topic?: string;
+      description?: string;
+      isFavorite?: boolean;
+      isArchived?: boolean;
+      priority?: string;
+      deadline?: string | null;
+      techStack?: string[];
+      tags?: string[];
+      coverColor?: string;
+      status?: string;
+    };
+
+    const data: Record<string, unknown> = {};
+    if (typeof body.topic === "string" && body.topic.trim()) data.topic = body.topic.trim();
+    if (typeof body.description === "string") data.description = body.description;
+    if (typeof body.isFavorite === "boolean") data.isFavorite = body.isFavorite;
+    if (typeof body.isArchived === "boolean") data.isArchived = body.isArchived;
+    if (typeof body.priority === "string") data.priority = body.priority;
+    if (body.deadline !== undefined) data.deadline = body.deadline ? new Date(body.deadline) : null;
+    if (Array.isArray(body.techStack)) data.techStack = JSON.stringify(body.techStack);
+    if (Array.isArray(body.tags)) data.tags = JSON.stringify(body.tags);
+    if (typeof body.coverColor === "string") data.coverColor = body.coverColor;
+    if (typeof body.status === "string") data.status = body.status;
+
+    const updated = await db.project.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        topic: true,
+        description: true,
+        isFavorite: true,
+        isArchived: true,
+        priority: true,
+        deadline: true,
+        techStack: true,
+        tags: true,
+        coverColor: true,
+        status: true,
+        updatedAt: true,
+      },
+    });
+
+    return Response.json({ success: true, project: updated });
+  } catch (err) {
+    return Response.json(
+      { error: "Failed to update project", details: err instanceof Error ? err.message : "unknown" },
+      { status: 500 }
+    );
+  }
+}
