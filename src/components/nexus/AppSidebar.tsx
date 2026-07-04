@@ -16,7 +16,6 @@ import {
   X,
   LayoutDashboard,
 } from "lucide-react";
-import { ThemeToggleSegmented } from "@/components/theme/ThemeToggle";
 
 export type AppView =
   | "input"
@@ -143,10 +142,6 @@ export function AppSidebar({ active }: { active: AppView }) {
       {/* ===== Desktop Sidebar (md+) ===== */}
       <aside className="hidden md:flex w-56 flex-col bg-nexus-surface/60 backdrop-blur-xl border-r border-border/30 py-4 px-3 flex-shrink-0">
         {navContent}
-        {/* Theme toggle — sticky at bottom of sidebar */}
-        <div className="pt-3 mt-2 border-t border-border/30">
-          <ThemeToggleSegmented className="w-full justify-center" />
-        </div>
       </aside>
 
       {/* ===== Mobile Toggle Button ===== */}
@@ -190,10 +185,6 @@ export function AppSidebar({ active }: { active: AppView }) {
               </button>
             </div>
             {navContent}
-            {/* Theme toggle — mobile drawer footer */}
-            <div className="pt-3 mt-2 border-t border-border/30">
-              <ThemeToggleSegmented className="w-full justify-center" />
-            </div>
           </aside>
         </div>
       )}

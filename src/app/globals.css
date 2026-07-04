@@ -48,69 +48,18 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ===== NEXUS AI theme =====
- * Light theme is the default (:root). Dark theme is applied via
- * next-themes adding `.dark` to <html>. Both palettes keep the teal
- * (#00d4aa) primary accent so brand identity stays consistent.
- *
+/* ===== NEXUS AI theme (dark, teal accent) — the only theme =====
  * Custom semantic vars used by NEXUS components:
- *   --nexus-bg          page background (was #060b14 in dark)
- *   --nexus-surface     sidebar / panel background (was #080d18)
- *   --nexus-surface-2   darker input surface (was #0c1322)
- *   --nexus-surface-3   card-elevated surface (was #111c2e)
- *   --nexus-border-soft soft border (was border-white/8)
+ *   --nexus-bg          page background
+ *   --nexus-surface     sidebar / panel background
+ *   --nexus-surface-2   darker input surface
+ *   --nexus-surface-3   card-elevated surface
+ *   --nexus-border-soft soft border
  *   --nexus-grid-line   grid pattern line color
  *   --nexus-glow-rgba   rgba() used for glow effects
  */
 :root {
   --radius: 0.625rem;
-
-  /* Light theme — clean, airy, keeps teal accent */
-  --background: #f6f8fb;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #00b894;
-  --primary-foreground: #ffffff;
-  --secondary: #eef2f7;
-  --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #00b894;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --border: #e2e8f0;
-  --input: #f1f5f9;
-  --ring: #00b894;
-  --chart-1: #00b894;
-  --chart-2: #0ea5e9;
-  --chart-3: #f59e0b;
-  --chart-4: #8b5cf6;
-  --chart-5: #ec4899;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #00b894;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1f5f9;
-  --sidebar-accent-foreground: #0f172a;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #00b894;
-
-  /* NEXUS semantic surfaces (light) */
-  --nexus-bg: #f6f8fb;
-  --nexus-surface: #ffffff;
-  --nexus-surface-2: #f1f5f9;
-  --nexus-surface-3: #ffffff;
-  --nexus-border-soft: rgba(15, 23, 42, 0.08);
-  --nexus-grid-line: rgba(15, 23, 42, 0.06);
-  --nexus-glow-rgba: 0, 184, 148;
-  --nexus-glow-strength: 0.18;
-}
-
-.dark {
-  /* Dark theme — original NEXUS sci-fi aesthetic */
   --background: #060b14;
   --foreground: #e2e8f0;
   --card: #111c2e;
@@ -143,7 +92,7 @@
   --sidebar-border: #1a2a40;
   --sidebar-ring: #00d4aa;
 
-  /* NEXUS semantic surfaces (dark) */
+  /* NEXUS semantic surfaces (dark — only theme) */
   --nexus-bg: #060b14;
   --nexus-surface: #080d18;
   --nexus-surface-2: #0c1322;

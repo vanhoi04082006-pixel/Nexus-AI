@@ -39,6 +39,7 @@ model Project {
   activityLogs  ActivityLog[]
   notifications Notification[]
   agentConfigs  AgentConfig[]
+  mailEmails    Email[]
 }
 
 /// Long-term memory cache for a project.
@@ -214,19 +215,50 @@ model ActivityLog {
   @@index([type])
 }
 
-// Notifications — bell icon alerts (edit proposals, task completions, etc.)
+// Notifications — bell icon alerts (task completions, proposals, mails, deadlines, etc.)
+// Per-user read tracking is done via NotificationRead (one row per reader).
+// recipientEmail: null = broadcast to everyone in the project; otherwise targeted.
 model Notification {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type      String   // EDIT_PROPOSAL | TASK_COMPLETED | TASK_ASSIGNED | PIPELINE_DONE | INIT_DONE | REFINE_DONE
-  title     String
-  message   String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type          String   // TASK_COMPLETED | TASK_STATUS_CHANGED | PROPOSAL_CREATED | REQUIREMENT_EDITED | DOC_UPLOADED | COMMENT | AI_DONE | AI_ERROR | DEADLINE_SOON | TASK_ASSIGNED | MAIL_RECEIVED | PROJECT_INVITE | APPROVAL_REQUEST | ACTIVITY
+  title         String
+  message       String   @default("")
+  // Enriched fields for the Detail Panel
+  senderName    String   @default("")   // who/what triggered it (member name or "AI Agent 03")
+  senderRole    String   @default("")   // member role or "AI" / "SYSTEM"
+  recipientEmail String? // null = broadcast to whole project; otherwise a specific user's email
+  priority      String   @default("normal") // low | normal | high | urgent
+  relatedTaskId String?  // optional task reference
+  relatedTaskTitle String @default("")
+  relatedMailId String?  // optional email reference
+  actionUrl     String   @default("")   // link to navigate to (e.g. "/?p=ID&token=TOKEN")
+  actionLabel   String   @default("")   // button label e.g. "Mở Task", "Đọc Email"
+  extra         String   @default("{}") // JSON for any additional context
+  // Legacy field kept for backward compat — not used for per-user read tracking
+  read          Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  readBy        NotificationRead[]
 
   @@index([projectId])
-  @@index([read])
+  @@index([recipientEmail])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Per-user read receipt for notifications.
+// A notification is "unread" for a user when no NotificationRead row exists.
+model NotificationRead {
+  id            String   @id @default(cuid())
+  notificationId String
+  notification  Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  readerEmail   String   // email of the user who read it (leader or member)
+  readAt        DateTime @default(now())
+
+  @@unique([notificationId, readerEmail])
+  @@index([readerEmail])
 }
 
 // Agent configuration — customizable AI agents
@@ -271,4 +303,93 @@ model Template {
   createdAt   DateTime @default(now())
 
   @@index([category])
+}
+
+// ===== MAIL SYSTEM =====
+// Email stores the actual email content (one row per email sent).
+// Per-user state (folder, read, starred) is in Mailbox.
+model Email {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromEmail   String
+  fromName    String   @default("")
+  // JSON arrays of email addresses (SQLite has no native array)
+  toEmails    String   @default("[]")  // JSON: ["a@x.com","b@y.com"]
+  ccEmails    String   @default("[]")
+  bccEmails   String   @default("[]")
+  subject     String
+  bodyHtml    String   @default("")
+  bodyText    String   @default("")
+  type        String   @default("COMPOSE") // COMPOSE | INVITATION | TASK_ASSIGNED | REMINDER | REPLY | FORWARD
+  // SMTP delivery status
+  smtpStatus  String   @default("pending") // pending | sent | failed | logged_only
+  smtpError   String?
+  smtpMessageId String?
+  // Threading: reply/forward chain
+  parentEmailId String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attachments  EmailAttachment[]
+  mailboxes    Mailbox[]
+  readReceipts MailRead[]
+
+  @@index([projectId])
+  @@index([fromEmail])
+  @@index([parentEmailId])
+  @@index([createdAt])
+}
+
+// Email attachment — stored as base64 content (SQLite blob alternative)
+model EmailAttachment {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  filename    String
+  mimeType    String   @default("application/octet-stream")
+  size        Int      @default(0)   // bytes
+  content     String   // base64-encoded file content
+  createdAt   DateTime @default(now())
+
+  @@index([emailId])
+}
+
+// Per-user mailbox state. One row per (email, user).
+// folder: INBOX | SENT | DRAFT | STARRED | TRASH | ARCHIVE | SPAM
+// (STARRED is a flag; folder is the primary location. We keep folder + isStarred separate
+//  so a starred mail in INBOX stays in INBOX but shows in the Starred view too.)
+model Mailbox {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  userEmail   String   // the user this mailbox row belongs to (leader or member email)
+  folder      String   @default("INBOX") // INBOX | SENT | DRAFT | TRASH | ARCHIVE | SPAM
+  isRead      Boolean  @default(false)
+  isStarred   Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  isTrashed   Boolean  @default(false)
+  readAt      DateTime?
+  trashedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([emailId, userEmail])
+  @@index([userEmail])
+  @@index([folder])
+  @@index([emailId])
+}
+
+// Read receipt audit log (separate from Mailbox.isRead for history tracking)
+model MailRead {
+  id          String   @id @default(cuid())
+  emailId     String
+  email       Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  userEmail   String
+  readAt      DateTime @default(now())
+  via         String   @default("MAILBOX") // MAILBOX | NOTIFICATION
+
+  @@unique([emailId, userEmail])
+  @@index([userEmail])
 }

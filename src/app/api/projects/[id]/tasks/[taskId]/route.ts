@@ -4,6 +4,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
+import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,17 +56,31 @@ export async function PUT(
       include: { member: true },
     });
 
-    // Create notification when task is marked done
-    if (body.status === "done") {
-      await db.notification.create({
-        data: {
-          projectId: id,
-          type: "TASK_COMPLETED",
-          title: `${access.name} hoàn thành task`,
-          message: `"${updated.title}" đã được đánh dấu hoàn thành`,
-        },
-      });
-    }
+    const project = await db.project.findUnique({
+      where: { id },
+      select: { topic: true, leaderEmail: true },
+    });
+
+    // Create + broadcast notification on task status change
+    const isDone = body.status === "done";
+    await createNotification({
+      projectId: id,
+      type: isDone ? "TASK_COMPLETED" : "TASK_STATUS_CHANGED",
+      title: isDone
+        ? `${access.name} đã hoàn thành task`
+        : `${access.name} đổi trạng thái task → ${body.status}`,
+      message: `"${updated.title}" trong dự án ${project?.topic || ""}`,
+      senderName: access.name,
+      senderRole: access.role === "leader" ? "Leader" : (updated.member?.role || "Member"),
+      // Notify the leader (project owner) when a member changes a task
+      recipientEmail: access.role === "member" ? (project?.leaderEmail || null) : null,
+      priority: isDone ? "normal" : "low",
+      relatedTaskId: taskId,
+      relatedTaskTitle: updated.title,
+      actionUrl: `/?p=${id}&token=${token}&tab=tasks`,
+      actionLabel: "Mở Task",
+      extra: { oldStatus: task.status, newStatus: body.status },
+    });
 
     return Response.json({
       task: {

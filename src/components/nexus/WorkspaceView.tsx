@@ -45,7 +45,6 @@ import { AgentHubTab } from "./tabs/AgentHubTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
 import { NotificationBell } from "./NotificationBell";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface NavItem {
   id: string;
@@ -582,7 +581,6 @@ export function WorkspaceView() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <ThemeToggle />
             <NotificationBell />
             {isLeader && (
               <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">

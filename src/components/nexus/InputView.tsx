@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const STRENGTHS = [
   "Backend", "Frontend", "Database", "UI/UX", "Testing", "DevOps",
@@ -264,7 +263,6 @@ export function InputView() {
             >
               ← Lịch sử
             </Button>
-            <ThemeToggle />
           </div>
         </div>
       </header>

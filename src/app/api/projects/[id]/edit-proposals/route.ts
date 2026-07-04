@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
+import { createNotification } from "@/lib/notifications";
 import type { SectionType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -95,14 +96,23 @@ export async function POST(
       include: { member: true },
     });
 
-    // Create notification for leader
-    await db.notification.create({
-      data: {
-        projectId: id,
-        type: "EDIT_PROPOSAL",
-        title: `${access.name} đề xuất chỉnh sửa`,
-        message: `Section "${body.section}": ${body.requestedChange.substring(0, 80)}`,
-      },
+    // Create + broadcast notification for leader
+    const project = await db.project.findUnique({
+      where: { id },
+      select: { leaderEmail: true, topic: true },
+    });
+    await createNotification({
+      projectId: id,
+      type: "PROPOSAL_CREATED",
+      title: `${access.name} đề xuất chỉnh sửa section ${body.section}`,
+      message: body.requestedChange.substring(0, 200),
+      senderName: access.name,
+      senderRole: access.role === "leader" ? "Leader" : (proposal.member?.role || "Member"),
+      recipientEmail: project?.leaderEmail || null,
+      priority: "normal",
+      actionUrl: `/?p=${id}&token=${token}&tab=history`,
+      actionLabel: "Xem Proposal",
+      extra: { section: body.section, proposalId: proposal.id },
     });
 
     return Response.json({

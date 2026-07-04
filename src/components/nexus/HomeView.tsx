@@ -31,7 +31,6 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface ProjectHistoryItem {
   id: string;
@@ -253,7 +252,6 @@ export function HomeView() {
           {/* Right: theme toggle + notifications + new project + avatar */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Theme toggle */}
-            <ThemeToggle />
             {/* Notification bell with real data */}
             <div className="relative">
               <button

@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const ICON_MAP: Record<string, typeof Code2> = {
   Code2, ShoppingBag, Settings, Smartphone, Sparkles, Brain, Terminal, Zap, Cpu, Bot, Activity, Star,
@@ -93,7 +92,6 @@ export function AgentHubView() {
               <h1 className="text-lg font-bold">Agent Hub</h1>
             </div>
           </div>
-          <ThemeToggle />
         </div>
       </header>
 

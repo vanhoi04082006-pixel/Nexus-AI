@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface ProjectHistoryItem {
   id: string;
@@ -171,7 +170,6 @@ export function AllProjectsView() {
           <Button onClick={newProject} className="bg-primary text-primary-foreground nexus-glow">
             <Plus className="w-4 h-4" /> Dự án mới
           </Button>
-          <ThemeToggle />
         </div>
       </header>
 

@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { NeuralBackground } from "@/components/nexus/NeuralBackground";
-import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,18 +32,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Mermaid.js via CDN for reliable UML rendering.
-            Theme-aware: re-initializes with light/dark palette whenever
-            the document theme class changes (next-themes toggles .dark on <html>). */}
+        {/* Mermaid.js via CDN for reliable UML rendering */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              (function() {
-                function mermaidThemeVars(isDark) {
-                  if (isDark) {
-                    return {
+              window.addEventListener('DOMContentLoaded', function() {
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+                s.onload = function() {
+                  if (window.mermaid) {
+                    window.mermaid.initialize({
+                      startOnLoad: false,
                       theme: 'dark',
-                      v: {
+                      themeVariables: {
                         primaryColor: '#131d2e',
                         primaryTextColor: '#e2e8f0',
                         primaryBorderColor: '#00d4aa',
@@ -65,82 +65,31 @@ export default function RootLayout({
                         noteBorderColor: '#00d4aa',
                         noteTextColor: '#e2e8f0',
                         classText: '#e2e8f0'
-                      }
-                    };
+                      },
+                      flowchart: { curve: 'basis', padding: 20 },
+                      sequence: { mirrorActors: false }
+                    });
+                    window.__mermaidReady = true;
+                    window.dispatchEvent(new Event('mermaid-ready'));
                   }
-                  return {
-                    theme: 'default',
-                    v: {
-                      primaryColor: '#f1f5f9',
-                      primaryTextColor: '#0f172a',
-                      primaryBorderColor: '#00b894',
-                      lineColor: '#00b894',
-                      secondaryColor: '#e2e8f0',
-                      tertiaryColor: '#f6f8fb',
-                      background: '#ffffff',
-                      mainBkg: '#f1f5f9',
-                      nodeBorder: '#00b894',
-                      clusterBkg: '#f6f8fb',
-                      titleColor: '#00b894',
-                      edgeLabelBackground: '#ffffff',
-                      actorBkg: '#f1f5f9',
-                      actorBorder: '#00b894',
-                      actorTextColor: '#0f172a',
-                      signalColor: '#0f172a',
-                      noteBkgColor: '#e2e8f0',
-                      noteBorderColor: '#00b894',
-                      noteTextColor: '#0f172a',
-                      classText: '#0f172a'
-                    }
-                  };
-                }
-                function isDarkMode() {
-                  return document.documentElement.classList.contains('dark');
-                }
-                function applyMermaidTheme() {
-                  if (!window.mermaid) return;
-                  var cfg = mermaidThemeVars(isDarkMode());
-                  window.mermaid.initialize({
-                    startOnLoad: false,
-                    theme: cfg.theme,
-                    themeVariables: cfg.v,
-                    flowchart: { curve: 'basis', padding: 20 },
-                    sequence: { mirrorActors: false }
-                  });
-                  window.__mermaidReady = true;
-                  window.dispatchEvent(new Event('mermaid-ready'));
-                  window.dispatchEvent(new Event('mermaid-theme-changed'));
-                }
-                window.__applyMermaidTheme = applyMermaidTheme;
-                window.addEventListener('DOMContentLoaded', function() {
-                  var s = document.createElement('script');
-                  s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-                  s.onload = function() { applyMermaidTheme(); };
-                  document.head.appendChild(s);
-                });
-                // Re-apply when theme toggles (next-themes updates the class on <html>)
-                var obs = new MutationObserver(function() {
-                  if (window.mermaid) applyMermaidTheme();
-                });
-                obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-              })();
+                };
+                document.head.appendChild(s);
+              });
             `,
           }}
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground dark`}
         suppressHydrationWarning
       >
-        <ThemeProvider>
-          {/* Sci-fi neural network background — living AI brain visualization */}
-          <NeuralBackground />
-          {/* Content above background */}
-          <div className="relative z-10">
-            {children}
-          </div>
-          <Toaster />
-        </ThemeProvider>
+        {/* Sci-fi neural network background — living AI brain visualization */}
+        <NeuralBackground />
+        {/* Content above background */}
+        <div className="relative z-10">
+          {children}
+        </div>
+        <Toaster />
       </body>
     </html>
   );
