@@ -30,6 +30,7 @@ import {
   Bell,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
+import { AppSidebar } from "./AppSidebar";
 
 interface ProjectHistoryItem {
   id: string;
@@ -304,60 +305,8 @@ export function HomeView() {
       <div className="flex-1 overflow-hidden">
         <div className="flex h-[calc(100vh-65px)]">
 
-          {/* ===== Left Sidebar ===== */}
-          <aside className="hidden md:flex w-56 flex-col bg-[#080d18]/60 backdrop-blur-xl border-r border-border/30 py-4 px-3 flex-shrink-0">
-            {/* Nav groups */}
-            <div className="flex-1 space-y-5">
-              <div>
-                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Tổng quan</div>
-                <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm bg-primary/12 text-primary transition-colors relative">
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
-                    <Activity className="w-4 h-4" /> Tổng quan
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Dự án</div>
-                <div className="space-y-0.5">
-                  <button onClick={() => setView("all-projects" as never)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <FolderOpen className="w-4 h-4" /> Tất cả dự án
-                  </button>
-                  <button onClick={newProject} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Plus className="w-4 h-4" /> Tạo dự án mới
-                  </button>
-                  <button onClick={() => { toast.info("Templates nằm bên dưới — chọn template để tạo dự án nhanh!"); document.getElementById('templates-section')?.scrollIntoView({ behavior: 'smooth' }); }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Sparkles className="w-4 h-4" /> Templates
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Công cụ</div>
-                <div className="space-y-0.5">
-                  <button onClick={() => setView("agent-hub" as never)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Brain className="w-4 h-4" /> Agent Hub
-                  </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Terminal className="w-4 h-4" /> Knowledge Base
-                  </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Zap className="w-4 h-4" /> Workflow
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">Cài đặt</div>
-                <div className="space-y-0.5">
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Settings className="w-4 h-4" /> Cài đặt chung
-                  </button>
-                  <button onClick={() => {}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all">
-                    <Cpu className="w-4 h-4" /> Tích hợp
-                  </button>
-                </div>
-              </div>
-            </div>
-          </aside>
+          {/* ===== Left Sidebar (shared across views) ===== */}
+          <AppSidebar active="home" />
 
           {/* ===== Main Content (center) ===== */}
           <div className="flex-1 overflow-y-auto nexus-scroll">

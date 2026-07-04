@@ -23,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
+import { AppSidebar } from "./AppSidebar";
 
 const STRENGTHS = [
   "Backend", "Frontend", "Database", "UI/UX", "Testing", "DevOps",
@@ -267,8 +268,10 @@ export function InputView() {
       </header>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto nexus-scroll">
-        <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="flex-1 flex overflow-hidden">
+        <AppSidebar active="input" />
+        <div className="flex-1 overflow-y-auto nexus-scroll">
+          <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="nexus-boot space-y-6">
             {/* Premium Intro with 3D AI Brain + glow */}
             <div className="text-center mb-8 relative">
@@ -680,6 +683,7 @@ export function InputView() {
                 Khởi tạo Dự Án
               </Button>
             </div>
+          </div>
           </div>
         </div>
       </div>

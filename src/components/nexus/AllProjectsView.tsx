@@ -25,6 +25,7 @@ import {
   Archive,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
+import { AppSidebar } from "./AppSidebar";
 
 interface ProjectHistoryItem {
   id: string;
@@ -172,8 +173,10 @@ export function AllProjectsView() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto nexus-scroll">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="flex-1 flex overflow-hidden">
+        <AppSidebar active="all-projects" />
+        <div className="flex-1 overflow-y-auto nexus-scroll">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <div className="flex-1 min-w-[200px] flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-white/8 backdrop-blur-md">
@@ -283,6 +286,7 @@ export function AllProjectsView() {
               })}
             </div>
           )}
+          </div>
         </div>
       </div>
     </main>

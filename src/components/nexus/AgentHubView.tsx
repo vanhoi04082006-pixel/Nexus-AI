@@ -23,6 +23,7 @@ import {
   Bot,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
+import { AppSidebar } from "./AppSidebar";
 
 const ICON_MAP: Record<string, typeof Code2> = {
   Code2, ShoppingBag, Settings, Smartphone, Sparkles, Brain, Terminal, Zap, Cpu, Bot, Activity, Star,
@@ -94,8 +95,10 @@ export function AgentHubView() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto nexus-scroll">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="flex-1 flex overflow-hidden">
+        <AppSidebar active="agent-hub" />
+        <div className="flex-1 overflow-y-auto nexus-scroll">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Stats overview */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 text-center shadow-inner">
@@ -232,6 +235,7 @@ export function AgentHubView() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </main>
