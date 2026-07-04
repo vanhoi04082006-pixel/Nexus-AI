@@ -6,8 +6,8 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
-import { createNotification } from "@/lib/notifications";
-import { NOTIFICATION_SERVICE_PORT } from "@/lib/notifications";
+import { createNotification, NOTIFICATION_SERVICE_PORT } from "@/lib/notifications";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -286,16 +286,22 @@ export async function POST(
       data: { smtpStatus, smtpError, smtpMessageId },
     });
 
-    // 4. Activity log
-    await db.activityLog.create({
-      data: {
+    // 4. Activity log (mail sent / draft saved)
+    try {
+      await logActivity({
         projectId: id,
-        type: "EMAIL_SENT",
+        type: "MAIL_SENT",
         status: smtpStatus === "sent" ? "SUCCESS" : smtpStatus === "failed" ? "FAILED" : "RUNNING",
-        title: `${isDraft ? "Draft saved" : "Mail sent"}: ${body.subject}`,
+        title: `${isDraft ? "Draft saved" : "Mail sent"}: ${fromName} gửi mail: ${body.subject}`,
         details: `To: ${toArr.join(", ")}${ccArr.length ? ` | CC: ${ccArr.join(", ")}` : ""}${bccArr.length ? ` | BCC: ${bccArr.length}` : ""} | SMTP: ${smtpStatus}`,
-      },
-    });
+        actorName: fromName,
+        actorEmail: fromEmail,
+        actorRole: "Leader",
+        relatedMailId: email.id,
+        actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+        actionLabel: "Mở Mailbox",
+      });
+    } catch { /* non-fatal */ }
 
     // 5. Create notifications for each in-project recipient + broadcast realtime
     if (!isDraft) {
@@ -318,6 +324,22 @@ export async function POST(
           actionLabel: "Đọc Email",
           extra: { fromEmail, subject: body.subject },
         });
+        // Log mail-received activity for the dashboard feed (per-recipient row)
+        try {
+          await logActivity({
+            projectId: id,
+            type: "MAIL_RECEIVED",
+            status: "SUCCESS",
+            title: `Email mới từ ${fromName}`,
+            details: `${body.subject} → ${recipient}`,
+            actorName: fromName,
+            actorEmail: fromEmail,
+            actorRole: "Leader",
+            relatedMailId: email.id,
+            actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+            actionLabel: "Đọc Email",
+          });
+        } catch { /* non-fatal */ }
       }
       // Broadcast mail:new to the WS service
       try {

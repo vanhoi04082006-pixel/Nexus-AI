@@ -8,6 +8,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -72,6 +73,22 @@ export async function POST(
         mimeType: att.mimeType,
       });
     }
+
+    // Log upload activity for the dashboard feed
+    try {
+      await logActivity({
+        projectId: id,
+        type: "DOC_UPLOADED",
+        status: "SUCCESS",
+        title: `${access.name} upload ${attachments.length} file`,
+        details: attachments.map((a) => a.filename).join(", "),
+        actorName: access.name,
+        actorEmail: access.email,
+        actorRole: "Leader",
+        actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+        actionLabel: "Mở Mailbox",
+      });
+    } catch { /* non-fatal */ }
 
     return Response.json({ attachments });
   } catch (err) {

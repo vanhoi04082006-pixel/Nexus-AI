@@ -1,7 +1,8 @@
 // NEXUS AI - Access control helpers
 // Resolves who is visiting a project: leader (full edit) or member (view + chat).
 
-import { db } from "./db";
+import { db } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import type { AccessInfo } from "./types";
 
 export async function resolveAccess(
@@ -34,6 +35,21 @@ export async function resolveAccess(
           where: { id: member.id },
           data: { joinedAt: new Date() },
         });
+        // Log member-joined activity (fire-and-forget; safe if it fails)
+        try {
+          await logActivity({
+            projectId,
+            type: "MEMBER_JOINED",
+            status: "SUCCESS",
+            title: `${member.name} tham gia dự án`,
+            details: `${member.email} vừa xác nhận lời mời và tham gia workspace.`,
+            actorName: member.name,
+            actorEmail: member.email,
+            actorRole: "Member",
+            actionUrl: `/?p=${projectId}&token=${token}&tab=members`,
+            actionLabel: "Mở dự án",
+          });
+        } catch { /* non-fatal */ }
       }
       return {
         role: "member",

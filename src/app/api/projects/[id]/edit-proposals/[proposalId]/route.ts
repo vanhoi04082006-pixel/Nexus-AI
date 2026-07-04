@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,6 +44,25 @@ export async function PUT(
       data: { status: body.status },
       include: { member: true },
     });
+
+    // Log proposal-approved/rejected activity for the dashboard feed
+    try {
+      await logActivity({
+        projectId: id,
+        type: body.status === "APPROVED" ? "PROPOSAL_APPROVED" : "PROPOSAL_REJECTED",
+        status: "SUCCESS",
+        title:
+          body.status === "APPROVED"
+            ? `${access!.name} duyệt proposal: ${updated.section}`
+            : `${access!.name} từ chối proposal: ${updated.section}`,
+        details: updated.requestedChange,
+        actorName: access!.name,
+        actorEmail: access!.email,
+        actorRole: "Leader",
+        actionUrl: `/?p=${id}&token=${token}&tab=history`,
+        actionLabel: "Xem Proposal",
+      });
+    } catch { /* non-fatal */ }
 
     return Response.json({
       proposal: {

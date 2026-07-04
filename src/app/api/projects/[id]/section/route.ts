@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
+import { logActivity } from "@/lib/activity";
 import type { SectionType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,22 @@ export async function PUT(
         },
       });
     }
+
+    // Log the project update (section edit) for the dashboard activity feed
+    try {
+      await logActivity({
+        projectId: id,
+        type: "PROJECT_UPDATED",
+        status: "SUCCESS",
+        title: `${access.name} cập nhật dự án`,
+        details: `Cập nhật section ${body.section} (v${updated.version})`,
+        actorName: access.name,
+        actorEmail: access.email,
+        actorRole: "Leader",
+        actionUrl: `/?p=${id}&token=${token}&tab=${body.section}`,
+        actionLabel: "Mở Section",
+      });
+    } catch { /* non-fatal */ }
 
     return Response.json({
       section: updated.type,

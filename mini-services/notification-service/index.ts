@@ -89,6 +89,112 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
     return
   }
 
+  // Broadcast a new activity-log entry → dashboards refresh "Recent Activity" widget.
+  // POST /broadcast-activity { projectId, activity: {...} }
+  if (req.method === 'POST' && req.url === '/broadcast-activity') {
+    let body = ''
+    for await (const chunk of req) body += chunk
+    try {
+      const payload = JSON.parse(body) as {
+        projectId: string
+        activity: Record<string, unknown> & { id: string }
+      }
+      if (!payload.projectId || !payload.activity?.id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'projectId and activity.id required' }))
+        return
+      }
+      // Broadcast to the global dashboard room (for the Home dashboard) AND the project room
+      io.to('dashboard').emit('activity:new', {
+        projectId: payload.projectId,
+        activity: payload.activity,
+        timestamp: new Date().toISOString(),
+      })
+      io.to(`project:${payload.projectId}`).emit('activity:new', {
+        projectId: payload.projectId,
+        activity: payload.activity,
+        timestamp: new Date().toISOString(),
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, broadcast: true }))
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Invalid JSON', details: err instanceof Error ? err.message : 'unknown' }))
+    }
+    return
+  }
+
+  // Broadcast a task update → dashboards refresh "Tasks đang làm" widget.
+  // POST /broadcast-task { projectId, task: {...}, action }
+  if (req.method === 'POST' && req.url === '/broadcast-task') {
+    let body = ''
+    for await (const chunk of req) body += chunk
+    try {
+      const payload = JSON.parse(body) as {
+        projectId: string
+        taskId: string
+        action: string
+        task?: Record<string, unknown>
+      }
+      if (!payload.projectId || !payload.taskId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'projectId and taskId required' }))
+        return
+      }
+      io.to('dashboard').emit('task:update', {
+        projectId: payload.projectId,
+        taskId: payload.taskId,
+        action: payload.action,
+        task: payload.task,
+        timestamp: new Date().toISOString(),
+      })
+      io.to(`project:${payload.projectId}`).emit('task:update', {
+        projectId: payload.projectId,
+        taskId: payload.taskId,
+        action: payload.action,
+        task: payload.task,
+        timestamp: new Date().toISOString(),
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, broadcast: true }))
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Invalid JSON', details: err instanceof Error ? err.message : 'unknown' }))
+    }
+    return
+  }
+
+  // Broadcast a system-status update → dashboard refreshes "NEXUS AI Status" widget.
+  // POST /broadcast-status { subsystem, status, details }
+  if (req.method === 'POST' && req.url === '/broadcast-status') {
+    let body = ''
+    for await (const chunk of req) body += chunk
+    try {
+      const payload = JSON.parse(body) as {
+        subsystem: string
+        status: string
+        details?: string
+      }
+      if (!payload.subsystem || !payload.status) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'subsystem and status required' }))
+        return
+      }
+      io.to('dashboard').emit('status:update', {
+        subsystem: payload.subsystem,
+        status: payload.status,
+        details: payload.details || '',
+        timestamp: new Date().toISOString(),
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, broadcast: true }))
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Invalid JSON', details: err instanceof Error ? err.message : 'unknown' }))
+    }
+    return
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ error: 'Not found' }))
 })
@@ -118,16 +224,26 @@ io.on('connection', (socket: Socket) => {
   console.log(`[${ts()}] [notif:connect] socket=${socket.id}`)
   sessions.set(socket.id, { userEmail: '', rooms: new Set() })
 
-  // join: client emits { projectId, userEmail, token }
-  socket.on('join', (payload: JoinPayload) => {
-    const { projectId, userEmail, token } = payload ?? {}
-    if (!projectId) {
-      socket.emit('error', { message: 'join requires { projectId }' })
-      return
-    }
+  // join: client emits { projectId, userEmail, token, dashboard?: boolean }
+  socket.on('join', (payload: JoinPayload & { dashboard?: boolean }) => {
+    const { projectId, userEmail, token, dashboard } = payload ?? {}
     if (!token) {
       socket.emit('error', { message: 'Token required' })
       socket.disconnect()
+      return
+    }
+
+    // Always join the global dashboard room (Home view widgets — activity/tasks/status)
+    socket.join('dashboard')
+
+    // If dashboard=true only (no projectId), we're done — this is a dashboard-only socket
+    if (dashboard && !projectId) {
+      console.log(`[${ts()}] [notif:join] socket=${socket.id} joined dashboard room (dashboard-only)`)
+      return
+    }
+
+    if (!projectId) {
+      socket.emit('error', { message: 'join requires { projectId } or { dashboard: true }' })
       return
     }
 
@@ -144,6 +260,7 @@ io.on('connection', (socket: Socket) => {
     if (session) {
       session.userEmail = userEmail || ''
       session.rooms.add(projectRoom)
+      session.rooms.add('dashboard')
       if (userEmail) session.rooms.add(`user:${userEmail}`)
     }
 

@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
+import { logActivity } from "@/lib/activity";
 import { publicMember } from "@/app/api/projects/_lib/reconstruct";
 
 export const dynamic = "force-dynamic";
@@ -149,6 +150,26 @@ export async function DELETE(
     if (!requireLeader(access)) {
       return Response.json({ error: "Leader access required to delete" }, { status: 403 });
     }
+
+    // Capture project info BEFORE deleting (so we can log activity with FK intact)
+    const project = await db.project.findUnique({
+      where: { id },
+      select: { topic: true, leaderName: true, leaderEmail: true },
+    });
+
+    // Log the deletion FIRST (project FK must still exist for ActivityLog.projectId)
+    try {
+      await logActivity({
+        projectId: id,
+        type: "PROJECT_DELETED",
+        status: "WARNING",
+        title: `${access?.name || project?.leaderName || "Leader"} xóa dự án`,
+        details: project?.topic || "",
+        actorName: access?.name || project?.leaderName || "",
+        actorEmail: access?.email || project?.leaderEmail || "",
+        actorRole: "Leader",
+      });
+    } catch { /* non-fatal */ }
 
     // Delete project — cascade will delete all related records (members, analyses, tasks, etc.)
     await db.project.delete({

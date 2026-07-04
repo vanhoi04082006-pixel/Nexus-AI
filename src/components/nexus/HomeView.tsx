@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { io, Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,9 +29,93 @@ import {
   Zap,
   Search,
   Bell,
+  FolderPlus,
+  FolderEdit,
+  UserPlus,
+  UserMinus,
+  ListPlus,
+  ListChecks,
+  RefreshCw,
+  Upload,
+  Bot,
+  AlertCircle,
+  CalendarPlus,
+  GitMerge,
+  Github,
+  FileEdit,
+  Check,
+  X,
+  Send,
+  Mail,
+  ListTodo,
+  Database,
+  HardDrive,
+  Boxes,
+  Server,
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
+
+// ===== Activity / Status / Task types =====
+interface ActivityItem {
+  id: string;
+  type: string;
+  status: string;
+  title: string;
+  details: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: string;
+  actorAvatar: string;
+  relatedTaskId: string | null;
+  relatedTaskTitle: string;
+  actionUrl: string;
+  actionLabel: string;
+  icon: string;
+  projectId: string;
+  projectTopic: string;
+  createdAt: string;
+}
+
+interface SystemStatusData {
+  agents: { total: number; online: number; offline: number; busy: number; idle: number; error: number };
+  apiKeys: { total: number; active: number; expired: number; nearQuota: number; provider: string };
+  pipeline: { status: string; currentAgent: string; progress: number; stage: string; projectTopic: string };
+  database: { status: string; details: string };
+  redis: { status: string; details: string };
+  vectorDb: { status: string; details: string };
+  storage: { status: string; details: string };
+}
+
+interface DashboardTask {
+  id: string;
+  title: string;
+  assigneeName: string;
+  memberName: string | null;
+  memberEmail: string | null;
+  role: string;
+  priority: string;
+  sprintName: string;
+  layer: string;
+  status: string;
+  progress: number;
+  deadline: string | null;
+  isOverdue: boolean;
+  isDueSoon: boolean;
+  isAssignedToMe: boolean;
+  projectId: string;
+  projectTopic: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Map activity icon name → lucide component
+const ICON_MAP: Record<string, typeof Activity> = {
+  FolderPlus, FolderEdit, Trash2, UserPlus, UserMinus, ListPlus, ListChecks,
+  RefreshCw, CheckSquare, Upload, Bot, AlertCircle, CalendarPlus, Rocket,
+  GitMerge, Github, FileEdit, Check, X, Send, Mail, ListTodo, Cpu, Activity,
+};
 
 interface ProjectHistoryItem {
   id: string;
@@ -115,6 +200,53 @@ export function HomeView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<{ id: string; type: string; title: string; desc: string; time: string; projectId?: string }[]>([]);
+  // Dashboard widget state
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatusData | null>(null);
+  const [dashboardTasks, setDashboardTasks] = useState<DashboardTask[]>([]);
+  const [taskCounts, setTaskCounts] = useState({ total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
+  const socketRef = useRef<Socket | null>(null);
+
+  // Resolve the current user's token (leader token from access)
+  const userToken = access?.email ? projects[0]?.leaderToken || "" : "";
+
+  const loadActivities = useCallback(async () => {
+    // Find the leader token from the first project (the Home view lists all user's projects)
+    try {
+      const token = projects[0]?.leaderToken;
+      if (!token) return;
+      const resp = await fetch(`/api/dashboard/activity?token=${encodeURIComponent(token)}&limit=15`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setActivities(data.activities || []);
+      }
+    } catch { /* ignore */ }
+  }, [projects]);
+
+  const loadSystemStatus = useCallback(async () => {
+    try {
+      const token = projects[0]?.leaderToken;
+      if (!token) return;
+      const resp = await fetch(`/api/dashboard/status?token=${encodeURIComponent(token)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setSystemStatus(data);
+      }
+    } catch { /* ignore */ }
+  }, [projects]);
+
+  const loadDashboardTasks = useCallback(async () => {
+    try {
+      const token = projects[0]?.leaderToken;
+      if (!token) return;
+      const resp = await fetch(`/api/dashboard/tasks?token=${encodeURIComponent(token)}&filter=all`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setDashboardTasks(data.tasks || []);
+        setTaskCounts(data.counts || { total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
+      }
+    } catch { /* ignore */ }
+  }, [projects]);
 
   useEffect(() => {
     loadProjects();
@@ -123,6 +255,46 @@ export function HomeView() {
     const notifInterval = setInterval(loadNotifications, 30000);
     return () => clearInterval(notifInterval);
   }, []);
+
+  // Load dashboard widgets once projects are available
+  useEffect(() => {
+    if (projects.length > 0) {
+      loadActivities();
+      loadSystemStatus();
+      loadDashboardTasks();
+    }
+  }, [projects, loadActivities, loadSystemStatus, loadDashboardTasks]);
+
+  // Realtime WebSocket for dashboard widgets (activity:new, task:update, status:update)
+  useEffect(() => {
+    const token = projects[0]?.leaderToken;
+    if (!token) return;
+    const socket = io("/?XTransformPort=3002", { transports: ["websocket", "polling"] });
+    socketRef.current = socket;
+    socket.on("connect", () => {
+      socket.emit("join", { dashboard: true, token });
+    });
+    socket.on("activity:new", () => {
+      loadActivities();
+    });
+    socket.on("task:update", () => {
+      loadDashboardTasks();
+    });
+    socket.on("status:update", () => {
+      loadSystemStatus();
+    });
+    // Polling fallback (every 20s) in case WS misses an event
+    const interval = setInterval(() => {
+      loadActivities();
+      loadDashboardTasks();
+      loadSystemStatus();
+    }, 20000);
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+      clearInterval(interval);
+    };
+  }, [projects, loadActivities, loadDashboardTasks, loadSystemStatus]);
 
   async function loadNotifications() {
     try {
@@ -208,6 +380,48 @@ export function HomeView() {
   function fmtDate(iso: string): string {
     return new Date(iso).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });
   }
+
+  function fmtActivityTime(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return "vừa xong";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}p trước`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h trước`;
+    if (diff < 7 * 86400000) return `${Math.floor(diff / 86400000)} ngày trước`;
+    return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  }
+
+  function fmtDeadline(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+    if (diffDays < 0) return `${Math.abs(diffDays)} ngày quá hạn`;
+    if (diffDays === 0) return "Hôm nay";
+    if (diffDays === 1) return "Ngày mai";
+    if (diffDays < 7) return `${diffDays} ngày nữa`;
+    return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  }
+
+  // Pipeline status color mapping (text + dot)
+  const PIPELINE_COLOR: Record<string, string> = {
+    ready: "text-emerald-400",
+    running: "text-cyan-400",
+    paused: "text-amber-400",
+    failed: "text-red-400",
+    deploying: "text-purple-400",
+    success: "text-emerald-400",
+  };
+  const PIPELINE_DOT: Record<string, string> = {
+    ready: "bg-emerald-400",
+    running: "bg-cyan-400",
+    paused: "bg-amber-400",
+    failed: "bg-red-400",
+    deploying: "bg-purple-400",
+    success: "bg-emerald-400",
+  };
 
   // Calculate overall stats
   const totalMembers = projects.reduce((sum, p) => sum + p.memberCount, 0);
@@ -560,73 +774,194 @@ export function HomeView() {
                 </div>
               </div>
 
-              {/* Recent activity */}
+              {/* Recent activity — REAL data from ActivityLog */}
               <div className="mb-6">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-3">Hoạt động gần đây</h3>
-                <div className="space-y-2">
-                  {projects.slice(0, 5).map((p, i) => {
-                    const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
-                    const AVATAR_COLORS = ["from-cyan-500/30 to-blue-600/15 text-cyan-300", "from-emerald-500/30 to-teal-600/15 text-emerald-300", "from-purple-500/30 to-indigo-600/15 text-purple-300", "from-amber-400/30 to-orange-600/15 text-amber-300", "from-rose-500/30 to-pink-600/15 text-rose-300"];
-                    return (
-                      <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-card/30 hover:bg-card/50 cursor-pointer transition-colors" onClick={() => openProject(p)}>
-                        <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
-                          {p.topic.charAt(0).toUpperCase()}
+                <div className="space-y-2 max-h-72 overflow-y-auto nexus-scroll">
+                  {activities.length === 0 ? (
+                    <div className="px-2 py-6 text-center">
+                      <Activity className="w-6 h-6 text-muted-foreground/30 mx-auto mb-1.5" />
+                      <p className="text-[10px] text-muted-foreground">Chưa có hoạt động</p>
+                    </div>
+                  ) : (
+                    activities.map((a) => {
+                      const Icon = ICON_MAP[a.icon] || Activity;
+                      const AVATAR_COLORS = [
+                        "from-cyan-500/30 to-blue-600/15 text-cyan-300",
+                        "from-emerald-500/30 to-teal-600/15 text-emerald-300",
+                        "from-purple-500/30 to-indigo-600/15 text-purple-300",
+                        "from-amber-400/30 to-orange-600/15 text-amber-300",
+                        "from-rose-500/30 to-pink-600/15 text-rose-300",
+                      ];
+                      const colorIdx = (a.actorName?.charCodeAt(0) || 0) % AVATAR_COLORS.length;
+                      const initial = (a.actorName || a.projectTopic || "?").charAt(0).toUpperCase();
+                      return (
+                        <div
+                          key={a.id}
+                          className="flex items-start gap-2.5 p-2 rounded-lg bg-card/30 hover:bg-card/50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            if (a.actionUrl) {
+                              const url = new URL(a.actionUrl, window.location.origin);
+                              const pId = url.searchParams.get("p");
+                              const pToken = url.searchParams.get("token");
+                              if (pId && pToken) {
+                                const proj = projects.find((p) => p.id === pId);
+                                if (proj) openProject(proj);
+                              }
+                            } else {
+                              const proj = projects.find((p) => p.id === a.projectId);
+                              if (proj) openProject(proj);
+                            }
+                          }}
+                        >
+                          <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${AVATAR_COLORS[colorIdx]} flex items-center justify-center text-[10px] font-bold flex-shrink-0`}>
+                            {initial}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <Icon className={`w-3 h-3 flex-shrink-0 ${a.status === "FAILED" ? "text-red-400" : "text-primary"}`} />
+                              <p className="text-[11px] font-medium truncate">{a.actorName || "Hệ thống"}</p>
+                            </div>
+                            <p className="text-[10px] text-foreground/80 line-clamp-2 leading-tight">{a.title}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {a.projectTopic && <span className="text-[9px] text-muted-foreground truncate">Dự án: {a.projectTopic}</span>}
+                              <span className="text-[9px] text-muted-foreground/50 ml-auto flex-shrink-0">{fmtActivityTime(a.createdAt)}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-medium truncate">{p.topic}</p>
-                          <p className="text-[9px] text-muted-foreground">{status.text} · {fmtDate(p.updatedAt)}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* NEXUS AI Status */}
+              {/* NEXUS AI Status — REAL system status */}
               <div className="mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-cyan-500/5 border border-border/50 p-4 nexus-hud backdrop-blur-md shadow-lg shadow-primary/5">
                 <div className="flex items-center gap-2 mb-2">
                   <Activity className="w-4 h-4 text-primary" />
                   <span className="text-xs font-semibold text-primary">NEXUS AI Status</span>
                 </div>
                 <div className="space-y-1.5">
+                  {/* AI Agents */}
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">AI Agents</span>
-                    <span className="font-mono text-emerald-400">10/10 Online</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><Bot className="w-2.5 h-2.5" /> AI Agents</span>
+                    <span className="font-mono text-emerald-400">
+                      {systemStatus ? `${systemStatus.agents.online + systemStatus.agents.busy}/${systemStatus.agents.total}` : "—"} Online
+                    </span>
                   </div>
+                  {systemStatus && systemStatus.agents.busy > 0 && (
+                    <div className="flex items-center justify-between text-[9px] pl-4">
+                      <span className="text-muted-foreground/60">└ Busy</span>
+                      <span className="font-mono text-amber-400">{systemStatus.agents.busy}</span>
+                    </div>
+                  )}
+                  {systemStatus && systemStatus.agents.error > 0 && (
+                    <div className="flex items-center justify-between text-[9px] pl-4">
+                      <span className="text-muted-foreground/60">└ Error</span>
+                      <span className="font-mono text-red-400">{systemStatus.agents.error}</span>
+                    </div>
+                  )}
+                  {/* API Keys */}
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">API Keys</span>
-                    <span className="font-mono text-primary">18 Active</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><Zap className="w-2.5 h-2.5" /> API Keys</span>
+                    <span className="font-mono text-primary">
+                      {systemStatus ? `${systemStatus.apiKeys.active} Active` : "—"}
+                    </span>
                   </div>
+                  {systemStatus && systemStatus.apiKeys.nearQuota > 0 && (
+                    <div className="flex items-center justify-between text-[9px] pl-4">
+                      <span className="text-muted-foreground/60">└ Near quota</span>
+                      <span className="font-mono text-amber-400">{systemStatus.apiKeys.nearQuota}</span>
+                    </div>
+                  )}
+                  {/* Pipeline */}
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">Pipeline</span>
-                    <span className="font-mono text-cyan-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Ready
+                    <span className="text-muted-foreground flex items-center gap-1"><Cpu className="w-2.5 h-2.5" /> Pipeline</span>
+                    <span className={`font-mono flex items-center gap-1 ${PIPELINE_COLOR[systemStatus?.pipeline.status || "ready"] || "text-cyan-400"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${PIPELINE_DOT[systemStatus?.pipeline.status || "ready"] || "bg-emerald-400"} ${(systemStatus?.pipeline.status === "running" || systemStatus?.pipeline.status === "deploying") ? "animate-pulse" : ""}`} />
+                      {systemStatus?.pipeline.status || "Ready"}
+                    </span>
+                  </div>
+                  {systemStatus && systemStatus.pipeline.status === "running" && systemStatus.pipeline.currentAgent && (
+                    <div className="text-[9px] text-muted-foreground/70 pl-4 truncate">└ {systemStatus.pipeline.currentAgent} ({systemStatus.pipeline.progress}%)</div>
+                  )}
+                  {/* Database */}
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground flex items-center gap-1"><Database className="w-2.5 h-2.5" /> Database</span>
+                    <span className={`font-mono ${systemStatus?.database.status === "connected" ? "text-emerald-400" : "text-red-400"}`}>
+                      {systemStatus?.database.status || "—"}
+                    </span>
+                  </div>
+                  {/* Redis */}
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground flex items-center gap-1"><Server className="w-2.5 h-2.5" /> Redis</span>
+                    <span className={`font-mono ${systemStatus?.redis.status === "connected" ? "text-emerald-400" : "text-muted-foreground/60"}`}>
+                      {systemStatus?.redis.status || "—"}
+                    </span>
+                  </div>
+                  {/* Storage */}
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground flex items-center gap-1"><HardDrive className="w-2.5 h-2.5" /> Storage</span>
+                    <span className={`font-mono ${systemStatus?.storage.status === "connected" ? "text-emerald-400" : "text-red-400"}`}>
+                      {systemStatus?.storage.status || "—"}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Tasks đang làm */}
-              {heroProject && heroProject.taskCount > 0 && (
-                <div className="mt-auto rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckSquare className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-semibold text-primary">Tasks đang làm</span>
-                    <span className="text-[10px] text-muted-foreground ml-auto">{heroProject.taskCount} total</span>
-                  </div>
-                  <div className="space-y-2">
-                    {["Database", "API Endpoints", "Frontend UI", "Testing"].map((task, i) => (
-                      <div key={task} className="flex items-center gap-2 text-xs">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${i < 2 ? "bg-emerald-500/20 border-emerald-500/40" : "border-border/40"}`}>
-                          {i < 2 && <CheckSquare className="w-2.5 h-2.5 text-emerald-400" />}
-                        </div>
-                        <span className={i < 2 ? "text-muted-foreground line-through" : "text-foreground/80"}>{task}</span>
-                        {i < 2 && <span className="ml-auto text-[9px] text-emerald-400 font-mono">done</span>}
-                      </div>
-                    ))}
-                  </div>
+              {/* Tasks đang làm — REAL task data */}
+              <div className="mt-auto rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckSquare className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold text-primary">Tasks đang làm</span>
+                  <span className="text-[10px] text-muted-foreground ml-auto">{taskCounts.total} total</span>
                 </div>
-              )}
+                {/* Quick stats */}
+                <div className="flex items-center gap-2 mb-3 text-[9px]">
+                  {taskCounts.inProgress > 0 && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400">{taskCounts.inProgress} doing</span>}
+                  {taskCounts.dueSoon > 0 && <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">{taskCounts.dueSoon} due soon</span>}
+                  {taskCounts.overdue > 0 && <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">{taskCounts.overdue} overdue</span>}
+                  {taskCounts.total === 0 && <span className="text-muted-foreground">Chưa có task</span>}
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto nexus-scroll">
+                  {dashboardTasks.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground text-center py-2">Không có task đang làm</p>
+                  ) : (
+                    dashboardTasks.slice(0, 6).map((t) => {
+                      const proj = projects.find((p) => p.id === t.projectId);
+                      return (
+                        <div
+                          key={t.id}
+                          className="flex items-start gap-2 text-xs p-2 rounded-lg hover:bg-card/40 cursor-pointer transition-colors"
+                          onClick={() => { if (proj) openProject(proj); }}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 ${t.status === "done" ? "bg-emerald-500/20 border-emerald-500/40" : t.isOverdue ? "border-red-500/40 bg-red-500/10" : "border-border/40"}`}>
+                            {t.status === "done" && <CheckSquare className="w-2.5 h-2.5 text-emerald-400" />}
+                            {t.isOverdue && t.status !== "done" && <Clock className="w-2.5 h-2.5 text-red-400" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-medium truncate">{t.title}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[9px] text-muted-foreground">{t.memberName || t.assigneeName || "Unassigned"}</span>
+                              {t.sprintName && <span className="text-[9px] text-muted-foreground/60">· {t.sprintName}</span>}
+                              <span className={`text-[9px] font-mono ml-auto ${t.isOverdue ? "text-red-400" : t.isDueSoon ? "text-amber-400" : "text-muted-foreground/60"}`}>
+                                {t.deadline ? fmtDeadline(t.deadline) : ""}
+                              </span>
+                            </div>
+                            {/* Progress bar */}
+                            <div className="h-1 bg-border/40 rounded-full overflow-hidden mt-1">
+                              <div
+                                className={`h-full transition-all ${t.status === "done" ? "bg-emerald-400" : t.isOverdue ? "bg-red-400" : "bg-primary"}`}
+                                style={{ width: `${t.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </aside>
           )}
         </div>

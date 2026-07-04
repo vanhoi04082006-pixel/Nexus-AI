@@ -7,6 +7,12 @@ import { generateTasks } from "@/lib/ai";
 import { resolveAccess, requireLeader } from "@/lib/access";
 import { sendTaskAssignedEmail } from "@/lib/email";
 import {
+  logActivity,
+  updateAgentStatus,
+  updatePipelineStatus,
+  refreshTaskStatistics,
+} from "@/lib/activity";
+import {
   reconstructInput,
   reconstructResult,
 } from "@/app/api/projects/_lib/reconstruct";
@@ -81,6 +87,12 @@ export async function POST(
       provider: "pipeline",
       message: `▶ INIT STARTED — project: "${project.topic}" — ${input.members.length} member(s)`,
     });
+
+    // Mark pipeline as running + AI agent busy (for the live dashboard)
+    try {
+      await updatePipelineStatus(id, "running", "Sprint Planner", 10, "TASK_GEN");
+      await updateAgentStatus("TASK", "Sprint Planner", "Task Generator", "busy", "Generating todolist from sprint plan", id);
+    } catch { /* non-fatal */ }
 
     // Small delay to ensure progress tracker is visible to polling
     await new Promise((r) => setTimeout(r, 100));
@@ -211,17 +223,44 @@ export async function POST(
               provider: "pipeline",
               message: `✅ INIT COMPLETED — ${savedCount} task(s) đã lưu, email đã gửi`,
             });
-            // Save activity log
+            // Refresh cached task statistics for the dashboard
+            try { await refreshTaskStatistics(id); } catch { /* non-fatal */ }
+            // Mark AI agent as online again + pipeline as success
             try {
-              await db.activityLog.create({
-                data: {
-                  projectId: id,
-                  type: "INIT",
-                  status: "SUCCESS",
-                  title: `Sinh todolist thành công`,
-                  details: `✅ ${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên. Tasks phân bổ theo vai trò: ${input.members.map((m) => `${m.name}(${tasks.filter((t) => t.assigneeName === m.name).length})`).join(", ")}`,
-                  agentId: "TASK",
-                },
+              await updateAgentStatus("TASK", "Sprint Planner", "Task Generator", "online", "Idle", id);
+              await updatePipelineStatus(id, "success", "Sprint Planner", 100, "TASK_GEN");
+            } catch { /* non-fatal */ }
+            // Save activity logs: SPRINT_CREATED + TASK_CREATED + INIT done
+            try {
+              await logActivity({
+                projectId: id,
+                type: "SPRINT_CREATED",
+                status: "SUCCESS",
+                title: `Sprint được tạo`,
+                details: `Sprint plan đã được áp dụng cho ${savedCount} task.`,
+                actorName: "Sprint Planner",
+                actorRole: "AI Agent",
+                agentId: "TASK",
+              });
+              await logActivity({
+                projectId: id,
+                type: "TASK_CREATED",
+                status: "SUCCESS",
+                title: `${savedCount} tasks được tạo`,
+                details: `${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên.`,
+                actorName: "Sprint Planner",
+                actorRole: "AI Agent",
+                agentId: "TASK",
+              });
+              await logActivity({
+                projectId: id,
+                type: "AI_AGENT_DONE",
+                status: "SUCCESS",
+                title: `Sinh todolist thành công`,
+                details: `✅ ${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên. Tasks phân bổ theo vai trò: ${input.members.map((m) => `${m.name}(${tasks.filter((t) => t.assigneeName === m.name).length})`).join(", ")}`,
+                actorName: "Sprint Planner",
+                actorRole: "AI Agent",
+                agentId: "TASK",
               });
             } catch { /* non-fatal */ }
           })
@@ -234,17 +273,22 @@ export async function POST(
               provider: "pipeline",
               message: `❌ INIT FAILED — ${msg}`,
             });
-            // Save activity log
+            // Mark AI agent as error + pipeline as failed (for the live dashboard)
             try {
-              await db.activityLog.create({
-                data: {
-                  projectId: id,
-                  type: "INIT",
-                  status: "FAILED",
-                  title: `Sinh todolist thất bại`,
-                  details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
-                  agentId: "TASK",
-                },
+              await updateAgentStatus("TASK", "Sprint Planner", "Task Generator", "error", `Failed: ${msg}`, id);
+              await updatePipelineStatus(id, "failed", "Sprint Planner", 0, "TASK_GEN", msg);
+            } catch { /* non-fatal */ }
+            // Save activity log (AI agent error)
+            try {
+              await logActivity({
+                projectId: id,
+                type: "AI_AGENT_ERROR",
+                status: "FAILED",
+                title: `Sinh todolist thất bại`,
+                details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+                actorName: "Sprint Planner",
+                actorRole: "AI Agent",
+                agentId: "TASK",
               });
             } catch { /* non-fatal */ }
             finishInitialize(id, undefined, msg);

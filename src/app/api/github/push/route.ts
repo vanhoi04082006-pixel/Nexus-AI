@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { resolveAccess, requireLeader } from "@/lib/access";
 import { pushProjectToGitHub } from "@/lib/github";
+import { logActivity, updatePipelineStatus } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,12 +27,44 @@ export async function POST(req: Request) {
 
   try {
     const result = await pushProjectToGitHub(projectId);
+    // Log successful deploy + mark pipeline as deploying → success
+    try {
+      await updatePipelineStatus(projectId, "deploying", "Git / DevOps", 90, "DEPLOY");
+      await logActivity({
+        projectId,
+        type: "DEPLOY",
+        status: "SUCCESS",
+        title: `Push lên GitHub`,
+        details: `${result.repoName} (${result.fileCount} files, commit ${result.commitSha.substring(0, 7)}${result.prUrl ? `, PR: ${result.prUrl}` : ""})`,
+        actorName: access?.name || "Leader",
+        actorEmail: access?.email,
+        actorRole: "Leader",
+        actionUrl: result.repoUrl,
+        actionLabel: "Mở Repo",
+      });
+      await updatePipelineStatus(projectId, "success", "Git / DevOps", 100, "DEPLOY");
+    } catch { /* non-fatal */ }
     return Response.json({
       success: true,
       ...result,
     });
   } catch (err) {
     console.error("[GitHub push] Error:", err);
+    // Log failed deploy
+    try {
+      const errMsg = err instanceof Error ? err.message : "Push failed";
+      await logActivity({
+        projectId,
+        type: "DEPLOY",
+        status: "FAILED",
+        title: `Push lên GitHub thất bại`,
+        details: errMsg,
+        actorName: access?.name || "Leader",
+        actorEmail: access?.email,
+        actorRole: "Leader",
+      });
+      await updatePipelineStatus(projectId, "failed", "Git / DevOps", 0, "DEPLOY", errMsg);
+    } catch { /* non-fatal */ }
     return Response.json(
       {
         success: false,

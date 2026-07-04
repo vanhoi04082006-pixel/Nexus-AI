@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { runPipeline } from "@/lib/ai";
 import { sendInvitationEmails } from "@/lib/email";
+import { logActivity, updatePipelineStatus } from "@/lib/activity";
 import { SECTION_KEYS } from "@/app/api/projects/_lib/reconstruct";
 import {
   initProgress,
@@ -152,6 +153,10 @@ export async function POST(req: Request) {
     agentId: "PIPELINE",
     message: `▶ PIPELINE STARTED — topic: "${input.topic}" — ${input.members.length} member(s)`,
   });
+  // Mark pipeline as running (for the live dashboard)
+  try {
+    await updatePipelineStatus(project.id, "running", "Initializing", 5, "ANALYSIS");
+  } catch { /* non-fatal */ }
 
   // ===== Run pipeline IN THE BACKGROUND =====
   process.nextTick(() => {
@@ -250,23 +255,25 @@ export async function POST(req: Request) {
             agentId: "PIPELINE",
             message: `✅ PIPELINE COMPLETED — all sections saved, invitations sent`,
           });
-          // Save activity log
+          // Save activity log (pipeline success = project ready)
           try {
             const p = getProgress(project.id);
             const doneCount = p?.agents.filter((a) => a.status === "done").length || 0;
             const failedCount = p?.agents.filter((a) => a.status === "failed").length || 0;
             const logCount = p?.logs.length || 0;
-            await db.activityLog.create({
-              data: {
-                projectId: project.id,
-                type: "PIPELINE",
-                status: "SUCCESS",
-                title: `Pipeline hoàn thành — 10 AI Agents`,
-                details: `✅ ${doneCount}/10 agents hoàn thành${failedCount > 0 ? `, ${failedCount} fallback` : ""}. Tất cả sections đã lưu. Email lời mời đã gửi ${memberRows.length} thành viên. ${logCount} log lines.`,
-                agentId: "PIPELINE",
-                logCount,
-              },
+            await logActivity({
+              projectId: project.id,
+              type: "PROJECT_CREATED",
+              status: "SUCCESS",
+              title: `Pipeline hoàn thành — 10 AI Agents`,
+              details: `✅ ${doneCount}/10 agents hoàn thành${failedCount > 0 ? `, ${failedCount} fallback` : ""}. Tất cả sections đã lưu. Email lời mời đã gửi ${memberRows.length} thành viên. ${logCount} log lines.`,
+              actorName: input.leaderName,
+              actorEmail: input.leaderEmail,
+              actorRole: "Leader",
+              agentId: "PIPELINE",
+              logCount,
             });
+            await updatePipelineStatus(project.id, "success", "", 100, "DONE");
           } catch { /* non-fatal */ }
         })
         .catch(async (err) => {
@@ -278,18 +285,20 @@ export async function POST(req: Request) {
             agentId: "PIPELINE",
             message: `❌ PIPELINE FAILED — ${msg}`,
           });
-          // Save activity log
+          // Save activity log (pipeline failure = project creation failed)
           try {
-            await db.activityLog.create({
-              data: {
-                projectId: project.id,
-                type: "PIPELINE",
-                status: "FAILED",
-                title: `Pipeline thất bại`,
-                details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
-                agentId: "PIPELINE",
-              },
+            await logActivity({
+              projectId: project.id,
+              type: "AI_AGENT_ERROR",
+              status: "FAILED",
+              title: `Pipeline thất bại`,
+              details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+              actorName: input.leaderName,
+              actorEmail: input.leaderEmail,
+              actorRole: "Leader",
+              agentId: "PIPELINE",
             });
+            await updatePipelineStatus(project.id, "failed", "", 0, "PIPELINE", msg);
           } catch { /* non-fatal */ }
           failProgress(project.id, msg);
         });

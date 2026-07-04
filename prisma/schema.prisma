@@ -196,23 +196,120 @@ model EmailLog {
   @@index([projectId])
 }
 
-// Activity log: stores all pipeline/init/refine logs + success/failure events
+// Activity log: stores all pipeline/init/refine logs + success/failure events.
+// Enriched with actor info + relations so the dashboard "Recent Activity" widget
+// can show who did what, on which project/task, with a clickable link.
 model ActivityLog {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type      String   // PIPELINE | INIT | REFINE | TASK_GEN | SECTION_EDIT | GITHUB_PUSH | EMAIL_SENT
-  status    String   // SUCCESS | FAILED | RUNNING | WARNING
-  title     String   // Short summary (vd: "Pipeline hoàn thành", "Sinh todolist thất bại")
-  details   String   @default("") // Long description (vd: "10 agents done, 0 failed, 25 tasks generated")
-  agentId   String?  // "01".."10" | "PIPELINE" | "TASK" | "REFINE" (nullable for non-agent events)
-  model     String?  // Last model used (nullable)
-  duration  Int?     // milliseconds (nullable)
-  logCount  Int?     // Number of log lines (nullable, for pipeline/init/refine)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type        String   // PROJECT_CREATED | PROJECT_UPDATED | PROJECT_DELETED | MEMBER_JOINED | MEMBER_LEFT | TASK_CREATED | TASK_UPDATED | TASK_STATUS_CHANGED | TASK_COMPLETED | DOC_UPLOADED | AI_AGENT_START | AI_AGENT_DONE | AI_AGENT_ERROR | SPRINT_CREATED | DEPLOY | GIT_MERGE | PROPOSAL_CREATED | PROPOSAL_APPROVED | PROPOSAL_REJECTED | MAIL_SENT | MAIL_RECEIVED | PIPELINE | INIT | REFINE | TASK_GEN | SECTION_EDIT | GITHUB_PUSH | EMAIL_SENT
+  status      String   @default("SUCCESS") // SUCCESS | FAILED | RUNNING | WARNING
+  title       String   // Short summary
+  details     String   @default("")
+  // Actor info (who triggered the event)
+  actorName   String   @default("")
+  actorEmail  String   @default("")
+  actorRole   String   @default("") // Leader | Member | AI Agent | System
+  actorAvatar String   @default("") // optional avatar URL or initials
+  // Relations
+  relatedTaskId    String?
+  relatedTaskTitle String   @default("")
+  relatedMailId    String?
+  actionUrl   String   @default("") // click-through link
+  actionLabel String   @default("")
+  icon        String   @default("Activity") // lucide icon name for the activity type
+  // Legacy pipeline/AI fields (nullable, kept for backward compat)
+  agentId     String?
+  model       String?
+  duration    Int?
+  logCount    Int?
+  createdAt   DateTime @default(now())
 
   @@index([projectId])
   @@index([type])
+  @@index([createdAt])
+  @@index([actorEmail])
+}
+
+// Task change history — audit trail of every task mutation.
+model TaskLog {
+  id          String   @id @default(cuid())
+  taskId      String
+  projectId   String
+  action      String   // CREATED | UPDATED | STATUS_CHANGED | COMPLETED | ASSIGNED | DEADLINE_CHANGED
+  oldStatus   String?
+  newStatus   String?
+  actorName   String   @default("")
+  actorEmail  String   @default("")
+  details     String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([taskId])
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+// Live AI agent status — updated whenever an agent starts/finishes/errors.
+// Falls back to AgentConfig if no row exists for an agentId.
+model AgentStatus {
+  id          String   @id @default(cuid())
+  agentId     String   @unique // "01".."10" | custom
+  name        String
+  role        String   @default("")
+  status      String   @default("idle") // online | offline | busy | error | idle
+  currentTask String   @default("") // what it's doing right now
+  projectId   String?
+  lastActiveAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([projectId])
+}
+
+// System status — key/value rows for db/redis/vectorDB/storage.
+// One row per subsystem. status: connected | disconnected | ready | error | etc.
+model SystemStatus {
+  id          String   @id @default(cuid())
+  subsystem   String   @unique // database | redis | vector_db | storage | pipeline
+  status      String   @default("unknown") // connected | disconnected | ready | running | paused | failed | deploying | success | unknown
+  details     String   @default("") // e.g. "SQLite @ /db/custom.db" or "12.4 MB used"
+  metadata    String   @default("{}") // JSON for extra info (usage %, latency, etc.)
+  updatedAt   DateTime @updatedAt
+}
+
+// Pipeline status — one row per running/recent pipeline per project.
+model PipelineStatus {
+  id          String   @id @default(cuid())
+  projectId   String
+  status      String   @default("ready") // ready | running | paused | failed | deploying | success
+  currentAgent String  @default("") // agent currently working
+  progress    Int      @default(0) // 0-100
+  stage       String   @default("") // ANALYSIS | HR | SPRINT | DESIGN | UML | DOCS | GIT | TASK_GEN
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+}
+
+// Task statistics snapshot — cached aggregate per project (refreshed on task changes).
+model TaskStatistic {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  totalTasks      Int      @default(0)
+  doneTasks       Int      @default(0)
+  inProgressTasks Int      @default(0)
+  todoTasks       Int      @default(0)
+  reviewTasks     Int      @default(0)
+  overdueTasks    Int      @default(0)
+  dueSoonTasks    Int      @default(0) // deadline within 24h
+  completionRate  Float    @default(0.0) // doneTasks/totalTasks * 100
+  updatedAt       DateTime @updatedAt
 }
 
 // Notifications — bell icon alerts (task completions, proposals, mails, deadlines, etc.)

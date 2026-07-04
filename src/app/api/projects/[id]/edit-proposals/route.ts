@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
 import { createNotification } from "@/lib/notifications";
+import { logActivity } from "@/lib/activity";
 import type { SectionType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,22 @@ export async function POST(
       actionLabel: "Xem Proposal",
       extra: { section: body.section, proposalId: proposal.id },
     });
+
+    // Log proposal-created activity for the dashboard feed
+    try {
+      await logActivity({
+        projectId: id,
+        type: "PROPOSAL_CREATED",
+        status: "SUCCESS",
+        title: `${access.name} gửi proposal`,
+        details: body.requestedChange,
+        actorName: access.name,
+        actorEmail: access.email,
+        actorRole: access.role === "leader" ? "Leader" : "Member",
+        actionUrl: `/?p=${id}&token=${token}&tab=history`,
+        actionLabel: "Xem Proposal",
+      });
+    } catch { /* non-fatal */ }
 
     return Response.json({
       proposal: {

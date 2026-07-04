@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
 import { createNotification } from "@/lib/notifications";
+import { logActivity, refreshTaskStatistics } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,8 +62,27 @@ export async function PUT(
       select: { topic: true, leaderEmail: true },
     });
 
-    // Create + broadcast notification on task status change
+    // Audit-trail row (TaskLog) for every task mutation
     const isDone = body.status === "done";
+    try {
+      await db.taskLog.create({
+        data: {
+          taskId,
+          projectId: id,
+          action: isDone ? "COMPLETED" : "STATUS_CHANGED",
+          oldStatus: task.status,
+          newStatus: body.status,
+          actorName: access.name,
+          actorEmail: access.email || "",
+          details: `"${updated.title}" → ${body.status}`,
+        },
+      });
+    } catch { /* non-fatal */ }
+
+    // Refresh cached task statistics (for the dashboard task widget)
+    try { await refreshTaskStatistics(id); } catch { /* non-fatal */ }
+
+    // Create + broadcast notification on task status change
     await createNotification({
       projectId: id,
       type: isDone ? "TASK_COMPLETED" : "TASK_STATUS_CHANGED",
@@ -81,6 +101,26 @@ export async function PUT(
       actionLabel: "Mở Task",
       extra: { oldStatus: task.status, newStatus: body.status },
     });
+
+    // Log activity for the dashboard "Recent Activity" feed
+    try {
+      await logActivity({
+        projectId: id,
+        type: isDone ? "TASK_COMPLETED" : "TASK_STATUS_CHANGED",
+        status: "SUCCESS",
+        title: isDone
+          ? `${access.name} hoàn thành task: ${updated.title}`
+          : `${access.name} đổi trạng thái task → ${body.status}`,
+        details: `"${updated.title}" trong dự án ${project?.topic || ""} (từ ${task.status} → ${body.status})`,
+        actorName: access.name,
+        actorEmail: access.email,
+        actorRole: access.role === "leader" ? "Leader" : "Member",
+        relatedTaskId: taskId,
+        relatedTaskTitle: updated.title,
+        actionUrl: `/?p=${id}&token=${token}&tab=tasks`,
+        actionLabel: "Mở Task",
+      });
+    } catch { /* non-fatal */ }
 
     return Response.json({
       task: {
