@@ -144,11 +144,11 @@ export function DesignTab() {
           <h3 className="flex items-center gap-2 text-base font-bold mb-3">
             <FolderTree className="w-4 h-4 text-primary" /> Folder Structure
           </h3>
-          <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden">
-            <div className="flex justify-between items-center px-4 py-2 bg-[#0c1322] border-b border-border">
+          <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden">
+            <div className="flex justify-between items-center px-4 py-2 bg-nexus-surface-2 border-b border-border">
               <span className="text-xs text-muted-foreground font-mono">📁 project-structure</span>
             </div>
-            <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed whitespace-pre" style={{ color: "#c9d1d9" }}>
+            <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed whitespace-pre" style={{ color: "var(--foreground)" }}>
               {esc((r.folderStructure || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
             </pre>
           </div>

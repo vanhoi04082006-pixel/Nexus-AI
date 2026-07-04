@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface ProjectHistoryItem {
   id: string;
@@ -216,9 +217,9 @@ export function HomeView() {
   const overallProgress = projects.length > 0 ? Math.round((completedProjects / projects.length) * 100) : 0;
 
   return (
-    <main className="flex-1 flex flex-col bg-[#060b14]/95 min-h-screen nexus-boot">
+    <main className="flex-1 flex flex-col bg-nexus-bg/95 min-h-screen nexus-boot">
       {/* ===== Top Bar with search + notifications + avatar ===== */}
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-[#060b14]/90 backdrop-blur-2xl">
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-nexus-bg/90 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 flex-shrink-0">
             <div className="relative">
@@ -237,7 +238,7 @@ export function HomeView() {
           </div>
 
           {/* Search bar */}
-          <div className="flex-1 max-w-md hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-white/8 backdrop-blur-md">
+          <div className="flex-1 max-w-md hidden md:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-border/50 backdrop-blur-md">
             <Search className="w-4 h-4 text-muted-foreground/60" />
             <input
               type="text"
@@ -249,13 +250,15 @@ export function HomeView() {
             <kbd className="text-[9px] text-muted-foreground/50 font-mono px-1.5 py-0.5 rounded border border-border/40">⌘K</kbd>
           </div>
 
-          {/* Right: notifications + new project + avatar */}
+          {/* Right: theme toggle + notifications + new project + avatar */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Theme toggle */}
+            <ThemeToggle />
             {/* Notification bell with real data */}
             <div className="relative">
               <button
                 onClick={() => setNotifOpen((v) => !v)}
-                className="relative w-9 h-9 rounded-lg bg-card/40 border border-white/8 flex items-center justify-center hover:border-primary/30 transition-colors"
+                className="relative w-9 h-9 rounded-lg bg-card/40 border border-border/50 flex items-center justify-center hover:border-primary/30 transition-colors"
               >
                 <Bell className="w-4 h-4 text-muted-foreground" />
                 {notifications.length > 0 && (
@@ -265,7 +268,7 @@ export function HomeView() {
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-11 w-80 max-h-96 overflow-y-auto nexus-scroll rounded-2xl bg-[#080d18]/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-primary/10 p-2 z-50">
+                <div className="absolute right-0 top-11 w-80 max-h-96 overflow-y-auto nexus-scroll rounded-2xl bg-nexus-surface/95 backdrop-blur-xl border border-border/60 shadow-2xl shadow-primary/10 p-2 z-50">
                   <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground/60 border-b border-border/30 mb-2">
                     Thông báo
                   </div>
@@ -400,7 +403,7 @@ export function HomeView() {
                           <Button onClick={() => openProject(heroProject)} size="lg" className="bg-gradient-to-r from-primary to-cyan-400 text-primary-foreground hover:opacity-90 nexus-glow-strong rounded-2xl px-6 py-3 text-base shadow-[0_0_30px_rgba(0,212,170,0.3)]">
                             <Rocket className="w-5 h-5" /> Tiếp tục làm việc
                           </Button>
-                          <Button onClick={newProject} variant="secondary" size="lg" className="border-white/10 bg-card/50 backdrop-blur-md rounded-2xl px-6 py-3 text-base">
+                          <Button onClick={newProject} variant="secondary" size="lg" className="border-border/60 bg-card/50 backdrop-blur-md rounded-2xl px-6 py-3 text-base">
                             <Plus className="w-5 h-5" /> Dự án mới
                           </Button>
                         </div>
@@ -444,7 +447,7 @@ export function HomeView() {
                           return (
                             <div
                               key={p.id}
-                              className={`nexus-card-hover rounded-2xl border border-white/5 ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1.5 transition-all`}
+                              className={`nexus-card-hover rounded-2xl border border-border/40 ${borderColor} bg-card/50 backdrop-blur-xl overflow-hidden cursor-pointer group nexus-hud shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1.5 transition-all`}
                               onClick={() => openProject(p)}
                             >
                               {/* Card header with gradient + project image */}
@@ -529,26 +532,26 @@ export function HomeView() {
 
           {/* ===== Right Sidebar — Project Overview ===== */}
           {!loading && projects.length > 0 && (
-            <aside className="hidden lg:flex w-80 flex-col bg-[#080d18]/60 backdrop-blur-xl border-l border-border/30 p-4 overflow-y-auto nexus-scroll">
+            <aside className="hidden lg:flex w-80 flex-col bg-nexus-surface/60 backdrop-blur-xl border-l border-border/30 p-4 overflow-y-auto nexus-scroll">
               {/* Overview stats */}
               <div className="mb-6">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-3">Tổng quan</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-primary">{projects.length}</div>
                     <div className="text-[9px] text-muted-foreground">Dự án</div>
                   </div>
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-cyan-400">{totalMembers}</div>
                     <div className="text-[9px] text-muted-foreground">Thành viên</div>
                   </div>
-                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
+                  <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5 text-center shadow-inner">
                     <div className="text-xl font-bold text-emerald-400">{totalTasks}</div>
                     <div className="text-[9px] text-muted-foreground">Tasks</div>
                   </div>
                 </div>
                 {/* Overall progress */}
-                <div className="mt-3 rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5">
+                <div className="mt-3 rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] text-muted-foreground">Tiến độ tổng thể</span>
                     <span className="text-xs font-bold text-primary">{overallProgress}%</span>
@@ -582,7 +585,7 @@ export function HomeView() {
               </div>
 
               {/* NEXUS AI Status */}
-              <div className="mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-cyan-500/5 border border-white/8 p-4 nexus-hud backdrop-blur-md shadow-lg shadow-primary/5">
+              <div className="mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-cyan-500/5 border border-border/50 p-4 nexus-hud backdrop-blur-md shadow-lg shadow-primary/5">
                 <div className="flex items-center gap-2 mb-2">
                   <Activity className="w-4 h-4 text-primary" />
                   <span className="text-xs font-semibold text-primary">NEXUS AI Status</span>
@@ -607,7 +610,7 @@ export function HomeView() {
 
               {/* Tasks đang làm */}
               {heroProject && heroProject.taskCount > 0 && (
-                <div className="mt-auto rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 shadow-lg shadow-primary/5">
+                <div className="mt-auto rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 shadow-lg shadow-primary/5">
                   <div className="flex items-center gap-2 mb-3">
                     <CheckSquare className="w-4 h-4 text-primary" />
                     <span className="text-xs font-semibold text-primary">Tasks đang làm</span>

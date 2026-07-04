@@ -36,7 +36,7 @@ function renderMarkdown(text: string): string {
   // Code blocks (triple backtick)
   html = html.replace(/```[\s\S]*?```/g, (m) => {
     const code = m.replace(/```\w*\n?/, "").replace(/```$/, "");
-    return `<pre class="bg-[#060b14] border border-border rounded-lg p-3 my-2 overflow-x-auto text-xs font-mono text-foreground/80">${code}</pre>`;
+    return `<pre class="bg-nexus-bg border border-border rounded-lg p-3 my-2 overflow-x-auto text-xs font-mono text-foreground/80">${code}</pre>`;
   });
 
   // Bullet lists
@@ -110,9 +110,9 @@ export function DocsTab() {
       </div>
 
       {/* Content */}
-      <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden">
+      <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center px-4 py-2 bg-[#0c1322] border-b border-border">
+        <div className="flex justify-between items-center px-4 py-2 bg-nexus-surface-2 border-b border-border">
           <span className="text-xs text-muted-foreground font-mono">
             {TABS.find((t) => t.id === active)?.name}
           </span>

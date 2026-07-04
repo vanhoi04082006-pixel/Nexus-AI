@@ -9,6 +9,8 @@ import { useEffect, useRef } from "react";
  * - Lines connect nearby nodes (synapses)
  * - Pulses travel along connections (neural activity)
  * - Teal color scheme matching NEXUS AI theme
+ * - Theme-aware: reads --nexus-glow-rgba from CSS so it adapts to
+ *   light/dark mode, and re-reads when the theme class on <html> changes.
  *
  * Performance: capped at 40 nodes, 60fps, pauses when tab hidden.
  */
@@ -23,6 +25,29 @@ export function NeuralBackground() {
 
     let animationId: number;
     let running = true;
+
+    // Theme color cache — updated when theme changes
+    let glowRgb = "0, 212, 170"; // default dark teal
+    let lineOpacityMultiplier = 1;
+
+    function readThemeColors() {
+      const styles = getComputedStyle(document.documentElement);
+      const raw = styles.getPropertyValue("--nexus-glow-rgba").trim();
+      if (raw) glowRgb = raw;
+      // In light mode, reduce line opacity so the network is subtle
+      const isDark = document.documentElement.classList.contains("dark");
+      lineOpacityMultiplier = isDark ? 1 : 0.5;
+    }
+    readThemeColors();
+
+    // Watch for theme class changes on <html> (next-themes toggles .dark)
+    const themeObserver = new MutationObserver(() => {
+      readThemeColors();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     // Resize handler
     function resize() {
@@ -106,13 +131,13 @@ export function NeuralBackground() {
         const glow = 0.3 + Math.sin(p.pulsePhase) * 0.2;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 212, 170, ${glow})`;
+        ctx.fillStyle = `rgba(${glowRgb}, ${glow})`;
         ctx.fill();
 
         // Outer glow
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 212, 170, ${glow * 0.15})`;
+        ctx.fillStyle = `rgba(${glowRgb}, ${glow * 0.15})`;
         ctx.fill();
       }
 
@@ -123,11 +148,11 @@ export function NeuralBackground() {
           const dy = particles[i].y - particles[j].y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < MAX_DISTANCE) {
-            const opacity = (1 - dist / MAX_DISTANCE) * 0.15;
+            const opacity = (1 - dist / MAX_DISTANCE) * 0.15 * lineOpacityMultiplier;
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(0, 212, 170, ${opacity})`;
+            ctx.strokeStyle = `rgba(${glowRgb}, ${opacity})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
@@ -157,13 +182,13 @@ export function NeuralBackground() {
         // Draw pulse (bright moving dot)
         ctx.beginPath();
         ctx.arc(px, py, 2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 212, 170, 0.8)`;
+        ctx.fillStyle = `rgba(${glowRgb}, 0.8)`;
         ctx.fill();
 
         // Pulse trail
         ctx.beginPath();
         ctx.arc(px, py, 4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 212, 170, 0.2)`;
+        ctx.fillStyle = `rgba(${glowRgb}, 0.2)`;
         ctx.fill();
       }
 
@@ -184,6 +209,7 @@ export function NeuralBackground() {
       cancelAnimationFrame(animationId);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", handleVisibility);
+      themeObserver.disconnect();
     };
   }, []);
 

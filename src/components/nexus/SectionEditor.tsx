@@ -146,7 +146,7 @@ export function SectionEditor({ section, title, content, onSaved }: SectionEdito
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              className="font-mono text-xs bg-[#060b14] border-border min-h-[400px] resize-y"
+              className="font-mono text-xs bg-nexus-surface-2 border-border min-h-[400px] resize-y"
               spellCheck={false}
             />
           </div>
@@ -180,7 +180,7 @@ export function SectionEditor({ section, title, content, onSaved }: SectionEdito
               onChange={(e) => setProposalText(e.target.value)}
               rows={5}
               placeholder="VD: Them chuc nang xuat bao cao PDF, doi database sang PostgreSQL..."
-              className="bg-[#060b14] border-border"
+              className="bg-nexus-surface-2 border-border"
             />
           </div>
           <DialogFooter>

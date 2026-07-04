@@ -45,6 +45,7 @@ import { AgentHubTab } from "./tabs/AgentHubTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface NavItem {
   id: string;
@@ -364,7 +365,7 @@ export function WorkspaceView() {
   ];
 
   return (
-    <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-[#060b14]/95 nexus-grid-bg nexus-boot">
+    <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-nexus-bg/95 nexus-grid-bg nexus-boot">
       {/* Mobile toggle */}
       <button
         onClick={() => setSidebarOpen((v) => !v)}
@@ -377,7 +378,7 @@ export function WorkspaceView() {
       <aside
         className={`${
           sidebarOpen ? "flex" : "hidden"
-        } md:flex w-full md:w-64 lg:w-72 flex-col bg-[#080d18]/95 backdrop-blur-xl border-r border-border/40 z-40 md:z-0 fixed md:static inset-0 md:inset-auto`}
+        } md:flex w-full md:w-64 lg:w-72 flex-col bg-nexus-surface/95 backdrop-blur-xl border-r border-border/40 z-40 md:z-0 fixed md:static inset-0 md:inset-auto`}
       >
         {/* Logo */}
         <div className="px-4 py-4 border-b border-border/40">
@@ -532,7 +533,7 @@ export function WorkspaceView() {
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               placeholder="Delete"
-              className="w-full px-3 py-2 mb-4 bg-[#060b14] border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
+              className="w-full px-3 py-2 mb-4 bg-nexus-surface-2 border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
               autoFocus
             />
             <div className="flex gap-2 justify-end">
@@ -562,7 +563,7 @@ export function WorkspaceView() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 border-b border-border/40 bg-[#060b14]/80 backdrop-blur-xl px-6 py-3 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 border-b border-border/40 bg-nexus-bg/80 backdrop-blur-xl px-6 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0 flex items-center gap-3">
             {/* Active tab icon */}
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -581,6 +582,7 @@ export function WorkspaceView() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <ThemeToggle />
             <NotificationBell />
             {isLeader && (
               <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">

@@ -73,7 +73,7 @@ export function ProcessingOverlay() {
 
   return (
     <div className="fixed inset-0 bg-background/95 backdrop-blur-xl z-50 flex items-center justify-center p-3 sm:p-4 nexus-shimmer">
-      <div className="w-full max-w-5xl max-h-[94vh] bg-[#0c1322] border border-primary/30 rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 flex flex-col nexus-hud nexus-neon-border nexus-boot">
+      <div className="w-full max-w-5xl max-h-[94vh] bg-nexus-surface-2 border border-primary/30 rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 flex flex-col nexus-hud nexus-neon-border nexus-boot">
         {/* Header */}
         <div className="px-5 sm:px-6 py-3.5 border-b border-border flex items-center gap-3">
           {hasError ? (
@@ -169,7 +169,7 @@ export function ProcessingOverlay() {
           </div>
 
           {/* ===== RIGHT: Live Log Console ===== */}
-          <div className="flex flex-col min-h-0 bg-[#0a0f1c]">
+          <div className="flex flex-col min-h-0 bg-nexus-surface">
             <div className="px-5 sm:px-6 pt-3 pb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground border-b border-border/60">
               <Terminal className="w-3.5 h-3.5" />
               Live Log Console
@@ -193,7 +193,7 @@ export function ProcessingOverlay() {
                 return (
                   <div
                     key={l.id}
-                    className="flex items-start gap-2 py-0.5 hover:bg-white/[0.02] -mx-1 px-1 rounded"
+                    className="flex items-start gap-2 py-0.5 hover:bg-secondary/30 -mx-1 px-1 rounded"
                   >
                     {/* timestamp */}
                     <span className="text-slate-500 shrink-0 tabular-nums">

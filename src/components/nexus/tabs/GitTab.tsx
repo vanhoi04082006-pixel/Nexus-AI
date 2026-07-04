@@ -227,8 +227,8 @@ export function GitTab() {
           <h3 className="flex items-center gap-2 text-base font-bold mb-3">
             <Terminal className="w-4 h-4 text-primary" /> Git Commands
           </h3>
-          <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden">
-            <div className="flex justify-between items-center px-4 py-2 bg-[#0c1322] border-b border-border">
+          <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden">
+            <div className="flex justify-between items-center px-4 py-2 bg-nexus-surface-2 border-b border-border">
               <span className="text-xs text-muted-foreground font-mono">setup.sh</span>
               <button
                 onClick={() => copy(r.gitCommands || "")}
@@ -260,8 +260,8 @@ export function GitTab() {
           <h3 className="flex items-center gap-2 text-base font-bold mb-3">
             <Ticket className="w-4 h-4 text-primary" /> Issue Template
           </h3>
-          <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden">
-            <div className="flex justify-between items-center px-4 py-2 bg-[#0c1322] border-b border-border">
+          <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden">
+            <div className="flex justify-between items-center px-4 py-2 bg-nexus-surface-2 border-b border-border">
               <span className="text-xs text-muted-foreground font-mono">task.md</span>
               <button
                 onClick={() => copy(r.issueTemplate || "")}

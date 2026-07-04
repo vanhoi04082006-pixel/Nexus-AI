@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const STRENGTHS = [
   "Backend", "Frontend", "Database", "UI/UX", "Testing", "DevOps",
@@ -238,9 +239,9 @@ export function InputView() {
   }
 
   return (
-    <main className="flex-1 flex flex-col bg-[#060b14] nexus-grid-bg">
+    <main className="flex-1 flex flex-col bg-nexus-bg nexus-grid-bg">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-border/50 bg-[#060b14]/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-border/50 bg-nexus-bg/90 backdrop-blur-xl">
         <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center nexus-pulse-glow">
@@ -263,6 +264,7 @@ export function InputView() {
             >
               ← Lịch sử
             </Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -312,7 +314,7 @@ export function InputView() {
                     value={input.topic}
                     onChange={(e) => setInput({ topic: e.target.value })}
                     placeholder="VD: He thong quan ly nhan su, E-commerce, LMS..."
-                    className="text-base bg-[#0c1322] border-border"
+                    className="text-base bg-nexus-surface-2 border-border"
                   />
                 </div>
                 <div>
@@ -324,7 +326,7 @@ export function InputView() {
                     onChange={(e) => setInput({ description: e.target.value })}
                     rows={3}
                     placeholder="Mo ta chi tiet: nguoi dung cuoi la ai, giai quyet van de gi, quy mo nao..."
-                    className="bg-[#0c1322] border-border"
+                    className="bg-nexus-surface-2 border-border"
                   />
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -336,7 +338,7 @@ export function InputView() {
                       value={input.purpose}
                       onChange={(e) => setInput({ purpose: e.target.value })}
                       placeholder="VD: Do an tot nghiep, Hackathon, San pham thuc te..."
-                      className="bg-[#0c1322] border-border"
+                      className="bg-nexus-surface-2 border-border"
                     />
                   </div>
                   <div>
@@ -347,7 +349,7 @@ export function InputView() {
                       value={input.leaderName}
                       onChange={(e) => setInput({ leaderName: e.target.value })}
                       placeholder="Ten cua ban (nhom truong)"
-                      className="bg-[#0c1322] border-border"
+                      className="bg-nexus-surface-2 border-border"
                     />
                   </div>
                 </div>
@@ -361,7 +363,7 @@ export function InputView() {
                       value={input.leaderEmail}
                       onChange={(e) => setInput({ leaderEmail: e.target.value })}
                       placeholder="nhomtruong@gmail.com"
-                      className="bg-[#0c1322] border-border"
+                      className="bg-nexus-surface-2 border-border"
                     />
                     <p className="text-[11px] text-muted-foreground mt-1">
                       Email nay se dung de GUI email loi moi den thanh vien qua SMTP.
@@ -376,7 +378,7 @@ export function InputView() {
                       value={input.leaderSmtpPassword}
                       onChange={(e) => setInput({ leaderSmtpPassword: e.target.value })}
                       placeholder="16 ky tu app password"
-                      className="bg-[#0c1322] border-border font-mono"
+                      className="bg-nexus-surface-2 border-border font-mono"
                       maxLength={32}
                     />
                     <p className="text-[11px] text-muted-foreground mt-1">
@@ -424,7 +426,7 @@ export function InputView() {
                       }
                       rows={4}
                       placeholder={"Dang nhap / Dang xuat / Phan quyen\nQuan ly nhan vien CRUD\nCham cong / Nghi phep\nBao cao thong ke..."}
-                      className="bg-[#0c1322] border-border"
+                      className="bg-nexus-surface-2 border-border"
                     />
                   </div>
                   <div>
@@ -438,7 +440,7 @@ export function InputView() {
                       }
                       rows={2}
                       placeholder="Multi-language, Dark mode, Responsive, PWA, Real-time notification..."
-                      className="bg-[#0c1322] border-border"
+                      className="bg-nexus-surface-2 border-border"
                     />
                   </div>
                   <div className="grid md:grid-cols-2 gap-4">
@@ -475,7 +477,7 @@ export function InputView() {
                         }
                         rows={1}
                         placeholder="Nhap them cong nghe khac (phan cach bang dau phay)..."
-                        className="bg-[#0c1322] border-border text-xs"
+                        className="bg-nexus-surface-2 border-border text-xs"
                       />
                     </div>
                     <div>
@@ -511,7 +513,7 @@ export function InputView() {
                         }
                         rows={1}
                         placeholder="Nhap them ngon ngu khac (phan cach bang dau phay)..."
-                        className="bg-[#0c1322] border-border text-xs"
+                        className="bg-nexus-surface-2 border-border text-xs"
                       />
                     </div>
                   </div>
@@ -556,7 +558,7 @@ export function InputView() {
                           value={m.name}
                           onChange={(e) => setMember(i, { name: e.target.value })}
                           placeholder="Nguyen Van A"
-                          className="bg-[#0c1322] border-border"
+                          className="bg-nexus-surface-2 border-border"
                         />
                       </div>
                       <div>
@@ -568,7 +570,7 @@ export function InputView() {
                           value={m.email}
                           onChange={(e) => setMember(i, { email: e.target.value })}
                           placeholder="a@example.com"
-                          className="bg-[#0c1322] border-border"
+                          className="bg-nexus-surface-2 border-border"
                         />
                       </div>
                     </div>
@@ -597,7 +599,7 @@ export function InputView() {
                           onChange={(e) => setMember(i, { strengths: e.target.value })}
                           rows={2}
                           placeholder="Nhap them uu diem (phan cach bang dau phay)..."
-                          className="bg-[#0c1322] border-border text-xs"
+                          className="bg-nexus-surface-2 border-border text-xs"
                         />
                       </div>
                       <div>
@@ -624,7 +626,7 @@ export function InputView() {
                           onChange={(e) => setMember(i, { weaknesses: e.target.value })}
                           rows={2}
                           placeholder="Nhap them nhuoc diem (phan cach bang dau phay)..."
-                          className="bg-[#0c1322] border-border text-xs"
+                          className="bg-nexus-surface-2 border-border text-xs"
                         />
                       </div>
                     </div>

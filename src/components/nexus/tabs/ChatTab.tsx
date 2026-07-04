@@ -367,7 +367,7 @@ export function ChatTab() {
 
       {/* Refine progress console (inline mini view) */}
       {refining && refineLogs.length > 0 && (
-        <Card className="bg-[#060b14] border-border">
+        <Card className="bg-nexus-bg border-border">
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
             <Terminal className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-mono text-muted-foreground">AI Refine Console</span>
@@ -381,7 +381,7 @@ export function ChatTab() {
                 {log.level === "success" && <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0 mt-0.5" />}
                 {log.level === "error" && <span className="text-destructive">{"\u2716"}</span>}
                 {log.level === "warn" && <span className="text-amber-400">{"\u26A0"}</span>}
-                {log.level === "info" && <span className="text-slate-400">{"\u2022"}</span>}
+                {log.level === "info" && <span className="text-muted-foreground">{"\u2022"}</span>}
                 <span className="text-muted-foreground/80 text-[10px]">
                   {new Date(log.ts).toLocaleTimeString("en-GB", { hour12: false })}
                 </span>
@@ -498,7 +498,7 @@ export function ChatTab() {
               }
             }}
             placeholder="Nhap tin nhan... (Enter de gui)"
-            className="bg-[#060b14] border-border"
+            className="bg-nexus-bg border-border"
             disabled={sending}
           />
           <Button onClick={send} disabled={sending || !draft.trim()} className="bg-primary text-primary-foreground">

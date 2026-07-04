@@ -16,6 +16,7 @@ import {
   X,
   LayoutDashboard,
 } from "lucide-react";
+import { ThemeToggleSegmented } from "@/components/theme/ThemeToggle";
 
 export type AppView =
   | "input"
@@ -140,8 +141,12 @@ export function AppSidebar({ active }: { active: AppView }) {
   return (
     <>
       {/* ===== Desktop Sidebar (md+) ===== */}
-      <aside className="hidden md:flex w-56 flex-col bg-[#080d18]/60 backdrop-blur-xl border-r border-border/30 py-4 px-3 flex-shrink-0">
+      <aside className="hidden md:flex w-56 flex-col bg-nexus-surface/60 backdrop-blur-xl border-r border-border/30 py-4 px-3 flex-shrink-0">
         {navContent}
+        {/* Theme toggle — sticky at bottom of sidebar */}
+        <div className="pt-3 mt-2 border-t border-border/30">
+          <ThemeToggleSegmented className="w-full justify-center" />
+        </div>
       </aside>
 
       {/* ===== Mobile Toggle Button ===== */}
@@ -162,7 +167,7 @@ export function AppSidebar({ active }: { active: AppView }) {
             onClick={() => setMobileOpen(false)}
           />
           {/* Drawer */}
-          <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-[#080d18]/95 backdrop-blur-2xl border-r border-border/40 flex flex-col py-4 px-3 shadow-2xl shadow-primary/20 animate-in slide-in-from-left duration-200">
+          <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-nexus-surface/95 backdrop-blur-2xl border-r border-border/40 flex flex-col py-4 px-3 shadow-2xl shadow-primary/20 animate-in slide-in-from-left duration-200">
             {/* Drawer header */}
             <div className="flex items-center justify-between px-3 pb-3 mb-2 border-b border-border/30">
               <div className="flex items-center gap-2">
@@ -185,6 +190,10 @@ export function AppSidebar({ active }: { active: AppView }) {
               </button>
             </div>
             {navContent}
+            {/* Theme toggle — mobile drawer footer */}
+            <div className="pt-3 mt-2 border-t border-border/30">
+              <ThemeToggleSegmented className="w-full justify-center" />
+            </div>
           </aside>
         </div>
       )}

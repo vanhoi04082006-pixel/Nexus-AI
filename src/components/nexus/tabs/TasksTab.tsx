@@ -467,7 +467,7 @@ export function TasksTab() {
                       )}
                     </div>
                     {hints.snippet && (
-                      <pre className="bg-[#060b14] text-foreground/80 p-3 rounded-lg text-[11px] font-mono overflow-x-auto nexus-scroll border border-border max-h-48">
+                      <pre className="bg-nexus-bg text-foreground/80 p-3 rounded-lg text-[11px] font-mono overflow-x-auto nexus-scroll border border-border max-h-48">
                         <code>{hints.snippet}</code>
                       </pre>
                     )}

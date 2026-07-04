@@ -86,7 +86,7 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative w-9 h-9 rounded-lg bg-card/40 border border-white/8 flex items-center justify-center hover:border-primary/30 transition-colors backdrop-blur-md"
+        className="relative w-9 h-9 rounded-lg bg-card/40 border border-border/50 flex items-center justify-center hover:border-primary/30 transition-colors backdrop-blur-md"
       >
         <Bell className="w-4 h-4 text-muted-foreground" />
         {unreadCount > 0 && (
@@ -99,7 +99,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto nexus-scroll bg-[#0c1322]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl shadow-primary/10 z-50 nexus-boot">
+          <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto nexus-scroll bg-nexus-surface-2/95 backdrop-blur-xl border border-border/60 rounded-2xl shadow-2xl shadow-primary/10 z-50 nexus-boot">
             {/* Header */}
             <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Thông báo</span>

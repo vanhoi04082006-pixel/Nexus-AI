@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const ICON_MAP: Record<string, typeof Code2> = {
   Code2, ShoppingBag, Settings, Smartphone, Sparkles, Brain, Terminal, Zap, Cpu, Bot, Activity, Star,
@@ -80,8 +81,8 @@ export function AgentHubView() {
     : agents;
 
   return (
-    <main className="flex-1 flex flex-col bg-[#060b14]/95 min-h-screen nexus-boot">
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-[#060b14]/90 backdrop-blur-2xl">
+    <main className="flex-1 flex flex-col bg-nexus-bg/95 min-h-screen nexus-boot">
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-nexus-bg/90 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setView("home")} className="text-muted-foreground hover:text-primary transition-colors">
@@ -92,6 +93,7 @@ export function AgentHubView() {
               <h1 className="text-lg font-bold">Agent Hub</h1>
             </div>
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -101,19 +103,19 @@ export function AgentHubView() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Stats overview */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 text-center shadow-inner">
+            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 text-center shadow-inner">
               <div className="text-2xl font-bold text-primary">{stats.total}</div>
               <div className="text-[10px] text-muted-foreground">Tổng Agents</div>
             </div>
-            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 text-center shadow-inner">
+            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 text-center shadow-inner">
               <div className="text-2xl font-bold text-emerald-400">{stats.online}</div>
               <div className="text-[10px] text-muted-foreground">Online</div>
             </div>
-            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 text-center shadow-inner">
+            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 text-center shadow-inner">
               <div className="text-2xl font-bold text-amber-400">{stats.working}</div>
               <div className="text-[10px] text-muted-foreground">Đang làm</div>
             </div>
-            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-white/8 p-4 text-center shadow-inner">
+            <div className="rounded-2xl bg-card/30 backdrop-blur-md border border-border/50 p-4 text-center shadow-inner">
               <div className="text-2xl font-bold text-cyan-400">{stats.idle}</div>
               <div className="text-[10px] text-muted-foreground">Sẵn sàng</div>
             </div>
@@ -134,7 +136,7 @@ export function AgentHubView() {
 
           {/* Search */}
           {activeTab === "agents" && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-white/8 backdrop-blur-md mb-6 max-w-md">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-border/50 backdrop-blur-md mb-6 max-w-md">
               <Search className="w-4 h-4 text-muted-foreground/60" />
               <input type="text" placeholder="Tìm agent..." className="flex-1 bg-transparent text-sm outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
@@ -145,7 +147,7 @@ export function AgentHubView() {
           ) : activeTab === "agents" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredAgents.map((agent) => (
-                <div key={agent.id} className="rounded-2xl border border-white/5 bg-card/50 backdrop-blur-xl p-5 nexus-hud shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-all group">
+                <div key={agent.id} className="rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl p-5 nexus-hud shadow-lg shadow-primary/5 hover:shadow-primary/20 transition-all group">
                   <div className="flex items-start gap-3 mb-3">
                     <div className="relative">
                       <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center nexus-flicker">
@@ -186,7 +188,7 @@ export function AgentHubView() {
                 {MARKETPLACE_AGENTS.map((ma) => {
                   const Icon = ICON_MAP[ma.icon] || Code2;
                   return (
-                    <div key={ma.name} className={`rounded-2xl border border-white/5 bg-gradient-to-br ${ma.color} backdrop-blur-xl p-5 nexus-hud shadow-lg hover:shadow-primary/20 transition-all group`}>
+                    <div key={ma.name} className={`rounded-2xl border border-border/40 bg-gradient-to-br ${ma.color} backdrop-blur-xl p-5 nexus-hud shadow-lg hover:shadow-primary/20 transition-all group`}>
                       <div className="w-12 h-12 rounded-xl bg-card/60 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                         <Icon className={`w-6 h-6 ${ma.iconColor}`} />
                       </div>
@@ -206,28 +208,28 @@ export function AgentHubView() {
               <div className="flex justify-center mb-6"><AI3DBrain size={80} /></div>
               <h3 className="text-lg font-bold text-center mb-2">Agent Builder</h3>
               <p className="text-sm text-muted-foreground text-center mb-6">Tạo AI Agent mới với role, model, tools tùy chỉnh.</p>
-              <div className="space-y-4 rounded-2xl border border-white/5 bg-card/50 backdrop-blur-xl p-6 nexus-hud">
+              <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl p-6 nexus-hud">
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-2 block">Tên Agent</label>
-                  <input className="w-full px-3 py-2 rounded-lg bg-[#060b14] border border-border text-sm outline-none focus:border-primary" placeholder="VD: Backend Expert" />
+                  <input className="w-full px-3 py-2 rounded-lg bg-nexus-surface-2 border border-border text-sm outline-none focus:border-primary" placeholder="VD: Backend Expert" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-2 block">Role</label>
-                    <select className="w-full px-3 py-2 rounded-lg bg-[#060b14] border border-border text-sm outline-none">
+                    <select className="w-full px-3 py-2 rounded-lg bg-nexus-surface-2 border border-border text-sm outline-none">
                       <option>Architect</option><option>Backend Developer</option><option>Frontend Developer</option><option>Database Engineer</option><option>QA Tester</option><option>DevOps</option><option>Security</option><option>Technical Writer</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-2 block">Model</label>
-                    <select className="w-full px-3 py-2 rounded-lg bg-[#060b14] border border-border text-sm outline-none">
+                    <select className="w-full px-3 py-2 rounded-lg bg-nexus-surface-2 border border-border text-sm outline-none">
                       <option>openai/gpt-oss-120b:free</option><option>nvidia/nemotron-3-ultra-550b-a55b:free</option><option>google/gemma-4-31b-it:free</option><option>qwen/qwen3-coder:free</option>
                     </select>
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 mb-2 block">System Prompt</label>
-                  <textarea rows={3} className="w-full px-3 py-2 rounded-lg bg-[#060b14] border border-border text-sm outline-none focus:border-primary resize-none" placeholder="Hướng dẫn cho AI Agent..." />
+                  <textarea rows={3} className="w-full px-3 py-2 rounded-lg bg-nexus-surface-2 border border-border text-sm outline-none focus:border-primary resize-none" placeholder="Hướng dẫn cho AI Agent..." />
                 </div>
                 <Button className="w-full bg-primary text-primary-foreground nexus-glow">
                   <Plus className="w-4 h-4" /> Tạo Agent

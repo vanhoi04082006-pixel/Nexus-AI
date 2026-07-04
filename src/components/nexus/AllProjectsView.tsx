@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { AI3DBrain } from "./AI3DBrain";
 import { AppSidebar } from "./AppSidebar";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 interface ProjectHistoryItem {
   id: string;
@@ -157,8 +158,8 @@ export function AllProjectsView() {
     });
 
   return (
-    <main className="flex-1 flex flex-col bg-[#060b14]/95 min-h-screen nexus-boot">
-      <header className="sticky top-0 z-50 border-b border-border/40 bg-[#060b14]/90 backdrop-blur-2xl">
+    <main className="flex-1 flex flex-col bg-nexus-bg/95 min-h-screen nexus-boot">
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-nexus-bg/90 backdrop-blur-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setView("home")} className="text-muted-foreground hover:text-primary transition-colors">
@@ -170,6 +171,7 @@ export function AllProjectsView() {
           <Button onClick={newProject} className="bg-primary text-primary-foreground nexus-glow">
             <Plus className="w-4 h-4" /> Dự án mới
           </Button>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -179,7 +181,7 @@ export function AllProjectsView() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
-            <div className="flex-1 min-w-[200px] flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-white/8 backdrop-blur-md">
+            <div className="flex-1 min-w-[200px] flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card/40 border border-border/50 backdrop-blur-md">
               <Search className="w-4 h-4 text-muted-foreground/60" />
               <input
                 type="text"
@@ -189,20 +191,20 @@ export function AllProjectsView() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-xl bg-card/40 border border-white/8 text-sm outline-none">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-xl bg-card/40 border border-border/50 text-sm outline-none">
               <option value="all">Tất cả trạng thái</option>
               <option value="INITIALIZED">Hoàn thành</option>
               <option value="WORKSPACE">Đang làm việc</option>
               <option value="ANALYZING">Đang phân tích</option>
               <option value="DRAFT">Bản nháp</option>
             </select>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-3 py-2 rounded-xl bg-card/40 border border-white/8 text-sm outline-none">
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-3 py-2 rounded-xl bg-card/40 border border-border/50 text-sm outline-none">
               <option value="updated">Cập nhật mới nhất</option>
               <option value="created">Tạo mới nhất</option>
               <option value="name">Tên A-Z</option>
               <option value="members">Thành viên</option>
             </select>
-            <div className="flex gap-1 p-1 rounded-lg bg-card/40 border border-white/8">
+            <div className="flex gap-1 p-1 rounded-lg bg-card/40 border border-border/50">
               <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-md ${viewMode === "grid" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}>
                 <LayoutGrid className="w-4 h-4" />
               </button>
@@ -227,7 +229,7 @@ export function AllProjectsView() {
                 const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
                 const isFav = favorites.has(p.id);
                 return (
-                  <div key={p.id} className="group rounded-2xl border border-white/5 bg-card/50 backdrop-blur-xl overflow-hidden shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1.5 transition-all nexus-hud">
+                  <div key={p.id} className="group rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl overflow-hidden shadow-lg shadow-primary/5 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1.5 transition-all nexus-hud">
                     <div className={`h-24 bg-gradient-to-br from-cyan-500/15 to-blue-900/5 relative overflow-hidden`}>
                       <div className="absolute inset-0 nexus-grid-bg opacity-30" />
                       <div className="absolute top-2.5 right-2.5 flex gap-1.5">
@@ -266,7 +268,7 @@ export function AllProjectsView() {
                 const status = STATUS_LABELS[p.status] || STATUS_LABELS.DRAFT;
                 const isFav = favorites.has(p.id);
                 return (
-                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-2xl border border-white/5 bg-card/50 backdrop-blur-xl hover:border-primary/30 cursor-pointer group transition-all" onClick={() => openProject(p)}>
+                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-xl hover:border-primary/30 cursor-pointer group transition-all" onClick={() => openProject(p)}>
                     <button onClick={(e) => { e.stopPropagation(); toggleFavorite(p.id); }} className="flex-shrink-0">
                       <Star className={`w-4 h-4 ${isFav ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
                     </button>

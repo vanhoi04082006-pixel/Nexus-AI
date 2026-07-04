@@ -59,20 +59,20 @@ function parseERD(mermaid: string): { nodes: Node[]; edges: Edge[] } {
       data: {
         label: (
           <div style={{ fontSize: 11, minWidth: 120 }}>
-            <div style={{ fontWeight: 700, color: nodeColors.entity, borderBottom: "1px solid #1a2a40", paddingBottom: 4, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, color: nodeColors.entity, borderBottom: "1px solid var(--border)", paddingBottom: 4, marginBottom: 4 }}>
               {name}
             </div>
             {fields.slice(0, 8).map((f, i) => (
-              <div key={i} style={{ fontFamily: "monospace", fontSize: 10, color: "#94a3b8" }}>
+              <div key={i} style={{ fontFamily: "monospace", fontSize: 10, color: "var(--muted-foreground)" }}>
                 {f}
               </div>
             ))}
-            {fields.length > 8 && <div style={{ fontSize: 10, color: "#64748b" }}>+{fields.length - 8} more</div>}
+            {fields.length > 8 && <div style={{ fontSize: 10, color: "var(--muted-foreground)" }}>+{fields.length - 8} more</div>}
           </div>
         ),
       },
       style: {
-        background: "#0c1322",
+        background: "var(--nexus-surface-2)",
         border: `1px solid ${nodeColors.entity}`,
         borderRadius: 8,
         padding: 8,
@@ -93,9 +93,9 @@ function parseERD(mermaid: string): { nodes: Node[]; edges: Edge[] } {
         source,
         target,
         label: label || undefined,
-        style: { stroke: "#475569", strokeWidth: 1.5 },
-        labelStyle: { fontSize: 10, fill: "#64748b" },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#475569" },
+        style: { stroke: "var(--border)", strokeWidth: 1.5 },
+        labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--border)" },
       });
     }
   }
@@ -130,11 +130,11 @@ function parseClassDiagram(mermaid: string): { nodes: Node[]; edges: Edge[] } {
       data: {
         label: (
           <div style={{ fontSize: 11, minWidth: 140 }}>
-            <div style={{ fontWeight: 700, color: nodeColors.class, borderBottom: "1px solid #1a2a40", paddingBottom: 4, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, color: nodeColors.class, borderBottom: "1px solid var(--border)", paddingBottom: 4, marginBottom: 4 }}>
               {name}
             </div>
             {lines.slice(0, 10).map((l, i) => (
-              <div key={i} style={{ fontFamily: "monospace", fontSize: 9, color: l.startsWith("+") ? "#10b981" : "#94a3b8" }}>
+              <div key={i} style={{ fontFamily: "monospace", fontSize: 9, color: l.startsWith("+") ? "#10b981" : "var(--muted-foreground)" }}>
                 {l}
               </div>
             ))}
@@ -142,7 +142,7 @@ function parseClassDiagram(mermaid: string): { nodes: Node[]; edges: Edge[] } {
         ),
       },
       style: {
-        background: "#0c1322",
+        background: "var(--nexus-surface-2)",
         border: `1px solid ${nodeColors.class}`,
         borderRadius: 8,
         padding: 8,
@@ -165,9 +165,9 @@ function parseClassDiagram(mermaid: string): { nodes: Node[]; edges: Edge[] } {
         source,
         target: targetMatch[1],
         label: arrow.includes("<|") ? "extends" : arrow.includes(">") ? "uses" : "",
-        style: { stroke: "#475569", strokeWidth: 1.5 },
-        labelStyle: { fontSize: 9, fill: "#64748b" },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#475569" },
+        style: { stroke: "var(--border)", strokeWidth: 1.5 },
+        labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--border)" },
       });
     }
   }
@@ -268,7 +268,7 @@ export function UMLTab() {
 
       {active === "classDiagram" && (
         viewMode === "interactive" && hasInteractiveNodes ? (
-          <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
+          <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
             <ReactFlow
               nodes={classNodes}
               edges={classEdges}
@@ -278,16 +278,16 @@ export function UMLTab() {
               fitView
               attributionPosition="bottom-left"
             >
-              <Background color="#1a2a40" gap={20} />
+              <Background color="var(--secondary)" gap={20} />
               <Controls />
               <MiniMap
                 nodeColor={(n) => {
                   const border = (n.style as { border?: string })?.border || "";
                   if (border.includes("#38bdf8")) return "#38bdf8";
                   if (border.includes("#f59e0b")) return "#f59e0b";
-                  return "#475569";
+                  return "var(--border)";
                 }}
-                style={{ background: "#0c1322" }}
+                style={{ background: "var(--nexus-surface-2)" }}
               />
             </ReactFlow>
           </div>
@@ -298,7 +298,7 @@ export function UMLTab() {
 
       {active === "erd" && (
         viewMode === "interactive" && hasInteractiveNodes ? (
-          <div className="bg-[#060b14] border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
+          <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
             <ReactFlow
               nodes={erdNodes}
               edges={erdEdges}
@@ -308,16 +308,16 @@ export function UMLTab() {
               fitView
               attributionPosition="bottom-left"
             >
-              <Background color="#1a2a40" gap={20} />
+              <Background color="var(--secondary)" gap={20} />
               <Controls />
               <MiniMap
                 nodeColor={(n) => {
                   const border = (n.style as { border?: string })?.border || "";
                   if (border.includes("#38bdf8")) return "#38bdf8";
                   if (border.includes("#f59e0b")) return "#f59e0b";
-                  return "#475569";
+                  return "var(--border)";
                 }}
-                style={{ background: "#0c1322" }}
+                style={{ background: "var(--nexus-surface-2)" }}
               />
             </ReactFlow>
           </div>

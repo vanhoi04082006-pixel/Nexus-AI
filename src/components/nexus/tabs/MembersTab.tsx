@@ -253,7 +253,7 @@ export function MembersTab() {
               <Input
                 value={newMember.name}
                 onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
-                className="bg-[#060b14] border-border"
+                className="bg-nexus-bg border-border"
                 placeholder="Nguyen Van B"
               />
             </div>
@@ -263,7 +263,7 @@ export function MembersTab() {
                 type="email"
                 value={newMember.email}
                 onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                className="bg-[#060b14] border-border"
+                className="bg-nexus-bg border-border"
                 placeholder="b@example.com"
               />
               <p className="text-[11px] text-muted-foreground mt-1">
@@ -276,7 +276,7 @@ export function MembersTab() {
                 <Input
                   value={newMember.strengths}
                   onChange={(e) => setNewMember({ ...newMember, strengths: e.target.value })}
-                  className="bg-[#060b14] border-border text-xs"
+                  className="bg-nexus-bg border-border text-xs"
                   placeholder="React, Node.js"
                 />
               </div>
@@ -285,7 +285,7 @@ export function MembersTab() {
                 <Input
                   value={newMember.weaknesses}
                   onChange={(e) => setNewMember({ ...newMember, weaknesses: e.target.value })}
-                  className="bg-[#060b14] border-border text-xs"
+                  className="bg-nexus-bg border-border text-xs"
                   placeholder="Weak CSS"
                 />
               </div>
