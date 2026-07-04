@@ -226,7 +226,7 @@ export async function updatePipelineStatus(
         progress,
         stage,
         error: error ?? null,
-        finishedAt: status === "success" || status === "failed" || status === "ready" ? new Date() : null,
+        finishedAt: status === "success" || status === "ready" ? new Date() : null,
       },
     });
   } else {

@@ -93,10 +93,8 @@ export function AppSidebar({ active }: { active: AppView }) {
       toast.info("Tính năng đang phát triển.");
       return;
     }
-    setView(view as never);
-    if (view !== "workspace") {
-      window.history.pushState({}, "", "/");
-    }
+    setView(view as "home" | "all-projects" | "agent-hub");
+    window.history.pushState({}, "", "/");
   }
 
   const navContent = (

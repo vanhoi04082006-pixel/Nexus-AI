@@ -52,6 +52,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface TaskData {
   id: string;
   assigneeName: string;
+  memberId?: string | null;
   title: string;
   description: string;
   role: string;
@@ -154,7 +155,7 @@ export function TasksTab() {
   };
   const progressPct = Math.round((stats.done / stats.total) * 100);
 
-  function canUpdate(task: TaskData): boolean {
+  function canUpdate(task: { memberId?: string | null; assigneeName: string }): boolean {
     if (isLeader) return true;
     return access?.memberId === task.memberId || access?.name === task.assigneeName;
   }

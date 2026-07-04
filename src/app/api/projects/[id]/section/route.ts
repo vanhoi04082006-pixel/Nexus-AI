@@ -29,7 +29,7 @@ export async function PUT(
     const token = url.searchParams.get("token");
 
     const access = await resolveAccess(id, token);
-    if (!requireLeader(access)) {
+    if (!access || !requireLeader(access)) {
       return Response.json({ error: "Leader access required" }, { status: 403 });
     }
 

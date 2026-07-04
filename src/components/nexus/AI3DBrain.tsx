@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactElement } from "react";
+
 /**
  * AI3DBrain — CSS-based 3D rotating wireframe sphere.
  * Represents the "AI brain" of NEXUS AI.
@@ -7,7 +9,7 @@
  * wireframe globe with neural connection lines.
  */
 export function AI3DBrain({ size = 120 }: { size?: number }) {
-  const rings = [];
+  const rings: ReactElement[] = [];
   const ringCount = 8;
 
   for (let i = 0; i < ringCount; i++) {
@@ -24,7 +26,7 @@ export function AI3DBrain({ size = 120 }: { size?: number }) {
   }
 
   // Horizontal rings
-  const hRings = [];
+  const hRings: ReactElement[] = [];
   for (let i = 0; i < 5; i++) {
     const scale = 0.2 + (i * 0.2);
     const offset = (i - 2) * (size * 0.15);

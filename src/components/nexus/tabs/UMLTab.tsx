@@ -223,6 +223,7 @@ export function UMLTab() {
     }
   }, [r.erd, r.classDiagram, active]);
 
+  const hasInteractiveNodes = (active === "erd" ? erdNodes.length > 0 : active === "classDiagram" ? classNodes.length > 0 : false);
   const isInteractive = (active === "erd" || active === "classDiagram") && viewMode === "interactive" && hasInteractiveNodes;
 
   return (

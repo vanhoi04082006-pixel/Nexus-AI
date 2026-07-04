@@ -46,7 +46,7 @@ export async function POST(
       }
     }
 
-    const attachments = [];
+    const attachments: { id: string; filename: string; size: number; mimeType: string }[] = [];
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         return Response.json(

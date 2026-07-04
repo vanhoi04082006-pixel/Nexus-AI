@@ -532,18 +532,18 @@ export async function pushProjectToGitHub(
 
   // ===== Reconstruct ProjectInput =====
   let extraInfo: ProjectInput["extraInfo"] = {
-    requirements: [],
+    requirements: "",
     specialReqs: "",
-    techPrefs: [],
-    langPrefs: [],
+    techPrefs: "",
+    langPrefs: "",
   };
   try {
     const parsed = JSON.parse(project.extraInfo || "{}");
     extraInfo = {
-      requirements: Array.isArray(parsed.requirements) ? parsed.requirements : [],
+      requirements: Array.isArray(parsed.requirements) ? parsed.requirements.join("\n") : (typeof parsed.requirements === "string" ? parsed.requirements : ""),
       specialReqs: parsed.specialReqs || "",
-      techPrefs: Array.isArray(parsed.techPrefs) ? parsed.techPrefs : [],
-      langPrefs: Array.isArray(parsed.langPrefs) ? parsed.langPrefs : [],
+      techPrefs: Array.isArray(parsed.techPrefs) ? parsed.techPrefs.join(", ") : (typeof parsed.techPrefs === "string" ? parsed.techPrefs : ""),
+      langPrefs: Array.isArray(parsed.langPrefs) ? parsed.langPrefs.join(", ") : (typeof parsed.langPrefs === "string" ? parsed.langPrefs : ""),
     };
   } catch {
     /* keep defaults */

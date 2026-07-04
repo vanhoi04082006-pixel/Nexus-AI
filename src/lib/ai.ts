@@ -56,7 +56,7 @@ function jitteredDelay(base: number, attempt: number): number {
 interface AgentDef {
   id: string;
   name: string;
-  prompt: () => string;
+  prompt?: () => string;
   key: SectionType;
   required: boolean;
   temp: number;
@@ -451,7 +451,7 @@ async function callAndParse(
         // If data parses as JSON but doesn't match schema (missing fields, wrong types),
         // Zod catches it and we retry with the error message fed back to AI
         if (data) {
-          const zodResult = validateSection(sectionKey, data);
+          const zodResult = validateSection(sectionKey || "", data);
           if (zodResult.success) {
             console.log(`      ✓ ${model} (lan ${a}) [Zod validated]`);
             appendLog({
@@ -474,7 +474,7 @@ async function callAndParse(
             let fixedData: unknown = null;
             try { fixedData = JSON.parse(fixRaw.trim()); } catch { fixedData = JFix.parse(fixRaw); }
             if (fixedData) {
-              const revalidate = validateSection(sectionKey, fixedData);
+              const revalidate = validateSection(sectionKey || "", fixedData);
               if (revalidate.success) {
                 console.log(`      ✓ ${model} (lan ${a}) [Zod re-validated after fix]`);
                 appendLog({
@@ -878,10 +878,10 @@ function buildCtx(
   let c = `Du an: ${input.topic}`;
   if (input.description) c += `\nMo ta: ${input.description}`;
   if (input.purpose) c += `\nMuc dich: ${input.purpose}`;
-  if (extra.requirements?.length) c += `\nChuc nang yeu cau: ${extra.requirements.join("; ")}`;
+  if (extra.requirements?.trim()) c += `\nChuc nang yeu cau: ${extra.requirements}`;
   if (extra.specialReqs) c += `\nYeu cau dac biet: ${extra.specialReqs}`;
-  if (extra.techPrefs?.length) c += `\nCong nghe: ${extra.techPrefs.join(", ")}`;
-  if (extra.langPrefs?.length) c += `\nNgon ngu: ${extra.langPrefs.join(", ")}`;
+  if (extra.techPrefs?.trim()) c += `\nCong nghe: ${extra.techPrefs}`;
+  if (extra.langPrefs?.trim()) c += `\nNgon ngu: ${extra.langPrefs}`;
   c += `\nThanh vien (${members.length}):\n${ms}`;
 
   switch (key) {
@@ -966,7 +966,7 @@ function fallback(
         teamSize: members.length,
         estimatedDuration: "4-6 tuan",
         complexity: "Trung binh",
-        features: input.extraInfo.requirements.map((r) => ({ name: r, module: "Core", pri: "P1" })),
+        features: (input.extraInfo.requirements || "").split("\n").filter(Boolean).map((r) => ({ name: r.trim(), module: "Core", pri: "P1" })),
         actors: [{ name: "User", desc: "Nguoi dung cuoi" }],
         modules: ["Auth", "Core", "Dashboard"], // sensible defaults instead of cross-section
       };
@@ -1575,7 +1575,7 @@ export async function refineSections(
       ).substring(0, 4000)}\n\nHay tra lai phan ${ag.key} da chinh sua (JSON day du).`;
       const res = await callAndParse(ag.models, sys, user, ag.temp, ag.key);
       if (res && isValidSchema(res.data, ag.key)) {
-        (refined as Record<string, unknown>)[ag.key] = res.data;
+        (refined as unknown as Record<string, unknown>)[ag.key] = res.data;
         appendLog({
           level: "success",
           agentId: "REFINE",
@@ -1584,7 +1584,7 @@ export async function refineSections(
           message: `✓ [REFINE] ${label} → đã chỉnh sửa xong (${res.model})`,
         });
       } else if (res) {
-        (refined as Record<string, unknown>)[ag.key] = res.data;
+        (refined as unknown as Record<string, unknown>)[ag.key] = res.data;
         appendLog({
           level: "warn",
           agentId: "REFINE",

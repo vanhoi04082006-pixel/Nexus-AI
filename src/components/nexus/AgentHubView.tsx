@@ -58,11 +58,6 @@ export function AgentHubView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"agents" | "marketplace" | "builder">("agents");
 
-  useEffect(() => {
-    loadAgents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const loadAgents = useCallback(async () => {
     try {
       const resp = await fetch("/api/agents");
@@ -74,6 +69,12 @@ export function AgentHubView() {
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount pattern */
+  useEffect(() => {
+    loadAgents();
+  }, [loadAgents]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const filteredAgents = searchQuery.trim()
     ? agents.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.role.toLowerCase().includes(searchQuery.toLowerCase()))

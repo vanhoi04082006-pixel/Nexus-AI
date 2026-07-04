@@ -216,7 +216,7 @@ export function validateSection(
   }
   // Format Zod errors into readable message for AI self-fix
   const errorMessages = result.error.issues
-    .map((issue: { path: (string | number)[]; message: string }) => {
+    .map((issue) => {
       const path = issue.path.length > 0 ? issue.path.join(".") : "root";
       return `Field "${path}": ${issue.message}`;
     })

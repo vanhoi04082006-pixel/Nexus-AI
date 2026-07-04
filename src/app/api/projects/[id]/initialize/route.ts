@@ -140,8 +140,8 @@ export async function POST(
               const codeConventions = parseArray(t.codeConventions).join("\n");
               const acceptanceCriteria = parseArray(t.acceptanceCriteria).join("\n");
               const deadlineDate = parseDeadline(t.deadline);
-              const implementationSteps = parseArray((t as Record<string, unknown>).implementationSteps).join("\n");
-              const technicalHints = JSON.stringify((t as Record<string, unknown>).technicalHints || {});
+              const implementationSteps = parseArray((t as unknown as Record<string, unknown>).implementationSteps).join("\n");
+              const technicalHints = JSON.stringify((t as unknown as Record<string, unknown>).technicalHints || {});
 
               const created = await db.task.create({
                 data: {
@@ -160,8 +160,8 @@ export async function POST(
                   status: t.status || "todo",
                   hours: typeof t.hours === "number" ? t.hours : 8,
                   priority: t.priority || "P1",
-                  layer: (t as Record<string, unknown>).layer as string || "BACKEND",
-                  targetFile: (t as Record<string, unknown>).targetFile as string || "",
+                  layer: (t as unknown as Record<string, unknown>).layer as string || "BACKEND",
+                  targetFile: (t as unknown as Record<string, unknown>).targetFile as string || "",
                   implementationSteps,
                   technicalHints,
                 },

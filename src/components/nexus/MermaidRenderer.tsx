@@ -185,7 +185,7 @@ declare global {
   }
 }
 
-function waitForMermaid(timeoutMs = 10000): Promise<typeof window.mermaid> {
+function waitForMermaid(timeoutMs = 10000): Promise<NonNullable<typeof window.mermaid>> {
   return new Promise((resolve, reject) => {
     if (window.__mermaidReady && window.mermaid) {
       resolve(window.mermaid);
