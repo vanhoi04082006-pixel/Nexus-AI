@@ -25,43 +25,113 @@ export const maxDuration = 600;
 // ===== GET: List all projects =====
 export async function GET() {
   try {
-    const projects = await db.project.findMany({
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        topic: true,
-        description: true,
-        status: true,
-        leaderName: true,
-        leaderEmail: true,
-        leaderToken: true,
-        purpose: true,
-        isFavorite: true,
-        isArchived: true,
-        priority: true,
-        deadline: true,
-        techStack: true,
-        tags: true,
-        coverColor: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            members: true,
-            tasks: true,
-            analyses: true,
+    // Try the full enriched query (with new schema fields)
+    let projects;
+    try {
+      projects = await db.project.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          topic: true,
+          description: true,
+          status: true,
+          leaderName: true,
+          leaderEmail: true,
+          leaderToken: true,
+          purpose: true,
+          isFavorite: true,
+          isArchived: true,
+          priority: true,
+          deadline: true,
+          techStack: true,
+          tags: true,
+          coverColor: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              members: true,
+              tasks: true,
+              analyses: true,
+            },
+          },
+          members: {
+            select: { id: true, name: true, email: true, role: true },
+            take: 8,
+          },
+          tasks: {
+            select: { status: true },
           },
         },
-        members: {
-          select: { id: true, name: true, email: true, role: true },
-          take: 8,
+        take: 100,
+      });
+    } catch {
+      // Fallback: DB schema not synced yet (missing new columns) — query basic fields only
+      const basic = await db.project.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          topic: true,
+          description: true,
+          status: true,
+          leaderName: true,
+          leaderEmail: true,
+          leaderToken: true,
+          purpose: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              members: true,
+              tasks: true,
+              analyses: true,
+            },
+          },
+          members: {
+            select: { id: true, name: true, email: true, role: true },
+            take: 8,
+          },
+          tasks: {
+            select: { status: true },
+          },
         },
-        tasks: {
-          select: { status: true },
-        },
-      },
-      take: 100,
-    });
+        take: 100,
+      });
+      // Return with default values for new fields
+      return Response.json({
+        projects: basic.map((p) => {
+          const totalTasks = p.tasks.length;
+          const doneTasks = p.tasks.filter((t) => t.status === "done").length;
+          const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+          return {
+            id: p.id,
+            topic: p.topic,
+            description: p.description,
+            status: p.status,
+            leaderName: p.leaderName,
+            leaderEmail: p.leaderEmail,
+            leaderToken: p.leaderToken,
+            purpose: p.purpose,
+            isFavorite: false,
+            isArchived: false,
+            priority: "normal",
+            deadline: null,
+            techStack: [],
+            tags: [],
+            coverColor: "cyan",
+            memberCount: p._count.members,
+            taskCount: p._count.tasks,
+            doneTaskCount: doneTasks,
+            totalTaskCount: totalTasks,
+            progress,
+            hasAnalysis: p._count.analyses > 0,
+            members: p.members,
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+          };
+        }),
+      });
+    }
 
     return Response.json({
       projects: projects.map((p) => {

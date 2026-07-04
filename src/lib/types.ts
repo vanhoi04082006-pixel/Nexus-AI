@@ -12,10 +12,10 @@ export interface ProjectInput {
   description: string;
   purpose: string;
   extraInfo: {
-    requirements: string[];
+    requirements: string; // comma-separated string (matches frontend store + InputView)
     specialReqs: string;
-    techPrefs: string[];
-    langPrefs: string[];
+    techPrefs: string; // comma-separated string
+    langPrefs: string; // comma-separated string
   };
   members: MemberInput[];
   leaderName: string;

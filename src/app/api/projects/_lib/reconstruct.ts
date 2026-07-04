@@ -30,10 +30,10 @@ export async function reconstructInput(
   if (!project) return null;
 
   let extra: {
-    requirements?: string[];
+    requirements?: string[] | string;
     specialReqs?: string;
-    techPrefs?: string[];
-    langPrefs?: string[];
+    techPrefs?: string[] | string;
+    langPrefs?: string[] | string;
   } = {};
   try {
     extra = JSON.parse(project.extraInfo || "{}");
@@ -41,15 +41,22 @@ export async function reconstructInput(
     extra = {};
   }
 
+  // Helper: accept either string (comma-separated) or array, return string
+  const toString = (v: string[] | string | undefined): string => {
+    if (Array.isArray(v)) return v.join(", ");
+    if (typeof v === "string") return v;
+    return "";
+  };
+
   return {
     topic: project.topic,
     description: project.description,
     purpose: project.purpose,
     extraInfo: {
-      requirements: Array.isArray(extra.requirements) ? extra.requirements : [],
+      requirements: toString(extra.requirements),
       specialReqs: typeof extra.specialReqs === "string" ? extra.specialReqs : "",
-      techPrefs: Array.isArray(extra.techPrefs) ? extra.techPrefs : [],
-      langPrefs: Array.isArray(extra.langPrefs) ? extra.langPrefs : [],
+      techPrefs: toString(extra.techPrefs),
+      langPrefs: toString(extra.langPrefs),
     },
     members: project.members.map((m) => ({
       name: m.name,

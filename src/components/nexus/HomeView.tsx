@@ -196,6 +196,7 @@ export function HomeView() {
   const setInput = useNexus((s) => s.setInput);
   const [projects, setProjects] = useState<ProjectHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
@@ -324,13 +325,15 @@ export function HomeView() {
 
   async function loadProjects() {
     setLoading(true);
+    setLoadError(false);
     try {
       const resp = await fetch("/api/projects");
       if (!resp.ok) throw new Error("Failed to load");
       const data = await resp.json();
       setProjects(data.projects || []);
     } catch {
-      toast.error("Không tải được lịch sử dự án");
+      setLoadError(true);
+      toast.error("Không tải được danh sách dự án — kiểm tra kết nối DB");
     } finally {
       setLoading(false);
     }
@@ -359,7 +362,7 @@ export function HomeView() {
       description: template.description,
       purpose: template.purpose,
       extraInfo: {
-        requirements: [],
+        requirements: "",
         specialReqs: "",
         techPrefs: template.techPrefs,
         langPrefs: template.langPrefs,
@@ -368,6 +371,7 @@ export function HomeView() {
     setRoute(null, null);
     setView("input");
     window.history.pushState({}, "", `/`);
+    toast.success(`Đã áp dụng template "${template.name}" — điền thông tin còn lại rồi bấm Khởi tạo`);
   }
 
   const heroProject = projects[heroIndex] || projects[0];
@@ -528,6 +532,25 @@ export function HomeView() {
             {loading ? (
               <div className="flex items-center justify-center py-32">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : loadError ? (
+              /* ===== Error State ===== */
+              <div className="max-w-3xl mx-auto px-6 py-16 text-center nexus-boot">
+                <div className="flex justify-center mb-8">
+                  <div className="w-20 h-20 rounded-2xl bg-destructive/15 flex items-center justify-center">
+                    <AlertCircle className="w-10 h-10 text-destructive" />
+                  </div>
+                </div>
+                <h2 className="text-2xl font-bold mb-3">Không tải được dữ liệu</h2>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
+                  Có thể database chưa được sync. Chạy lệnh <code className="px-1.5 py-0.5 rounded bg-card/60 text-primary font-mono text-xs">bun run db:push</code> để cập nhật schema, rồi refresh trang.
+                </p>
+                <Button onClick={loadProjects} variant="secondary" className="mr-2">
+                  <RefreshCw className="w-4 h-4" /> Thử lại
+                </Button>
+                <Button onClick={newProject} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Plus className="w-4 h-4" /> Tạo dự án mới
+                </Button>
               </div>
             ) : projects.length === 0 ? (
               /* ===== Empty State with 3D AI Brain ===== */
