@@ -244,7 +244,17 @@ export const useNexus = create<NexusState>()(
 
   setView: (v) => set({ view: v }),
   setRoute: (projectId, token) => set({ projectId, token }),
-  setInput: (patch) => set((s) => ({ input: { ...s.input, ...patch } })),
+  setInput: (patch) =>
+    set((s) => ({
+      input: {
+        ...s.input,
+        ...patch,
+        // Deep-merge extraInfo so partial updates don't lose fields
+        extraInfo: patch.extraInfo
+          ? { ...s.input.extraInfo, ...patch.extraInfo }
+          : s.input.extraInfo,
+      },
+    })),
   setMember: (index, patch) =>
     set((s) => {
       const members = [...s.input.members];

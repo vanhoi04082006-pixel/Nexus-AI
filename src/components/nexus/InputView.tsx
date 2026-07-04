@@ -49,7 +49,7 @@ const LANGS = [
 ];
 
 function toggleTag(value: string, tag: string): string {
-  const items = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const items = (value || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (items.includes(tag)) {
     return items.filter((i) => i !== tag).join(", ");
   }
@@ -141,13 +141,13 @@ export function InputView() {
       description: input.description.trim(),
       purpose: input.purpose.trim(),
       extraInfo: {
-        requirements: input.extraInfo.requirements
+        requirements: (input.extraInfo.requirements || "")
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
-        specialReqs: input.extraInfo.specialReqs.trim(),
-        techPrefs: input.extraInfo.techPrefs.split(",").map((s) => s.trim()).filter(Boolean),
-        langPrefs: input.extraInfo.langPrefs.split(",").map((s) => s.trim()).filter(Boolean),
+        specialReqs: (input.extraInfo.specialReqs || "").trim(),
+        techPrefs: (input.extraInfo.techPrefs || "").split(",").map((s) => s.trim()).filter(Boolean),
+        langPrefs: (input.extraInfo.langPrefs || "").split(",").map((s) => s.trim()).filter(Boolean),
       },
       members: validMembers,
       leaderName: input.leaderName.trim(),
@@ -418,7 +418,7 @@ export function InputView() {
                       Chuc nang yeu cau (moi dong 1 chuc nang)
                     </label>
                     <Textarea
-                      value={input.extraInfo.requirements}
+                      value={input.extraInfo.requirements || ""}
                       onChange={(e) =>
                         setInput({ extraInfo: { ...input.extraInfo, requirements: e.target.value } })
                       }
@@ -432,7 +432,7 @@ export function InputView() {
                       Yeu cau dac biet
                     </label>
                     <Textarea
-                      value={input.extraInfo.specialReqs}
+                      value={input.extraInfo.specialReqs || ""}
                       onChange={(e) =>
                         setInput({ extraInfo: { ...input.extraInfo, specialReqs: e.target.value } })
                       }
@@ -459,7 +459,7 @@ export function InputView() {
                               })
                             }
                             className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                              input.extraInfo.techPrefs.includes(t)
+                              (input.extraInfo.techPrefs || "").includes(t)
                                 ? "bg-primary/15 border-primary text-primary"
                                 : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                             }`}
@@ -469,7 +469,7 @@ export function InputView() {
                         ))}
                       </div>
                       <Textarea
-                        value={input.extraInfo.techPrefs}
+                        value={input.extraInfo.techPrefs || ""}
                         onChange={(e) =>
                           setInput({ extraInfo: { ...input.extraInfo, techPrefs: e.target.value } })
                         }
@@ -495,7 +495,7 @@ export function InputView() {
                               })
                             }
                             className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                              input.extraInfo.langPrefs.includes(t)
+                              (input.extraInfo.langPrefs || "").includes(t)
                                 ? "bg-primary/15 border-primary text-primary"
                                 : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                             }`}
@@ -505,7 +505,7 @@ export function InputView() {
                         ))}
                       </div>
                       <Textarea
-                        value={input.extraInfo.langPrefs}
+                        value={input.extraInfo.langPrefs || ""}
                         onChange={(e) =>
                           setInput({ extraInfo: { ...input.extraInfo, langPrefs: e.target.value } })
                         }
