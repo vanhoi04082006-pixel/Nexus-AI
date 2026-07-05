@@ -265,11 +265,52 @@ function waitForMermaid(timeoutMs = 10000): Promise<NonNullable<typeof window.me
   });
 }
 
+/**
+ * Aggressive fix — used on retry when fixMermaid() still fails.
+ * Strips ALL problematic syntax to maximize the chance of Mermaid
+ * rendering successfully, even if the diagram looks simpler.
+ */
+function aggressiveFix(s: string): string {
+  let out = s;
+  // 1. Remove all edge labels with |...| syntax (common cause of syntax errors)
+  out = out.replace(/(-+>|<--|-+|\.+>+)\|[^|]*\|/g, "$1");
+  // 2. Remove all relationship labels after colons (A --> B : label → A --> B)
+  out = out.replace(/^(\s*\S+.*?(?:-->|---|-\.->|<--)\s*\S+)\s*:\s*.+$/gm, "$1");
+  // 3. Remove cardinality quotes (A "1" --> "*" B → A --> B)
+  out = out.replace(/"[^"]*"\s*(-->|---|<--|-\.->)\s*"[^"]*"/g, "$1");
+  // 4. Ensure all node labels in [...] are double-quoted
+  out = out.replace(/\[([^\]"'][^\]]*)\]/g, '["$1"]');
+  // 5. Remove subgraph ... end blocks (they sometimes cause issues)
+  // (keep it — just ensure "end" is on its own line)
+  out = out.replace(/^\s*end\s*$/gim, "end");
+  // 6. Remove any remaining special chars from node IDs (keep only [A-Za-z0-9_])
+  // This runs per-line for graph/classDiagram/erDiagram
+  const lines = out.split("\n");
+  const fixedLines = lines.map((line) => {
+    const trimmed = line.trim();
+    // Skip declaration lines
+    if (/^(graph|flowchart|classDiagram|erDiagram|sequenceDiagram|subgraph|end|classDef|style|%%)/.test(trimmed)) {
+      return line;
+    }
+    // For lines with node definitions or relationships, sanitize IDs
+    // Match: ID["label"] or ID[label] or ID --> ID
+    return line.replace(/^(\s*)([^\s\[\]{}()"'|:<>-]+)/, (_m, indent: string, id: string) => {
+      const cleanId = id.replace(/[^A-Za-z0-9_]/g, "");
+      return `${indent}${cleanId || "Node"}`;
+    });
+  });
+  out = fixedLines.join("\n");
+  // 7. Remove empty lines (Mermaid sometimes chokes on them)
+  out = out.replace(/^\s*$/gm, "");
+  return out.trim();
+}
+
 export function MermaidRenderer({ code, id }: { code: string; id: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [lastFixedCode, setLastFixedCode] = useState<string>("");
   const renderToken = useRef(0);
 
   useEffect(() => {
@@ -290,7 +331,13 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       try {
         const mermaid = await waitForMermaid();
         if (cancelled || myToken !== renderToken.current) return;
-        const fixed = fixMermaid(code);
+        // Apply fixMermaid + increasingly aggressive sanitization on retry
+        let fixed = fixMermaid(code);
+        if (retryCount >= 1) {
+          // Retry 1+: aggressive fallback — strip all problematic syntax
+          fixed = aggressiveFix(fixed);
+        }
+        setLastFixedCode(fixed);
         const renderId = `m-${id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
         const result = await Promise.race([
           mermaid.render(renderId, fixed),
@@ -364,17 +411,27 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       )}
       {error && (
         <>
-          <div className="text-destructive text-sm mb-3">Loi render Mermaid: {error}</div>
+          <div className="text-destructive text-sm mb-2">Loi render Mermaid: {error}</div>
+          {retryCount === 0 && (
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Bấm "Thử lại" để áp dụng bộ sửa lỗi nâng cao (sanitize IDs, strip edge labels).
+            </p>
+          )}
+          {retryCount > 0 && (
+            <p className="text-[11px] text-amber-400 mb-3">
+              Đã thử {retryCount} lần với aggressive fix. Diagram có thể quá phức tạp — thử edit section này.
+            </p>
+          )}
           <button
             onClick={() => {
               setRetryCount((c) => c + 1);
             }}
             className="mb-3 px-3 py-1 text-xs border border-primary text-primary rounded hover:bg-primary/10 transition-colors"
           >
-            ↻ Thu lai
+            ↻ Thu lai {retryCount > 0 && `(${retryCount})`}
           </button>
           <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap max-h-64 overflow-auto nexus-scroll w-full">
-            {code}
+            {lastFixedCode || code}
           </pre>
         </>
       )}
