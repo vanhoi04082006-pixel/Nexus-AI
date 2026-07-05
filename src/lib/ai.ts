@@ -21,7 +21,8 @@ const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
 const MAX_RETRIES = 5;      // 5 attempts per model (more retries for 429 rate-limits)
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
-const MAX_DELAY = 30000;
+const MAX_DELAY = 60000;   // 60s max delay between retries
+const RATE_LIMIT_DELAY = 60000; // 60s fixed wait for 429 rate-limits (user requirement)
 const MAX_CONCURRENCY = 3;  // Max parallel LLM calls (prevents memory blowup + rate-limit spikes)
 
 // Concurrency limiter — max 3 parallel LLM calls to prevent:
@@ -505,23 +506,23 @@ async function callAndParse(
           message: `  ✗ [${a}/${MAX_RETRIES}] ${model} → [${st || e.code || "NET"}] ${msg}`,
         });
 
-        // 429: rate limit — wait with FULL JITTER and retry same model
+        // 429: rate limit — wait 60s (user requirement) + jitter, then retry same model
         if (st === 429) {
-          const ra = e.retryAfter || d;
+          const ra = e.retryAfter || 60;
           const jittered = jitteredDelay(INIT_DELAY, a);
-          const waitMs = Math.min(ra, MAX_DELAY, jittered + 1000); // jitter + 1s floor
-          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs)}ms (jittered)`);
+          const waitMs = Math.max(RATE_LIMIT_DELAY, Math.min(ra * 1000, MAX_DELAY)) + Math.min(jittered, 5000);
+          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs / 1000)}s (60s + jitter)`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (jittered)`,
+            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (60s base + jitter)`,
           });
           await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
 
-        // 5xx / timeout / network: retry same model with backoff
+        // 5xx / timeout / network: retry same model with 60s delay (user requirement)
         // ETIMEDOUT = model is slow, not broken — retry with patience
         if (
           (st && st >= 500) ||
@@ -531,15 +532,16 @@ async function callAndParse(
         ) {
           const isTimeout = e.code === "ETIMEDOUT";
           const jittered = jitteredDelay(INIT_DELAY, a);
-          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(jittered)}ms (jittered)`);
+          const waitMs = Math.max(RATE_LIMIT_DELAY, jittered); // min 60s
+          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(waitMs / 1000)}s`);
           appendLog({
             level: "warn",
             model,
             message: isTimeout
-              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(jittered / 1000)}s (jittered, attempt ${a}/${MAX_RETRIES})`
-              : `  ⏳ Server/timeout — retrying in ${Math.round(jittered / 1000)}s (jittered)`,
+              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(waitMs / 1000)}s (attempt ${a}/${MAX_RETRIES})`
+              : `  ⏳ Server/timeout — retrying in ${Math.round(waitMs / 1000)}s`,
           });
-          await wait(jittered);
+          await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
