@@ -18,7 +18,7 @@ import type {
    Tunables
 =========================================================== */
 const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
-const MAX_RETRIES = 3;      // 3 attempts per model
+const MAX_RETRIES = 5;      // 5 attempts per model (more retries for 429 rate-limits)
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
 const MAX_DELAY = 30000;
@@ -1367,6 +1367,7 @@ export async function runPipeline(
 
   for (const ag of AGENTS) {
     if (!results[ag.key]) {
+      const i = AGENTS.indexOf(ag);
       console.log(`>> FALLBACK: ${ag.name}`);
       appendLog({
         level: "warn",
@@ -1374,7 +1375,15 @@ export async function runPipeline(
         provider: "fallback",
         message: `▷ FALLBACK: ${ag.name} → using static fallback data`,
       });
-      (results as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
+      (results as unknown as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
+      // CRITICAL: emit agent_done so the UI updates (otherwise agent stays "pending" forever)
+      onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Fallback)`, index: i, total });
+      appendLog({
+        level: "success",
+        agentId: ag.id,
+        provider: "fallback",
+        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (fallback)`,
+      });
     }
   }
 

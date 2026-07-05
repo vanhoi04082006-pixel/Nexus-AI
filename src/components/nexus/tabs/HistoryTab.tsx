@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   History,
   CheckCircle2,
@@ -15,7 +16,15 @@ import {
   FileCode,
   Mail,
   GitBranch,
+  Eye,
+  X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ActivityLogEntry {
   id: string;
@@ -90,6 +99,7 @@ export function HistoryTab() {
   const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [detailLog, setDetailLog] = useState<ActivityLogEntry | null>(null);
 
   async function loadHistory() {
     if (!projectId || !token) return;
@@ -267,6 +277,18 @@ export function HistoryTab() {
                           <span>📝 {log.logCount} logs</span>
                         )}
                       </div>
+
+                      {/* View detail button */}
+                      <div className="mt-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[10px] px-2 text-muted-foreground hover:text-primary"
+                          onClick={() => setDetailLog(log)}
+                        >
+                          <Eye className="w-3 h-3 mr-1" /> Xem chi tiết
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -275,6 +297,95 @@ export function HistoryTab() {
           })}
         </div>
       )}
+
+      {/* Detail Modal — xem toàn bộ log chi tiết */}
+      <Dialog open={!!detailLog} onOpenChange={(o) => !o && setDetailLog(null)}>
+        <DialogContent className="max-w-2xl bg-nexus-surface-2 border-border/60 max-h-[90vh] overflow-y-auto nexus-scroll">
+          {detailLog && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <FileCode className="w-4 h-4 text-primary" />
+                  {detailLog.title}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                {/* Status + type badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className={`text-[10px] ${
+                    detailLog.status === "SUCCESS" ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" :
+                    detailLog.status === "FAILED" ? "text-red-400 border-red-500/30 bg-red-500/10" :
+                    detailLog.status === "WARNING" ? "text-amber-400 border-amber-500/30 bg-amber-500/10" :
+                    "text-cyan-400 border-cyan-500/30 bg-cyan-500/10"
+                  }`}>
+                    {detailLog.status}
+                  </Badge>
+                  {detailLog.type && (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                      {detailLog.type}
+                    </Badge>
+                  )}
+                  {detailLog.agentId && (
+                    <Badge variant="outline" className="text-[10px] text-primary border-primary/30 bg-primary/10">
+                      Agent {detailLog.agentId}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Full details — live log */}
+                {detailLog.details ? (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">Live Log</p>
+                    <div className="rounded-lg bg-[#060b14] border border-border/40 p-3 max-h-[400px] overflow-y-auto nexus-scroll">
+                      <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed">{detailLog.details}</pre>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Không có chi tiết log</p>
+                )}
+
+                {/* Metadata grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-card/30 border border-border/30 p-2.5">
+                    <p className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">Thời gian</p>
+                    <p className="font-medium">{fmtDate(detailLog.createdAt)}</p>
+                  </div>
+                  {detailLog.model && (
+                    <div className="rounded-lg bg-card/30 border border-border/30 p-2.5">
+                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">Model</p>
+                      <p className="font-mono text-[10px] truncate">{detailLog.model}</p>
+                    </div>
+                  )}
+                  {detailLog.duration != null && (
+                    <div className="rounded-lg bg-card/30 border border-border/30 p-2.5">
+                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">Duration</p>
+                      <p className="font-medium">{fmtDuration(detailLog.duration)}</p>
+                    </div>
+                  )}
+                  {detailLog.logCount != null && detailLog.logCount > 0 && (
+                    <div className="rounded-lg bg-card/30 border border-border/30 p-2.5">
+                      <p className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">Log Lines</p>
+                      <p className="font-medium">{detailLog.logCount} lines</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Copy button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(detailLog.details || detailLog.title);
+                  }}
+                >
+                  Copy log
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

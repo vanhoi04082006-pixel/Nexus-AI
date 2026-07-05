@@ -45,6 +45,17 @@ function fixMermaid(code: string): string {
       }
     );
 
+    // CRITICAL: Fix "A -->|label| B" (no trailing text) → "A --> B : label"
+    // The |label| edge-label syntax is from sequence diagrams, NOT valid in classDiagram.
+    // In classDiagram, labels go after a colon: A --> B : label
+    // Example: Role -->|use| Permission → Role --> Permission : use
+    s = s.replace(
+      /^(\s*)(\w+)\s*(--?>|<--|--|-\.\->|<-\.\-)\s*\|([^|]+)\|\s*(\w+)\s*$/gm,
+      (_m, indent: string, from: string, arrow: string, edgeLabel: string, to: string) => {
+        return `${indent}${from} ${arrow} ${to} : ${edgeLabel.trim()}`;
+      }
+    );
+
     // CRITICAL: Fix 'A "1" --> "*" B : "label"' → 'A "1" --> "*" B : label'
     // Mermaid 11 sometimes chokes on quoted labels after colon in classDiagram
     // Strip quotes from the relationship label (keep the text)
