@@ -42,8 +42,8 @@ export async function reconstructInput(
   }
 
   // Helper: accept either string (comma-separated) or array, return string
-  const toString = (v: string[] | string | undefined): string => {
-    if (Array.isArray(v)) return v.join(", ");
+  const toStr = (v: string[] | string | undefined, sep = ", "): string => {
+    if (Array.isArray(v)) return v.join(sep);
     if (typeof v === "string") return v;
     return "";
   };
@@ -53,10 +53,10 @@ export async function reconstructInput(
     description: project.description,
     purpose: project.purpose,
     extraInfo: {
-      requirements: toString(extra.requirements),
+      requirements: toStr(extra.requirements, "\n"),
       specialReqs: typeof extra.specialReqs === "string" ? extra.specialReqs : "",
-      techPrefs: toString(extra.techPrefs),
-      langPrefs: toString(extra.langPrefs),
+      techPrefs: toStr(extra.techPrefs),
+      langPrefs: toStr(extra.langPrefs),
     },
     members: project.members.map((m) => ({
       name: m.name,

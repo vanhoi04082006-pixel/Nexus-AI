@@ -875,13 +875,24 @@ function buildCtx(
     .join("\n");
 
   const extra = input.extraInfo;
+  // Defensive: handle both string and array for requirements/techPrefs/langPrefs
+  // (old DB rows may store arrays; type says string)
+  const toArray = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((x) => String(x));
+    if (typeof v === "string" && v.trim()) return v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
+  const requirementsStr = toArray(extra.requirements).join("; ");
+  const techPrefsStr = toArray(extra.techPrefs).join(", ");
+  const langPrefsStr = toArray(extra.langPrefs).join(", ");
+
   let c = `Du an: ${input.topic}`;
   if (input.description) c += `\nMo ta: ${input.description}`;
   if (input.purpose) c += `\nMuc dich: ${input.purpose}`;
-  if (extra.requirements?.trim()) c += `\nChuc nang yeu cau: ${extra.requirements}`;
+  if (requirementsStr) c += `\nChuc nang yeu cau: ${requirementsStr}`;
   if (extra.specialReqs) c += `\nYeu cau dac biet: ${extra.specialReqs}`;
-  if (extra.techPrefs?.trim()) c += `\nCong nghe: ${extra.techPrefs}`;
-  if (extra.langPrefs?.trim()) c += `\nNgon ngu: ${extra.langPrefs}`;
+  if (techPrefsStr) c += `\nCong nghe: ${techPrefsStr}`;
+  if (langPrefsStr) c += `\nNgon ngu: ${langPrefsStr}`;
   c += `\nThanh vien (${members.length}):\n${ms}`;
 
   switch (key) {
@@ -952,6 +963,12 @@ function fallback(
   const d = new Date().toISOString().split("T")[0];
   const dEnd = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]; // +14 days
   const members = input.members;
+  // Defensive: handle both string and array for requirements
+  const toArr = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((x) => String(x));
+    if (typeof v === "string" && v.trim()) return v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
   switch (key) {
     case "analysis":
       return {
@@ -966,7 +983,7 @@ function fallback(
         teamSize: members.length,
         estimatedDuration: "4-6 tuan",
         complexity: "Trung binh",
-        features: (input.extraInfo.requirements || "").split("\n").filter(Boolean).map((r) => ({ name: r.trim(), module: "Core", pri: "P1" })),
+        features: toArr(input.extraInfo.requirements).map((r) => ({ name: r, module: "Core", pri: "P1" })),
         actors: [{ name: "User", desc: "Nguoi dung cuoi" }],
         modules: ["Auth", "Core", "Dashboard"], // sensible defaults instead of cross-section
       };
