@@ -821,6 +821,19 @@ NGUYEN TAC SINH TASK (SMART + ATOMIC):
 7. Dependencies phai ro rang: task nao phai lam truoc, task nao phu thuoc task nao
 8. Task PHAI PHU HOP VOI CHU DE DU AN — dung ten entity, ten file, ten module that cua du an
 
+CRITICAL — KHONG TRUNG LAP:
+- TUYET DOI KHONG sinh 2 task trung ten hoac trung noi dung
+- Moi task phai DUY NHAT — kiem tra lai danh sach truoc khi them task moi
+- Neu 2 task tuong tu nhau, hop nhat thanh 1 task duy nhat
+
+DAM BAO DAO (phu hop toan bo he thong):
+- Phan ra theo TAT CA layers: Database (schema, migration, seed), Backend (API CRUD, auth, validation), Frontend UI (layout, pages, components), Testing (unit, integration, e2e), DevOps (CI/CD, Docker, deploy)
+- Dua tren PHAN TICH (features, actors, modules) + NHAN SU (assignments, modules) + SPRINT (tasks, milestones) + THIET KE (DB tables, API endpoints, folder structure)
+- Moi feature/module trong phan tich phai co it nhat 1 task tuong ung
+- Moi API endpoint trong thiet ke phai co 1 task implement
+- Moi DB table trong thiet ke phai co 1 task tao model + migration
+- Moi member phai co task phu hop voi role va modules duoc gan
+
 ${JSON_INSTRUCTION}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
@@ -1726,17 +1739,36 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
     if (res && res.data) {
       const data = res.data as { tasks?: TaskItem[] };
       if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
-        console.log(`  [TASK GEN] Success: ${data.tasks.length} tasks from ${res.model}`);
+        // DEDUP: Remove duplicate tasks by title+assignee (AI sometimes returns dupes)
+        const seen = new Set<string>();
+        const uniqueTasks = data.tasks.filter((t) => {
+          const key = `${(t.title || "").toLowerCase().trim()}|${(t.assigneeName || "").toLowerCase().trim()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        const dupesRemoved = data.tasks.length - uniqueTasks.length;
+        if (dupesRemoved > 0) {
+          console.log(`  [TASK GEN] Removed ${dupesRemoved} duplicate task(s)`);
+          appendLog({
+            level: "warn",
+            agentId: "TASK",
+            provider: "pipeline",
+            model: res.model,
+            message: `⚠ [TASK GEN] Loại bỏ ${dupesRemoved} task trùng lặp (từ ${data.tasks.length} → ${uniqueTasks.length} task)`,
+          });
+        }
+        console.log(`  [TASK GEN] Success: ${uniqueTasks.length} tasks from ${res.model}`);
         appendLog({
           level: "success",
           agentId: "TASK",
           provider: "pipeline",
           model: res.model,
-          message: `✓ [TASK GEN] AI trả về ${data.tasks.length} task(s) (${res.model})`,
+          message: `✓ [TASK GEN] AI trả về ${uniqueTasks.length} task(s) (${res.model})`,
         });
         // Log per-member task breakdown so the user sees "sinh task cho A: chức năng X do A làm"
         const byMember = new Map<string, string[]>();
-        for (const t of data.tasks) {
+        for (const t of uniqueTasks) {
           const name = t.assigneeName || "(unassigned)";
           if (!byMember.has(name)) byMember.set(name, []);
           byMember.get(name)!.push(t.title || "Untitled");
@@ -1751,7 +1783,7 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
             });
           }
         }
-        return data.tasks;
+        return uniqueTasks;
       }
       // AI returned data but no tasks array — try to extract from common patterns
       const d = res.data as Record<string, unknown>;

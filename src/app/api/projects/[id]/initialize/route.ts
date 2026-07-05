@@ -120,6 +120,8 @@ export async function POST(
               provider: "pipeline",
               message: `💾 Đang lưu ${tasks.length} task vào database...`,
             });
+            // ===== Delete existing tasks first (prevent duplicates on re-init) =====
+            await db.task.deleteMany({ where: { projectId: id } });
             // ===== Persist tasks =====
             const memberByName = new Map<string, string>();
             for (const m of project.members) {
