@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense, lazy } from "react";
+import { useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useNexus } from "@/store/useNexus";
 import { toast } from "sonner";
@@ -10,12 +10,6 @@ import { WorkspaceView } from "@/components/nexus/WorkspaceView";
 import { HomeView } from "@/components/nexus/HomeView";
 import { AllProjectsView } from "@/components/nexus/AllProjectsView";
 import { AgentHubView } from "@/components/nexus/AgentHubView";
-import { BootSequence } from "@/components/landing/BootSequence";
-import "./landing.css";
-
-const LandingPage = lazy(() => import("@/components/landing/LandingPage").then(m => ({ default: m.LandingPage })));
-
-type AppState = "boot" | "landing" | "app";
 
 function NexusApp() {
   const params = useSearchParams();
@@ -29,35 +23,20 @@ function NexusApp() {
   const setView = useNexus((s) => s.setView);
   const pipelineRunning = useNexus((s) => s.pipelineRunning);
 
-  const [appState, setAppState] = useState<AppState>("boot");
-
-  // Boot sequence → landing
   useEffect(() => {
-    if (appState === "boot") {
-      const timer = setTimeout(() => {
-        // If URL has project token, skip landing → go directly to app
-        if (projectId && token) {
-          setAppState("app");
-        } else {
-          setAppState("landing");
-        }
-      }, 4200); // Boot takes ~4.2s
-      return () => clearTimeout(timer);
-    }
-  }, [appState, projectId, token]);
-
-  useEffect(() => {
-    if (projectId && token && appState === "app") {
+    if (projectId && token) {
       setRoute(projectId, token);
       setView("workspace");
-    } else if (appState === "app") {
+    } else {
       setRoute(null, null);
+      // If no project in URL, go to home (shows project history)
+      // But don't override if user is currently filling the input form
       const currentView = useNexus.getState().view;
       if (currentView === "workspace") {
         setView("home");
       }
     }
-  }, [projectId, token, setRoute, setView, appState]);
+  }, [projectId, token, setRoute, setView]);
 
   // Show toast when returning from GitHub OAuth
   useEffect(() => {
@@ -82,7 +61,7 @@ function NexusApp() {
     }
   }, [githubConnected, githubError]);
 
-  // Warn on exit during AI work
+  // Warn on exit during AI work (pipeline, initialize, refine)
   useEffect(() => {
     if (!pipelineRunning) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -94,27 +73,6 @@ function NexusApp() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [pipelineRunning]);
 
-  // ===== Boot Sequence =====
-  if (appState === "boot") {
-    return <BootSequence onComplete={() => {
-      if (projectId && token) {
-        setAppState("app");
-      } else {
-        setAppState("landing");
-      }
-    }} />;
-  }
-
-  // ===== Landing Page =====
-  if (appState === "landing") {
-    return (
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading NEXUS AI...</div>}>
-        <LandingPage onLaunch={() => setAppState("app")} />
-      </Suspense>
-    );
-  }
-
-  // ===== App (workspace/home/etc) =====
   return (
     <div className="min-h-screen flex flex-col nexus-grid-bg">
       {view === "home" && <HomeView />}
