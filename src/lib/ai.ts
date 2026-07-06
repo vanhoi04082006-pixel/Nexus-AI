@@ -348,6 +348,32 @@ class JFix {
 /* ===========================================================
    Core: call model + parse JSON, with retries per model
 =========================================================== */
+// ===== Adaptive Timeout =====
+// Different models have different response times. Use shorter timeouts
+// for fast models and longer for slow ones to avoid wasting time.
+const MODEL_TIMEOUTS: Record<string, number> = {
+  "nvidia/nemotron-3-ultra-550b-a55b:free": 300000, // 5 min — very slow
+  "nvidia/nemotron-3-super-120b-a12b:free": 240000, // 4 min
+  "openai/gpt-oss-120b:free": 180000, // 3 min
+  "google/gemma-4-31b-it:free": 120000, // 2 min
+  "google/gemma-4-26b-a4b-it:free": 90000, // 1.5 min
+  "qwen/qwen3-coder:free": 120000,
+  "qwen/qwen3-next-80b-a3b-instruct:free": 120000,
+};
+function getAdaptiveTimeout(model: string): number {
+  return MODEL_TIMEOUTS[model] ?? REQ_TIMEOUT;
+}
+
+// ===== Context Compression =====
+// Truncate long JSON strings to reduce token usage before sending to AI.
+// Keeps the most relevant parts: first N chars + last N chars.
+function compressContext(json: string, maxLen = 3000): string {
+  if (json.length <= maxLen) return json;
+  const head = Math.floor(maxLen * 0.6);
+  const tail = Math.floor(maxLen * 0.3);
+  return json.substring(0, head) + "\n...[COMPRESSED " + (json.length - head - tail) + " chars]...\n" + json.substring(json.length - tail);
+}
+
 async function callModel(
   model: string,
   sys: string,
@@ -368,7 +394,7 @@ async function callModel(
       frequency_penalty: 0.1,
       presence_penalty: 0.1,
     },
-    REQ_TIMEOUT
+    getAdaptiveTimeout(model) // Adaptive timeout per model
   ));
 }
 
@@ -454,13 +480,26 @@ async function callAndParse(
         if (data) {
           const zodResult = validateSection(sectionKey || "", data);
           if (zodResult.success) {
-            console.log(`      ✓ ${model} (lan ${a}) [Zod validated]`);
-            appendLog({
-              level: "success",
-              model,
-              message: `  ✓ ${model} parsed + Zod validated OK (attempt ${a})`,
-            });
-            return { data: zodResult.data, model };
+            // ===== Self-Critic: quick consistency check =====
+            // Verify the data has non-empty content (not just empty objects/arrays)
+            const dataStr = JSON.stringify(zodResult.data);
+            if (dataStr.length < 20 || dataStr === "{}" || dataStr === "[]") {
+              console.log(`      [${a}] Self-critic: data too empty (${dataStr.length} chars), retrying`);
+              appendLog({
+                level: "warn",
+                model,
+                message: `  ⚠ ${model} parsed OK but data is nearly empty — retrying (attempt ${a})`,
+              });
+              // Don't return — fall through to retry
+            } else {
+              console.log(`      ✓ ${model} (lan ${a}) [Zod validated + self-critic OK]`);
+              appendLog({
+                level: "success",
+                model,
+                message: `  ✓ ${model} parsed + Zod validated + self-critic OK (attempt ${a})`,
+              });
+              return { data: zodResult.data, model };
+            }
           } else {
             // Zod validation failed — data is valid JSON but wrong structure
             // Try AI self-fix with Zod error message (1 chance per attempt)
@@ -1689,10 +1728,10 @@ export async function generateTasks(
   onProgress?.(false);
   const base = buildCtx("analysis", result, input);
   // Defensive: sections may be undefined if the project is still in ANALYZING state
-  const analysisStr = result.analysis ? JSON.stringify(result.analysis) : "{}";
-  const hrStr = result.hr ? JSON.stringify(result.hr) : "{}";
-  const sprintStr = result.sprint ? JSON.stringify(result.sprint) : "{}";
-  const designStr = result.design ? JSON.stringify(result.design) : "{}";
+  const analysisStr = result.analysis ? compressContext(JSON.stringify(result.analysis), 2500) : "{}";
+  const hrStr = result.hr ? compressContext(JSON.stringify(result.hr), 1500) : "{}";
+  const sprintStr = result.sprint ? compressContext(JSON.stringify(result.sprint), 2500) : "{}";
+  const designStr = result.design ? compressContext(JSON.stringify(result.design), 2500) : "{}";
   const context = `${base}
 
 PHAN TICH DU AN:
