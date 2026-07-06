@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useRef, useState } from "react";
 import { io as ioFn, type Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";

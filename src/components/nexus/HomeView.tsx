@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";
@@ -378,7 +379,7 @@ export function HomeView() {
   const filteredProjects = searchQuery.trim()
     ? projects.filter(p => p.topic.toLowerCase().includes(searchQuery.toLowerCase()) || p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
     : projects;
-  const recentProjects = filteredProjects.slice(0, 10);
+  const recentProjects = filteredProjects.slice(0, 6);
 
   function fmtDate(iso: string): string {
     return new Date(iso).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });

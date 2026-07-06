@@ -75,8 +75,8 @@ export function MembersTab() {
     if (!m.inviteToken) return;
     const link = `${window.location.origin}/?p=${projectId}&token=${m.inviteToken}`;
     notify.copy(link, "Đã copy link mời!");
-    setCopiedId(m.id);
-    setTimeout(() => setCopiedId(null), 2000);
+    setCopied(m.id);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   async function handleProposal(p: EditProposalView, status: "APPROVED" | "REJECTED") {
