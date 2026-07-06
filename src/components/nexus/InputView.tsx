@@ -143,13 +143,19 @@ export function InputView() {
       description: input.description.trim(),
       purpose: input.purpose.trim(),
       extraInfo: {
-        requirements: (input.extraInfo.requirements || "")
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        specialReqs: (input.extraInfo.specialReqs || "").trim(),
-        techPrefs: (input.extraInfo.techPrefs || "").split(",").map((s) => s.trim()).filter(Boolean),
-        langPrefs: (input.extraInfo.langPrefs || "").split(",").map((s) => s.trim()).filter(Boolean),
+        requirements: (Array.isArray(input.extraInfo.requirements)
+          ? input.extraInfo.requirements.join("\n")
+          : (input.extraInfo.requirements || "")
+        ).split("\n").map((s: string) => s.trim()).filter(Boolean),
+        specialReqs: (typeof input.extraInfo.specialReqs === "string" ? input.extraInfo.specialReqs : "").trim(),
+        techPrefs: (Array.isArray(input.extraInfo.techPrefs)
+          ? input.extraInfo.techPrefs.join(",")
+          : (input.extraInfo.techPrefs || "")
+        ).split(",").map((s: string) => s.trim()).filter(Boolean),
+        langPrefs: (Array.isArray(input.extraInfo.langPrefs)
+          ? input.extraInfo.langPrefs.join(",")
+          : (input.extraInfo.langPrefs || "")
+        ).split(",").map((s: string) => s.trim()).filter(Boolean),
       },
       members: validMembers,
       leaderName: input.leaderName.trim(),

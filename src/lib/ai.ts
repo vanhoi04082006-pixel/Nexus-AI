@@ -18,10 +18,11 @@ import type {
    Tunables
 =========================================================== */
 const REQ_TIMEOUT = 300000; // 5 min — slow models (nemotron-ultra) need time
-const MAX_RETRIES = 3;      // 3 attempts per model
+const MAX_RETRIES = 5;      // 5 attempts per model (more retries for 429 rate-limits)
 const INIT_DELAY = 2000;
 const BACKOFF_MULT = 2;
-const MAX_DELAY = 30000;
+const MAX_DELAY = 60000;   // 60s max delay between retries
+const RATE_LIMIT_DELAY = 60000; // 60s fixed wait for 429 rate-limits (user requirement)
 const MAX_CONCURRENCY = 3;  // Max parallel LLM calls (prevents memory blowup + rate-limit spikes)
 
 // Concurrency limiter — max 3 parallel LLM calls to prevent:
@@ -505,23 +506,23 @@ async function callAndParse(
           message: `  ✗ [${a}/${MAX_RETRIES}] ${model} → [${st || e.code || "NET"}] ${msg}`,
         });
 
-        // 429: rate limit — wait with FULL JITTER and retry same model
+        // 429: rate limit — wait 60s (user requirement) + jitter, then retry same model
         if (st === 429) {
-          const ra = e.retryAfter || d;
+          const ra = e.retryAfter || 60;
           const jittered = jitteredDelay(INIT_DELAY, a);
-          const waitMs = Math.min(ra, MAX_DELAY, jittered + 1000); // jitter + 1s floor
-          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs)}ms (jittered)`);
+          const waitMs = Math.max(RATE_LIMIT_DELAY, Math.min(ra * 1000, MAX_DELAY)) + Math.min(jittered, 5000);
+          console.log(`      ⏳ Rate limit, doi ${Math.round(waitMs / 1000)}s (60s + jitter)`);
           appendLog({
             level: "warn",
             model,
-            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (jittered)`,
+            message: `  ⏳ Rate-limited — waiting ${Math.round(waitMs / 1000)}s before retry (60s base + jitter)`,
           });
           await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
 
-        // 5xx / timeout / network: retry same model with backoff
+        // 5xx / timeout / network: retry same model with 60s delay (user requirement)
         // ETIMEDOUT = model is slow, not broken — retry with patience
         if (
           (st && st >= 500) ||
@@ -531,15 +532,16 @@ async function callAndParse(
         ) {
           const isTimeout = e.code === "ETIMEDOUT";
           const jittered = jitteredDelay(INIT_DELAY, a);
-          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(jittered)}ms (jittered)`);
+          const waitMs = Math.max(RATE_LIMIT_DELAY, jittered); // min 60s
+          console.log(`      ⏳ ${isTimeout ? "Timeout (model slow)" : "Server/timeout"}, doi ${Math.round(waitMs / 1000)}s`);
           appendLog({
             level: "warn",
             model,
             message: isTimeout
-              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(jittered / 1000)}s (jittered, attempt ${a}/${MAX_RETRIES})`
-              : `  ⏳ Server/timeout — retrying in ${Math.round(jittered / 1000)}s (jittered)`,
+              ? `  ⏳ Timeout — model is slow, retrying in ${Math.round(waitMs / 1000)}s (attempt ${a}/${MAX_RETRIES})`
+              : `  ⏳ Server/timeout — retrying in ${Math.round(waitMs / 1000)}s`,
           });
-          await wait(jittered);
+          await wait(waitMs);
           d = Math.min(d * BACKOFF_MULT, MAX_DELAY);
           continue;
         }
@@ -821,6 +823,19 @@ NGUYEN TAC SINH TASK (SMART + ATOMIC):
 7. Dependencies phai ro rang: task nao phai lam truoc, task nao phu thuoc task nao
 8. Task PHAI PHU HOP VOI CHU DE DU AN — dung ten entity, ten file, ten module that cua du an
 
+CRITICAL — KHONG TRUNG LAP:
+- TUYET DOI KHONG sinh 2 task trung ten hoac trung noi dung
+- Moi task phai DUY NHAT — kiem tra lai danh sach truoc khi them task moi
+- Neu 2 task tuong tu nhau, hop nhat thanh 1 task duy nhat
+
+DAM BAO DAO (phu hop toan bo he thong):
+- Phan ra theo TAT CA layers: Database (schema, migration, seed), Backend (API CRUD, auth, validation), Frontend UI (layout, pages, components), Testing (unit, integration, e2e), DevOps (CI/CD, Docker, deploy)
+- Dua tren PHAN TICH (features, actors, modules) + NHAN SU (assignments, modules) + SPRINT (tasks, milestones) + THIET KE (DB tables, API endpoints, folder structure)
+- Moi feature/module trong phan tich phai co it nhat 1 task tuong ung
+- Moi API endpoint trong thiet ke phai co 1 task implement
+- Moi DB table trong thiet ke phai co 1 task tao model + migration
+- Moi member phai co task phu hop voi role va modules duoc gan
+
 ${JSON_INSTRUCTION}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
@@ -875,13 +890,24 @@ function buildCtx(
     .join("\n");
 
   const extra = input.extraInfo;
+  // Defensive: handle both string and array for requirements/techPrefs/langPrefs
+  // (old DB rows may store arrays; type says string)
+  const toArray = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((x) => String(x));
+    if (typeof v === "string" && v.trim()) return v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
+  const requirementsStr = toArray(extra.requirements).join("; ");
+  const techPrefsStr = toArray(extra.techPrefs).join(", ");
+  const langPrefsStr = toArray(extra.langPrefs).join(", ");
+
   let c = `Du an: ${input.topic}`;
   if (input.description) c += `\nMo ta: ${input.description}`;
   if (input.purpose) c += `\nMuc dich: ${input.purpose}`;
-  if (extra.requirements?.trim()) c += `\nChuc nang yeu cau: ${extra.requirements}`;
+  if (requirementsStr) c += `\nChuc nang yeu cau: ${requirementsStr}`;
   if (extra.specialReqs) c += `\nYeu cau dac biet: ${extra.specialReqs}`;
-  if (extra.techPrefs?.trim()) c += `\nCong nghe: ${extra.techPrefs}`;
-  if (extra.langPrefs?.trim()) c += `\nNgon ngu: ${extra.langPrefs}`;
+  if (techPrefsStr) c += `\nCong nghe: ${techPrefsStr}`;
+  if (langPrefsStr) c += `\nNgon ngu: ${langPrefsStr}`;
   c += `\nThanh vien (${members.length}):\n${ms}`;
 
   switch (key) {
@@ -952,6 +978,12 @@ function fallback(
   const d = new Date().toISOString().split("T")[0];
   const dEnd = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]; // +14 days
   const members = input.members;
+  // Defensive: handle both string and array for requirements
+  const toArr = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map((x) => String(x));
+    if (typeof v === "string" && v.trim()) return v.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
   switch (key) {
     case "analysis":
       return {
@@ -966,7 +998,7 @@ function fallback(
         teamSize: members.length,
         estimatedDuration: "4-6 tuan",
         complexity: "Trung binh",
-        features: (input.extraInfo.requirements || "").split("\n").filter(Boolean).map((r) => ({ name: r.trim(), module: "Core", pri: "P1" })),
+        features: toArr(input.extraInfo.requirements).map((r) => ({ name: r, module: "Core", pri: "P1" })),
         actors: [{ name: "User", desc: "Nguoi dung cuoi" }],
         modules: ["Auth", "Core", "Dashboard"], // sensible defaults instead of cross-section
       };
@@ -1350,6 +1382,7 @@ export async function runPipeline(
 
   for (const ag of AGENTS) {
     if (!results[ag.key]) {
+      const i = AGENTS.indexOf(ag);
       console.log(`>> FALLBACK: ${ag.name}`);
       appendLog({
         level: "warn",
@@ -1357,7 +1390,15 @@ export async function runPipeline(
         provider: "fallback",
         message: `▷ FALLBACK: ${ag.name} → using static fallback data`,
       });
-      (results as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
+      (results as unknown as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
+      // CRITICAL: emit agent_done so the UI updates (otherwise agent stays "pending" forever)
+      onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Fallback)`, index: i, total });
+      appendLog({
+        level: "success",
+        agentId: ag.id,
+        provider: "fallback",
+        message: `✓ [AGENT-${ag.id}] ${ag.name} → done (fallback)`,
+      });
     }
   }
 
@@ -1700,17 +1741,36 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
     if (res && res.data) {
       const data = res.data as { tasks?: TaskItem[] };
       if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
-        console.log(`  [TASK GEN] Success: ${data.tasks.length} tasks from ${res.model}`);
+        // DEDUP: Remove duplicate tasks by title+assignee (AI sometimes returns dupes)
+        const seen = new Set<string>();
+        const uniqueTasks = data.tasks.filter((t) => {
+          const key = `${(t.title || "").toLowerCase().trim()}|${(t.assigneeName || "").toLowerCase().trim()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        const dupesRemoved = data.tasks.length - uniqueTasks.length;
+        if (dupesRemoved > 0) {
+          console.log(`  [TASK GEN] Removed ${dupesRemoved} duplicate task(s)`);
+          appendLog({
+            level: "warn",
+            agentId: "TASK",
+            provider: "pipeline",
+            model: res.model,
+            message: `⚠ [TASK GEN] Loại bỏ ${dupesRemoved} task trùng lặp (từ ${data.tasks.length} → ${uniqueTasks.length} task)`,
+          });
+        }
+        console.log(`  [TASK GEN] Success: ${uniqueTasks.length} tasks from ${res.model}`);
         appendLog({
           level: "success",
           agentId: "TASK",
           provider: "pipeline",
           model: res.model,
-          message: `✓ [TASK GEN] AI trả về ${data.tasks.length} task(s) (${res.model})`,
+          message: `✓ [TASK GEN] AI trả về ${uniqueTasks.length} task(s) (${res.model})`,
         });
         // Log per-member task breakdown so the user sees "sinh task cho A: chức năng X do A làm"
         const byMember = new Map<string, string[]>();
-        for (const t of data.tasks) {
+        for (const t of uniqueTasks) {
           const name = t.assigneeName || "(unassigned)";
           if (!byMember.has(name)) byMember.set(name, []);
           byMember.get(name)!.push(t.title || "Untitled");
@@ -1725,7 +1785,7 @@ Hay tao todolist chi tiet cho tung thanh vien.`;
             });
           }
         }
-        return data.tasks;
+        return uniqueTasks;
       }
       // AI returned data but no tasks array — try to extract from common patterns
       const d = res.data as Record<string, unknown>;

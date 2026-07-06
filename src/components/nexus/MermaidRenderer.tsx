@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useNexus } from "@/store/useNexus";
 
 // Fix common AI mistakes in Mermaid code
 function fixMermaid(code: string): string {
@@ -45,6 +46,17 @@ function fixMermaid(code: string): string {
       }
     );
 
+    // CRITICAL: Fix "A -->|label| B" (no trailing text) → "A --> B : label"
+    // The |label| edge-label syntax is from sequence diagrams, NOT valid in classDiagram.
+    // In classDiagram, labels go after a colon: A --> B : label
+    // Example: Role -->|use| Permission → Role --> Permission : use
+    s = s.replace(
+      /^(\s*)(\w+)\s*(--?>|<--|--|-\.\->|<-\.\-)\s*\|([^|]+)\|\s*(\w+)\s*$/gm,
+      (_m, indent: string, from: string, arrow: string, edgeLabel: string, to: string) => {
+        return `${indent}${from} ${arrow} ${to} : ${edgeLabel.trim()}`;
+      }
+    );
+
     // CRITICAL: Fix 'A "1" --> "*" B : "label"' → 'A "1" --> "*" B : label'
     // Mermaid 11 sometimes chokes on quoted labels after colon in classDiagram
     // Strip quotes from the relationship label (keep the text)
@@ -84,6 +96,69 @@ function fixMermaid(code: string): string {
   //   A --> B : include → A -->|include| B
   //   A --> B : extend → A -.->|extend| B
   if (s.includes("graph TD") || s.includes("graph LR")) {
+    // CRITICAL: Sanitize node IDs with Vietnamese diacritics / spaces / special chars.
+    // Mermaid requires node IDs to match [A-Za-z0-9_] — no accents, no spaces.
+    // AI generates: "Bệnh nhân["Bệnh nhân"] --> ĐăngKý["Đăng ký"]"
+    // We convert:  "BenhNhan["Bệnh nhân"] --> DangKy["Đăng ký"]"
+    // Map of Vietnamese chars → ASCII equivalents
+    const vietMap: Record<string, string> = {
+      "à":"a","á":"a","ạ":"a","ả":"a","ã":"a","â":"a","ầ":"a","ấ":"a","ậ":"a","ẩ":"a","ẫ":"a",
+      "ă":"a","ằ":"a","ắ":"a","ặ":"a","ẳ":"a","ẵ":"a",
+      "è":"e","é":"e","ẹ":"e","ẻ":"e","ẽ":"e","ê":"e","ề":"e","ế":"e","ệ":"e","ể":"e","ễ":"e",
+      "ì":"i","í":"i","ị":"i","ỉ":"i","ĩ":"i",
+      "ò":"o","ó":"o","ọ":"o","ỏ":"o","õ":"o","ô":"o","ồ":"o","ố":"o","ộ":"o","ổ":"o","ỗ":"o",
+      "ơ":"o","ờ":"o","ớ":"o","ợ":"o","ở":"o","ỡ":"o",
+      "ù":"u","ú":"u","ụ":"u","ủ":"u","ũ":"u","ư":"u","ừ":"u","ứ":"u","ự":"u","ử":"u","ữ":"u",
+      "ỳ":"y","ý":"y","ỵ":"y","ỷ":"y","ỹ":"y",
+      "đ":"d",
+      "À":"A","Á":"A","Ạ":"A","Ả":"A","Ã":"A","Â":"A","Ầ":"A","Ấ":"A","Ậ":"A","Ẩ":"A","Ẫ":"A",
+      "Ă":"A","Ằ":"A","Ắ":"A","Ặ":"A","Ẳ":"A","Ẵ":"A",
+      "È":"E","É":"E","Ẹ":"E","Ẻ":"E","Ẽ":"E","Ê":"E","Ề":"E","Ế":"E","Ệ":"E","Ể":"E","Ễ":"E",
+      "Ì":"I","Í":"I","Ị":"I","Ỉ":"I","Ĩ":"I",
+      "Ò":"O","Ó":"O","Ọ":"O","Ỏ":"O","Õ":"O","Ô":"O","Ồ":"O","Ố":"O","Ộ":"O","Ổ":"O","Ỗ":"O",
+      "Ơ":"O","Ờ":"O","Ớ":"O","Ợ":"O","Ở":"O","Ỡ":"O",
+      "Ù":"U","Ú":"U","Ụ":"U","Ủ":"U","Ũ":"U","Ư":"U","Ừ":"U","Ứ":"U","Ự":"U","Ử":"U","Ữ":"U",
+      "Ỳ":"Y","Ý":"Y","Ỵ":"Y","Ỷ":"Y","Ỹ":"Y",
+      "Đ":"D",
+    };
+    const sanitizeId = (id: string): string => {
+      let result = "";
+      for (const ch of id) {
+        result += vietMap[ch] ?? ch;
+      }
+      // Remove spaces, hyphens, slashes, dots → CamelCase
+      result = result.replace(/[\s\-/.]+(.)/g, (_m, c: string) => c.toUpperCase());
+      result = result.replace(/[\s\-/.]/g, "");
+      // Replace any remaining non-alphanumeric chars
+      result = result.replace(/[^A-Za-z0-9_]/g, "");
+      return result || "Node";
+    };
+
+    // Fix node IDs that contain Vietnamese chars or spaces BEFORE the [ or -->
+    // Pattern: "Bệnh nhân[" → "BenhNhan["
+    // Pattern: "Bệnh nhân -->" → "BenhNhan -->"
+    // Pattern: "Bệnh nhân" (standalone) → "BenhNhan"
+    // CRITICAL: Skip declaration lines (graph TD, classDiagram, etc.)
+    const graphLines = s.split("\n");
+    s = graphLines.map((line) => {
+      const trimmed = line.trim();
+      // Skip declaration lines — don't sanitize IDs on them
+      if (/^(graph\s|flowchart\s|classDiagram|erDiagram|sequenceDiagram|subgraph\s|end\s*$|classDef\s|style\s|%%)/.test(trimmed)) {
+        return line;
+      }
+      return line.replace(
+        /^(\s*)([\p{L}\p{M}\s\-/.]+?)(\s*(?:\["|"|-->|---|-\.->|$))/u,
+        (_m, indent: string, id: string, rest: string) => {
+          const cleanId = id.trim();
+          // Only sanitize if the ID contains non-ASCII chars or spaces
+          if (/[^A-Za-z0-9_]/.test(cleanId)) {
+            return `${indent}${sanitizeId(cleanId)}${rest}`;
+          }
+          return _m;
+        }
+      );
+    }).join("\n");
+
     // CRITICAL: Fix "A --> B : include" and "A --> B : extend" syntax
     // Must run BEFORE the parens fixer to avoid conflicts.
     // Pattern: NodeId["label"] --> NodeId2["label2"] : include/extend
@@ -200,11 +275,56 @@ function waitForMermaid(timeoutMs = 10000): Promise<NonNullable<typeof window.me
   });
 }
 
+/**
+ * Aggressive fix — used on retry when fixMermaid() still fails.
+ * Strips ALL problematic syntax to maximize the chance of Mermaid
+ * rendering successfully, even if the diagram looks simpler.
+ */
+function aggressiveFix(s: string): string {
+  let out = s;
+  // 1. Remove all edge labels with |...| syntax (common cause of syntax errors)
+  out = out.replace(/(-+>|<--|-+|\.+>+)\|[^|]*\|/g, "$1");
+  // 2. Remove all relationship labels after colons (A --> B : label → A --> B)
+  out = out.replace(/^(\s*\S+.*?(?:-->|---|-\.->|<--)\s*\S+)\s*:\s*.+$/gm, "$1");
+  // 3. Remove cardinality quotes (A "1" --> "*" B → A --> B)
+  out = out.replace(/"[^"]*"\s*(-->|---|<--|-\.->)\s*"[^"]*"/g, "$1");
+  // 4. Ensure all node labels in [...] are double-quoted
+  out = out.replace(/\[([^\]"'][^\]]*)\]/g, '["$1"]');
+  // 5. Remove subgraph ... end blocks (they sometimes cause issues)
+  // (keep it — just ensure "end" is on its own line)
+  out = out.replace(/^\s*end\s*$/gim, "end");
+  // 6. Remove any remaining special chars from node IDs (keep only [A-Za-z0-9_])
+  // This runs per-line for graph/classDiagram/erDiagram
+  const lines = out.split("\n");
+  const fixedLines = lines.map((line) => {
+    const trimmed = line.trim();
+    // Skip declaration lines
+    if (/^(graph|flowchart|classDiagram|erDiagram|sequenceDiagram|subgraph|end|classDef|style|%%)/.test(trimmed)) {
+      return line;
+    }
+    // For lines with node definitions or relationships, sanitize IDs
+    // Match: ID["label"] or ID[label] or ID --> ID
+    return line.replace(/^(\s*)([^\s\[\]{}()"'|:<>-]+)/, (_m, indent: string, id: string) => {
+      const cleanId = id.replace(/[^A-Za-z0-9_]/g, "");
+      return `${indent}${cleanId || "Node"}`;
+    });
+  });
+  out = fixedLines.join("\n");
+  // 7. Remove empty lines (Mermaid sometimes chokes on them)
+  out = out.replace(/^\s*$/gm, "");
+  return out.trim();
+}
+
 export function MermaidRenderer({ code, id }: { code: string; id: string }) {
+  const projectId = useNexus((s) => s.projectId);
+  const token = useNexus((s) => s.token);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [lastFixedCode, setLastFixedCode] = useState<string>("");
+  const [aiFixing, setAiFixing] = useState(false);
+  const [aiFixedCode, setAiFixedCode] = useState<string | null>(null);
   const renderToken = useRef(0);
 
   useEffect(() => {
@@ -212,7 +332,6 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
     let cancelled = false;
 
     async function render() {
-      // Reset state for this render cycle
       setSvg(null);
       setError(null);
       setLoading(true);
@@ -225,7 +344,22 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       try {
         const mermaid = await waitForMermaid();
         if (cancelled || myToken !== renderToken.current) return;
-        const fixed = fixMermaid(code);
+
+        // Determine which code to use:
+        // - aiFixedCode (if AI already fixed it)
+        // - aggressiveFix(fixMermaid(code)) on retry >= 1
+        // - fixMermaid(code) on first attempt
+        let fixed: string;
+        if (aiFixedCode) {
+          fixed = aiFixedCode;
+        } else {
+          fixed = fixMermaid(code);
+          if (retryCount >= 1) {
+            fixed = aggressiveFix(fixed);
+          }
+        }
+        setLastFixedCode(fixed);
+
         const renderId = `m-${id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
         const result = await Promise.race([
           mermaid.render(renderId, fixed),
@@ -240,15 +374,55 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
         setLoading(false);
       } catch (e) {
         if (cancelled || myToken !== renderToken.current) return;
-        setError(e instanceof Error ? e.message : "Loi render");
+        const errMsg = e instanceof Error ? e.message : "Loi render";
+        setError(errMsg);
         setLoading(false);
+
+        // AUTO AI FIX: When aggressiveFix fails (retry >= 1) and we haven't
+        // tried AI yet, automatically call the AI Mermaid fixer
+        if (retryCount >= 1 && !aiFixedCode && !aiFixing && projectId && token) {
+          setAiFixing(true);
+          try {
+            const diagramType = code.includes("graph TD") || code.includes("graph LR")
+              ? "useCase"
+              : code.includes("classDiagram")
+              ? "classDiagram"
+              : code.includes("erDiagram")
+              ? "erd"
+              : code.includes("sequenceDiagram")
+              ? "sequence"
+              : "unknown";
+
+            const resp = await fetch(
+              `/api/projects/${projectId}/fix-mermaid?token=${encodeURIComponent(token)}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code, error: errMsg, diagramType }),
+              }
+            );
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.fixedCode) {
+                setAiFixedCode(data.fixedCode);
+                // Trigger re-render with AI-fixed code
+                setRetryCount((c) => c + 1);
+                return;
+              }
+            }
+          } catch {
+            // AI fix failed — user can still manually retry
+          } finally {
+            setAiFixing(false);
+          }
+        }
       }
     }
     render();
     return () => {
       cancelled = true;
     };
-  }, [code, id, retryCount]);
+  }, [code, id, retryCount, aiFixedCode, projectId, token, aiFixing]);
 
   function downloadSVG() {
     if (!svg) return;
@@ -297,19 +471,40 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       {loading && !error && !svg && (
         <div className="text-muted-foreground text-sm nexus-pulse">Dang render diagram...</div>
       )}
-      {error && (
+      {aiFixing && (
+        <div className="text-primary text-sm mb-3 flex items-center gap-2">
+          <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          AI đang sửa diagram...
+        </div>
+      )}
+      {error && !aiFixing && (
         <>
-          <div className="text-destructive text-sm mb-3">Loi render Mermaid: {error}</div>
+          <div className="text-destructive text-sm mb-2">Loi render Mermaid: {error}</div>
+          {retryCount === 0 && (
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Bấm "Thử lại" để áp dụng bộ sửa lỗi nâng cao + AI auto-fix.
+            </p>
+          )}
+          {retryCount > 0 && !aiFixedCode && (
+            <p className="text-[11px] text-amber-400 mb-3">
+              Đã thử {retryCount} lần. Bấm "Thử lại" để AI sửa diagram.
+            </p>
+          )}
+          {aiFixedCode && (
+            <p className="text-[11px] text-amber-400 mb-3">
+              AI đã sửa nhưng vẫn lỗi — diagram có thể quá phức tạp. Thử edit section.
+            </p>
+          )}
           <button
             onClick={() => {
               setRetryCount((c) => c + 1);
             }}
             className="mb-3 px-3 py-1 text-xs border border-primary text-primary rounded hover:bg-primary/10 transition-colors"
           >
-            ↻ Thu lai
+            ↻ Thu lai {retryCount > 0 && `(${retryCount})`}
           </button>
           <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap max-h-64 overflow-auto nexus-scroll w-full">
-            {code}
+            {lastFixedCode || code}
           </pre>
         </>
       )}

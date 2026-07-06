@@ -9,12 +9,14 @@
 - [Component Diagram](#-component-diagram)
 - [Multi-Agent Pipeline](#-multi-agent-pipeline)
 - [Data Flow](#-data-flow)
+- [Dashboard Widgets](#-dashboard-widgets)
+- [Notification & Mail System](#-notification--mail-system)
+- [Mermaid Rendering (3-tier fix)](#-mermaid-rendering-3-tier-fix)
 - [Live Log Console (AsyncLocalStorage)](#-live-log-console-asynclocalstorage)
 - [Multi-Key Rotation](#-multi-key-rotation)
 - [Database Schema](#-database-schema)
 - [Real-time (Socket.io + Polling)](#-real-time-socketio--polling)
 - [GitHub Integration](#-github-integration)
-- [Email System](#-email-system)
 - [State Management](#-state-management)
 - [Design Decisions](#-design-decisions)
 
@@ -22,15 +24,19 @@
 
 ## 🎯 Overview
 
-NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local (hoặc Docker). Backend là Next.js API Routes (Node.js runtime), database là SQLite qua Prisma ORM, real-time qua Socket.io mini-service.
+NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local (hoặc Docker/Fly.io). Backend là Next.js API Routes (Node.js runtime), database là SQLite qua Prisma ORM, real-time qua 2 Socket.io mini-services.
 
 **Design principles:**
+
 1. **Background + Polling** thay vì SSE (fix 504 gateway timeout)
-2. **Multi-provider fallback** — không bao giờ crash, luôn có kết quả
-3. **Multi-key rotation** — tối ưu free tier
-4. **AsyncLocalStorage** cho log context (không传 tham số qua 10 layers)
+2. **Multi-provider fallback** — không bao giờ crash, luôn có kết quả (5 retries/model × 9 models/agent × multi-key)
+3. **Multi-key rotation** — tối ưu free tier, auto-switch khi 429
+4. **AsyncLocalStorage** cho log context (không truyền tham số qua 10 layers)
 5. **Long-term memory** — AI nhớ dự án qua `ProjectContext`
-6. **Parallel execution** — Phase 2 agents chạy song song
+6. **Parallel execution** — Phase 2 + Phase 3 agents chạy song song (mặc định)
+7. **3-tier Mermaid fix** — regex → aggressive → AI (luôn render được diagram)
+8. **Per-user state** — notifications và mail có read tracking riêng cho mỗi user
+9. **Dark theme only** — single theme, teal accent, no light mode
 
 ---
 
@@ -40,503 +46,591 @@ NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local 
 ┌─────────────────────────────────────────────────────────────────┐
 │                         BROWSER (Client)                         │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │  React 19 + Next.js 16 (App Router)                        │ │
-│  │  ├─ HomeView (project history)                             │ │
-│  │  ├─ InputView (form nhập dự án)                            │ │
-│  │  ├─ WorkspaceView (11 tabs)                                │ │
-│  │  ├─ ProcessingOverlay (Live Log Console)                   │ │
-│  │  └─ Zustand store (persisted)                              │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                              ↕ HTTP polling 2.5s                  │
-│                              ↕ Socket.io (chat)                  │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    NEXT.JS API ROUTES (port 3000)                │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  /api/projects          CRUD + pipeline + refine + tasks   │ │
-│  │  /api/github            OAuth + push + PR                  │ │
-│  │  /api/config            Public URL                         │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Background Pipeline (process.nextTick)                    │ │
-│  │  ├─ 10 AI Agents (ai.ts)                                   │ │
-│  │  ├─ OpenRouter multi-key (openrouter.ts)                   │ │
-│  │  └─ AsyncLocalStorage log context                          │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Pipeline Progress Tracker (in-memory, globalThis)         │ │
-│  │  ├─ progressMap (pipeline)                                 │ │
-│  │  ├─ initMap (task generation)                              │ │
-│  │  └─ refineMap (AI refine)                                  │ │
+│  │  React 19 + Next.js 16 (App Router, Turbopack)             │ │
+│  │  Tailwind 4 + shadcn/ui (New York)                         │ │
+│  │  Zustand 5 (persisted) + TanStack Query 5                  │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
-              │                          │
-              ▼                          ▼
-┌──────────────────────────┐  ┌────────────────────────────────┐
-│  SQLite (Prisma)         │  │  External APIs                 │
-│  ├─ Project              │  │  ├─ OpenRouter (multi-key)     │
-│  ├─ Member               │  │  ├─ GitHub REST API            │
-│  ├─ Analysis (versioned) │  │  └─ Gmail SMTP (Nodemailer)    │
-│  ├─ Task                 │  └────────────────────────────────┘
-│  ├─ ChatMessage          │
-│  ├─ EditProposal         │              │
-│  ├─ EmailLog             │              ▼
-│  ├─ ProjectContext       │  ┌────────────────────────────────┐
-│  └─ TokenLog             │  │  Socket.io Chat Service        │
-└──────────────────────────┘  │  (mini-service, port 3001)     │
-                              │  └─ Room per project           │
-                              └────────────────────────────────┘
+        ↕ HTTP (REST)                  ↕ WebSocket (Socket.io)
+┌──────────────────────────────────────┐   ┌──────────────────────────────┐
+│  Next.js API Routes (port 3000)      │   │  Mini-services               │
+│  ┌────────────────────────────────┐  │   │  ┌────────────────────────┐ │
+│  │  50+ REST endpoints           │  │   │  │ chat-service (3001)    │ │
+│  │  + 10-agent pipeline (bg)     │──┼───┼─→│  Socket.io realtime    │ │
+│  │  + Mermaid AI fixer           │  │   │  │  chat                   │ │
+│  │  + Mail SMTP sender           │  │   │  └────────────────────────┘ │
+│  │  + Notification broadcaster   │──┼───┼─→┌────────────────────────┐ │
+│  │  + Activity logger            │  │   │  │ notification-service   │ │
+│  └────────────────────────────────┘  │   │  │  (port 3002)           │ │
+│                                      │   │  │  Socket.io notifications│ │
+│                                      │   │  │  + HTTP /broadcast*    │ │
+│                                      │   │  └────────────────────────┘ │
+└──────────────────────────────────────┘   └──────────────────────────────┘
+        │                                              │
+        ▼                                              ▼
+┌──────────────────────────────────────┐   ┌──────────────────────────────┐
+│  SQLite (Prisma 6)                   │   │  External APIs               │
+│  21 models                           │   │  OpenRouter (multi-key,      │
+│  ┌────────────────────────────────┐  │   │   9 free models/agent)      │
+│  │ Project + Member + Analysis    │  │   │  GitHub (OAuth + push)       │
+│  │ Task + TaskLog                 │  │   │  SMTP (nodemailer)           │
+│  │ Email + Mailbox + Attachment   │  │   └──────────────────────────────┘
+│  │ Notification + NotificationRead│  │
+│  │ ActivityLog (enriched)         │  │
+│  │ AgentStatus + SystemStatus     │  │
+│  │ PipelineStatus + TaskStatistic │  │
+│  │ ProjectContext + TokenLog      │  │
+│  │ Template + AgentConfig         │  │
+│  │ ChatMessage + EditProposal     │  │
+│  │ EmailLog (legacy) + MailRead   │  │
+│  └────────────────────────────────┘  │
+└──────────────────────────────────────┘
 ```
 
 ---
 
 ## 🧩 Component Diagram
 
-### Frontend Components
+### Frontend Views
 
 ```
 src/components/nexus/
-├── HomeView.tsx              # Project history (cards grid)
-├── InputView.tsx             # Form nhập dự án (topic, members, leader)
-├── WorkspaceView.tsx         # Main workspace (sidebar + tab content)
-│   ├─ Sidebar (logo, nav, leader info, init button, public URL)
-│   └─ Tab content (renderTab switch)
-├── tabs/                     # 11 workspace tabs
-│   ├── AnalysisTab.tsx       # Tech stack, features, actors, modules
-│   ├── HRTab.tsx             # Member assignments + risks
-│   ├── SprintTab.tsx         # Sprint timeline + milestones
-│   ├── DesignTab.tsx         # Architecture + DB schema + API + folder tree
-│   ├── UMLTab.tsx            # 4 diagrams (React Flow + Mermaid)
-│   ├── DocsTab.tsx           # README + Convention + API Standard (MDX editor)
-│   ├── GitTab.tsx            # OAuth + Push + PR
-│   ├── ChatTab.tsx           # Real-time chat + AI Refine
-│   ├── MembersTab.tsx        # Member list + invite links
-│   ├── TasksTab.tsx          # Kanban board (dnd-kit)
-│   └── MailboxTab.tsx        # Email log
-├── ProcessingOverlay.tsx     # Pipeline overlay (8 agent board + log console)
-├── TaskProcessingOverlay.tsx # Init/Refine overlay (thinking panel + log)
-├── MermaidRenderer.tsx       # Mermaid.js với extensive fixers
-├── SectionEditor.tsx         # Edit section dialog (MDX editor)
-└── useReload.ts              # Hook reload project data
+├── HomeView.tsx              ← Trang tổng quan (dashboard widgets)
+│   ├── Recent Activity widget
+│   ├── NEXUS AI Status widget
+│   └── Tasks đang làm widget
+├── AllProjectsView.tsx       ← Premium SaaS dashboard
+│   ├── Stats cards
+│   ├── Search + Filter + Sort
+│   ├── Grid/List toggle
+│   └── Context menu (favorite/archive/duplicate/delete)
+├── InputView.tsx             ← Create project form
+├── WorkspaceView.tsx         ← Project workspace (13 tabs)
+│   └── tabs/
+│       ├── AnalysisTab       (Agent 01 — analysis section)
+│       ├── HRTab             (Agent 02 — hr section)
+│       ├── SprintTab         (Agent 03 — sprint section)
+│       ├── DesignTab         (Agent 04 — design section)
+│       ├── UMLTab            (Agent 05 — uml section, Mermaid + React Flow)
+│       ├── DocsTab           (Agent 06 — docs section)
+│       ├── GitTab            (Agent 07 — git section)
+│       ├── ChatTab           (realtime chat)
+│       ├── MembersTab        (member management)
+│       ├── TasksTab          (Kanban board, drag-drop)
+│       ├── MailboxTab        (mail compose/list/read)
+│       ├── HistoryTab        (activity log)
+│       └── AgentHubTab       (10 AI agents dashboard)
+├── AgentHubView.tsx          ← Standalone agent hub
+├── NotificationBell.tsx      ← Bell + dropdown + detail modal
+├── MermaidRenderer.tsx       ← 3-tier fix (regex → aggressive → AI)
+├── ProcessingOverlay.tsx     ← Pipeline Live Log
+├── TaskProcessingOverlay.tsx ← Init/Refine Live Log
+├── NeuralBackground.tsx      ← Animated neural network bg
+└── AI3DBrain.tsx             ← 3D hero brain animation
 ```
 
-### Backend Lib
+### Backend libs
 
 ```
 src/lib/
-├── ai.ts                     # 8-agent pipeline + refine + task gen + chat
-├── openrouter.ts             # Multi-key rotation + cache + retry strategy
-├── github.ts                 # Push 15+ files + PR creation
-├── email.ts                  # SMTP (Nodemailer) + .public-url
-├── pipeline-progress.ts      # AsyncLocalStorage log + progress maps (globalThis)
-├── access.ts                 # resolveAccess + requireLeader
-├── db.ts                     # Prisma client
-├── types.ts                  # TypeScript types (ProjectResult, TaskItem, etc.)
-└── utils.ts                  # cn() + helpers
-```
-
-### API Routes
-
-```
-src/app/api/
-├── projects/
-│   ├── route.ts                    # GET list / POST create + run pipeline
-│   └── [id]/
-│       ├── route.ts                # GET / DELETE
-│       ├── progress/route.ts       # GET pipeline progress + logs
-│       ├── initialize/route.ts     # POST sinh todolist
-│       ├── initialize/progress/    # GET init progress + logs
-│       ├── refine/route.ts         # POST AI Refine
-│       ├── refine/progress/        # GET refine progress + logs
-│       ├── tasks/route.ts          # GET / POST tasks
-│       ├── tasks/[taskId]/route.ts # PATCH task status (drag-drop)
-│       ├── chat/route.ts           # GET / POST messages
-│       ├── chat/ai/route.ts        # POST AI Assistant reply
-│       ├── edit-proposals/         # GET / POST / PATCH proposals
-│       ├── section/route.ts        # GET / POST section content
-│       ├── members/route.ts        # GET members
-│       ├── mailbox/route.ts        # GET emails
-│       ├── context/route.ts        # GET long-term memory
-│       └── tokens/route.ts         # GET token usage logs
-├── github/
-│   ├── auth/route.ts               # GET OAuth redirect
-│   ├── callback/route.ts           # GET OAuth callback
-│   ├── status/route.ts             # GET OAuth status
-│   └── push/route.ts               # POST push to GitHub + create PR
-└── config/route.ts                 # GET public URL
+├── ai.ts                  ← 10-agent pipeline + retry + fallback + task gen
+├── openrouter.ts          ← Multi-key rotation + multi-model fallback
+├── github.ts              ← Push 17+ files + create PR
+├── email.ts               ← SMTP send via nodemailer
+├── notifications.ts       ← createNotification + broadcast to mini-service
+├── activity.ts            ← logActivity + updateSystemStatus + updatePipelineStatus
+├── pipeline-progress.ts   ← AsyncLocalStorage + progress maps (pipeline/init/refine)
+├── access.ts              ← resolveAccess + requireLeader
+├── schemas.ts             ← Zod validators per section type
+├── db.ts                  ← Prisma client singleton
+├── types.ts               ← ProjectResult, TaskItem, SectionType, ...
+└── utils.ts               ← cn() helper
 ```
 
 ---
 
 ## 🤖 Multi-Agent Pipeline
 
-### Phase 1: Sequential (analysis → hr → sprint)
+### 6 Phases
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  AGENT-01: Requirement Analyst                              │
-│  ├─ Input: topic, description, purpose, members             │
-│  ├─ Output: { desc, techStack, features, actors, modules }  │
-│  └─ Models: nemotron-ultra → qwen3-next → gpt-oss-120b ...  │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│  AGENT-02: HR Planner                                       │
-│  ├─ Input: Agent-01 output + members (strengths/weaknesses) │
-│  ├─ Output: { assignments, coverage, risks }                │
-│  └─ Models: gemma-4-31b → gemma-4-26b → nemotron-ultra ...  │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│  AGENT-03: Sprint Planner                                   │
-│  ├─ Input: Agent-01 + Agent-02 output                       │
-│  ├─ Output: { totalSprints, sprints, milestones }           │
-│  └─ Models: nemotron-ultra → nemotron-super → qwen3-next .. │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 1 — Analysis (Sequential, mỗi agent phụ thuộc cái trước) │
+│   Agent 01 (Requirement Analyst) → Agent 02 (HR Planner)      │
+│   → Agent 03 (Sprint Planner)                                  │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 2 — Design (Parallel mặc định, hoặc Sequential)          │
+│   Agent 04 (System Architect)  ┐                               │
+│   Agent 05 (UML Generator)     │ → Promise.all()               │
+│   Agent 06 (Technical Writer)  │                               │
+│   Agent 07 (Git/DevOps)        ┘                               │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 3 — Quality Gates (Parallel hoặc Sequential)             │
+│   Agent 08 (Software Tester)   ┐                               │
+│   Agent 09 (Security Reviewer) ┘ → Promise.all()               │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 4 — Retry (cho agent thất bại)                          │
+│   failed.forEach(agent => retry 1 lần sau 5s)                  │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 5 — Fallback (cho agent vẫn fail sau retry)             │
+│   if (agent.required) → fallback(key, input, results)          │
+│   (sinh dữ liệu tĩnh — pipeline KHÔNG BAO GIỜ crash)           │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE 6 — Quality Review (Agent 10)                           │
+│   Nhận 9 sections → Zod validate → fix conflicts → sync       │
+│   → final ProjectResult                                        │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 2: Parallel (design + uml + docs + git)
+### Per-agent retry strategy
 
-```
-Phase 1 output
-      │
-      ├──────────────┬──────────────┬──────────────┐
-      ▼              ▼              ▼              ▼
-┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐
-│ AGENT-04  │ │ AGENT-05  │ │ AGENT-06  │ │ AGENT-07  │
-│ Architect │ │ UML Gen   │ │ Writer    │ │ Git/DevOps│
-│           │ │           │ │           │ │           │
-│ design    │ │ uml       │ │ docs      │ │ git       │
-│ {dbTables,│ │ {useCase, │ │ {readme,  │ │ {gitCmds, │
-│  apiEndp, │ │  class,   │ │  conven,  │ │  branch,  │
-│  folder}  │ │  erd,     │ │  apiStd}  │ │  issue}   │
-│           │ │  seq}     │ │           │ │           │
-└───────────┘ └───────────┘ └───────────┘ └───────────┘
-      │             │             │             │
-      └─────────────┴─────────────┴─────────────┘
-                      ↓
-              Promise.all(phase2Promises)
-```
+Mỗi agent có **9 free models** OpenRouter. Mỗi model có **5 retries** với:
 
-### Phase 3: Retry failed agents
+- **Full-jitter backoff** — random delay trong window `[0, base × 2^attempt]`, max 60s
+- **429 rate-limit** — wait 60s + jitter, retry same model
+- **5xx/timeout** — wait 60s, retry same model (model có thể chậm, không hỏng)
+- **Network error** — try next model ngay
+- **Concurrency limit** — max 3 parallel LLM calls (`p-limit`) để tránh memory blowup + rate-limit spikes
 
-```
-for each failed agent:
-  wait 5s
-  retry with same models
-  if still fail → mark as failed
-```
+### Pipeline modes
 
-### Phase 4: Fallback (static data)
-
-```
-for each agent without result:
-  use fallback(agent.key, input, results)
-  → returns static placeholder JSON
-```
-
-### Phase 5: Quality Reviewer (AGENT-10)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  AGENT-10: Quality Reviewer                                 │
-│  ├─ Input: ALL 9 sections (JSON, truncated to 12000 chars)  │
-│  ├─ Task: Fix inconsistencies, sync sections                │
-│  ├─ Output: merged + fixed ProjectResult                    │
-│  └─ Models: gpt-oss-120b → qwen3-next → nemotron-ultra ...  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Task Generation (separate, on demand)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  TASK GENERATOR                                             │
-│  ├─ Input: ProjectResult (analysis + hr + sprint + design)  │
-│  ├─ Output: TaskItem[] (SMART tasks with code snippets)     │
-│  ├─ Models: qwen3-coder → gpt-oss-120b → laguna-m.1 ...     │
-│  └─ Trigger: POST /api/projects/:id/initialize              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### AI Refine (separate, on demand)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  AI REFINE                                                  │
-│  ├─ Input: current results + editRequests + chatDiscussion  │
-│  ├─ Task: Re-generate ALL 7 sections with new context       │
-│  ├─ Output: refined ProjectResult                           │
-│  └─ Trigger: POST /api/projects/:id/refine                  │
-└─────────────────────────────────────────────────────────────┘
-```
+| Mode | Cấu hình | Khi nào dùng |
+|---|---|---|
+| `parallel` (default) | `input.parallel = true` | Khi OpenRouter không bị rate-limit, chạy nhanh hơn |
+| `sequential` | `input.parallel = false` | Khi bị 429 liên tục, tránh spike requests |
 
 ---
 
 ## 📊 Data Flow
 
-### Pipeline Flow (tạo dự án mới)
+### Tạo project mới
 
 ```
-1. User submit form (InputView)
-   ↓
-2. POST /api/projects
-   ├─ Create Project + Members in DB
-   ├─ initProgress(projectId)
-   └─ process.nextTick(() => runPipeline(input, onProgress))
-   ↓
-3. POST returns immediately { projectId, leaderToken }
-   ↓
-4. Client polls GET /api/projects/:id/progress every 2.5s
-   ├─ Returns { status, agents[], logs[] }
-   └─ Client updates ProcessingOverlay
-   ↓
-5. Background pipeline runs:
-   ├─ Phase 1: Agent-01 → Agent-02 → Agent-03 (sequential)
-   ├─ Phase 2: Agent-04,05,06,07 (parallel via Promise.all)
-   ├─ Phase 3: Retry failed agents
-   ├─ Phase 4: Static fallback for missing sections
-   └─ Phase 5: Agent-10 Quality Reviewer
-   ↓
-6. Pipeline done:
-   ├─ Save sections to DB (Analysis with version)
-   ├─ Save ProjectContext (long-term memory)
-   ├─ Update project status → WORKSPACE
-   ├─ Send invitation emails
-   └─ finishProgress(projectId, { projectId, leaderToken })
-   ↓
-7. Client detects status === "done"
-   ├─ Redirect to workspace: /?p=PROJECT_ID&token=LEADER_TOKEN
-   └─ WorkspaceView loads project data
+User submit form
+      │
+      ▼
+POST /api/projects
+      │
+      ├─→ db.project.create()
+      ├─→ db.member.createMany()
+      ├─→ runWithProjectLog(projectId, () => runPipeline(input, onProgress))
+      │         │ (background, không block response)
+      │         │
+      │         ├─→ PHASE 1: analysis → hr → sprint (sequential)
+      │         ├─→ PHASE 2: design + uml + docs + git (parallel)
+      │         ├─→ PHASE 3: test + security (parallel)
+      │         ├─→ PHASE 4: retry failed agents
+      │         ├─→ PHASE 5: fallback for still-failed
+      │         ├─→ PHASE 6: Quality Reviewer
+      │         ├─→ db.analysis.upsert() per section
+      │         ├─→ db.projectContext.upsert() (long-term memory)
+      │         ├─→ db.tokenLog.create() per agent call
+      │         ├─→ db.activityLog.create() per phase
+      │         └─→ db.project.update({ status: "WORKSPACE" })
+      │
+      └─→ Response 200 { projectId, leaderToken }  ← trả ngay
+
+Client polls GET /api/projects/:id/progress?token=xxx mỗi 2.5s
+      │
+      ├─→ getProgress(projectId) ← in-memory map (expire 5 phút)
+      │     { status, agents[], logs[], startedAt }
+      │
+      └─→ Khi status === "done" → stop polling → load workspace
 ```
 
-### Init Flow (sinh todolist)
+### Initialize todolist
 
 ```
-1. Leader clicks "Khởi tạo Dự Án" (sidebar)
-   ↓
-2. POST /api/projects/:id/initialize
-   ├─ Delete old tasks
-   ├─ initInitialize(projectId)
-   └─ process.nextTick(() => runWithInitLog(projectId, () => generateTasks(...)))
-   ↓
-3. Client polls GET /api/projects/:id/initialize/progress every 2.5s
-   ├─ Returns { status, logs[], taskCount? }
-   └─ Client updates TaskProcessingOverlay (mode="init")
-   ↓
-4. generateTasks:
-   ├─ Read analysis + hr + sprint + design from DB
-   ├─ Log: "👤 Member A → vai trò: Frontend Developer · module: UI, ..."
-   ├─ Call AI (TASK_GEN_MODELS)
-   ├─ Log: "✓ Sinh task cho Member A: Thiết kế layout chính"
-   └─ Return TaskItem[]
-   ↓
-5. Persist tasks to DB + send TASK_ASSIGNED emails
-   ↓
-6. finishInitialize(projectId, taskCount)
-   ↓
-7. Client reloads project → switches to TasksTab
+User click "Sinh Todolist" trong Tasks tab
+      │
+      ▼
+POST /api/projects/:id/initialize?token=xxx  (leader only)
+      │
+      ├─→ db.task.deleteMany({ projectId })  (clean slate)
+      ├─→ runWithInitLog(projectId, () => generateTasks(project, results, members))
+      │         │ (background)
+      │         │
+      │         ├─→ For each member (parallel):
+      │         │     - build context (role, skills, modules)
+      │         │     - call AI with TASK prompt (multi-model fallback)
+      │         │     - parse JSON → TaskItem[]
+      │         │     - DEDUP: check trùng title/description với task đã có
+      │         │     - COMPREHENSIVENESS check: đảm bảo đủ layer (DB/BACKEND/UI/CONFIG/TESTING)
+      │         │     - db.task.createMany()
+      │         │     - db.taskLog.create() per task
+      │         │     - db.activityLog.create() (TASK_GEN)
+      │         │
+      │         └─→ refreshTaskStatistics(projectId)
+      │
+      └─→ Response 200 { started: true }
+
+Client polls GET /api/projects/:id/initialize/progress mỗi 2.5s
 ```
 
-### Refine Flow
+### AI Refine
 
 ```
-1. Leader clicks "AI Refine" (ChatTab)
-   ↓
-2. POST /api/projects/:id/refine
-   ├─ Body: { editRequests: [], chatDiscussion: "..." }
-   ├─ initRefine(projectId)
-   └─ runWithRefineLog(projectId, () => refineSections(...))
-   ↓
-3. Client polls GET /api/projects/:id/refine/progress every 2.5s
-   ├─ Returns { status, logs[], sections{} }
-   └─ Client updates TaskProcessingOverlay (mode="refine")
-   ↓
-4. refineSections:
-   ├─ For each of 7 sections:
-   │   ├─ Log: "🔧 [REFINE] Phân tích → đang đọc..."
-   │   ├─ Call AI with current content + edit requests
-   │   └─ Log: "✓ [REFINE] Phân tích → đã chỉnh sửa xong"
-   └─ Return refined ProjectResult
-   ↓
-5. Persist refined sections (version bumped)
-   ↓
-6. finishRefine(projectId)
-   ↓
-7. Client reloads project
+User submit edit requests + chat discussion
+      │
+      ▼
+POST /api/projects/:id/refine?token=xxx  (leader only)
+      │
+      ├─→ runWithRefineLog(projectId, () => refineSections(project, editRequests, chatDiscussion))
+      │         │ (background)
+      │         │
+      │         ├─→ For each section (parallel):
+      │         │     - read current content (from Analysis hoặc ProjectContext)
+      │         │     - build refine prompt (current + edit request + chat context)
+      │         │     - call AI (multi-model fallback)
+      │         │     - Zod validate
+      │         │     - db.analysis.update() with version bump
+      │         │     - mark sections[section] = true trong progress map
+      │         │
+      │         └─→ db.activityLog.create() (REFINE)
+      │
+      └─→ Response 200 { started: true }
+
+Client polls GET /api/projects/:id/refine/progress mỗi 2.5s
 ```
+
+---
+
+## 📊 Dashboard Widgets
+
+Trang tổng quan (Home view) có 3 widget realtime:
+
+### 1. Recent Activity
+
+- **Data source:** `ActivityLog` (20+ event types)
+- **API:** `GET /api/dashboard/activity?token=xxx&limit=20`
+- **Realtime:** WebSocket `activity:new` event từ notification-service
+- **UI:** List timeline với icon (lucide), actor avatar, action button click-through
+
+### 2. NEXUS AI Status
+
+- **Data source:** `AgentStatus` (10 agents) + `PipelineStatus` + `SystemStatus` + env keys
+- **API:** `GET /api/dashboard/status?token=xxx`
+- **Realtime:** WebSocket `status:update` event
+- **UI:** Grid cards cho:
+  - AI Agents (total/online/offline/busy/idle/error)
+  - API Keys (total/active/expired/near-quota)
+  - Pipeline (status + current agent + progress)
+  - Database / Redis / Vector DB / Storage (connected/disconnected/...)
+
+### 3. Tasks đang làm
+
+- **Data source:** `Task` (in_progress/overdue/due_soon của user)
+- **API:** `GET /api/dashboard/tasks?token=xxx&filter=in_progress|overdue|due_soon|assigned|all`
+- **Realtime:** WebSocket `task:update` event
+- **UI:** List tasks với priority badge, deadline countdown, project topic
+
+### WebSocket connection
+
+Frontend kết nối notification-service (port 3002) khi mount HomeView:
+
+```typescript
+const socket = io("/?XTransformPort=3002");
+socket.emit("join", { dashboard: true, userEmail, token });
+socket.on("activity:new", (data) => refreshActivity());
+socket.on("task:update", (data) => refreshTasks());
+socket.on("status:update", (data) => refreshStatus());
+```
+
+> Nếu notification-service không chạy, frontend tự fallback sang HTTP polling (refresh mỗi 10s).
+
+---
+
+## 🔔 Notification & Mail System
+
+### Notification Center
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Component: NotificationBell.tsx                            │
+│   - Bell icon với unread badge                             │
+│   - Dropdown list (10 items gần nhất)                      │
+│   - Detail modal (full message + action button)            │
+│   - Mark read / Mark all read / Mark unread                │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ API: /api/projects/[id]/notifications                      │
+│   - GET: list visible to user (broadcast OR recipientEmail)│
+│   - POST: create (internal) / mark_all_read                │
+│   - PATCH /:notifId: mark read/unread                      │
+│   - DELETE /:notifId: delete (leader only)                 │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ DB:                                                        │
+│   - Notification (broadcast OR targeted via recipientEmail)│
+│   - NotificationRead (per-user read tracking, unique constraint)
+│   - 13 types: TASK_COMPLETED, TASK_STATUS_CHANGED,         │
+│     PROPOSAL_CREATED, REQUIREMENT_EDITED, DOC_UPLOADED,    │
+│     COMMENT, AI_DONE, AI_ERROR, DEADLINE_SOON,             │
+│     TASK_ASSIGNED, MAIL_RECEIVED, PROJECT_INVITE,          │
+│     APPROVAL_REQUEST                                       │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ Realtime: notification-service (port 3002)                 │
+│   - createNotification() → POST /broadcast                 │
+│   - Socket.io rooms: project:ID + user:EMAIL + dashboard   │
+│   - Event: notification:new                                │
+│   - Per-user unread badge sync (notification_read echo)    │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Mail System
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ Component: MailboxTab.tsx                                  │
+│   - 7 folders: INBOX / SENT / DRAFT / STARRED /            │
+│     ARCHIVE / SPAM / TRASH                                 │
+│   - Compose modal (rich text editor @mdxeditor)            │
+│   - AI Rewrite button (5 modes: improve/professional/      │
+│     friendly/concise/expand)                               │
+│   - Attachments upload (max 5MB/file)                      │
+│   - Reply / Reply-all / Forward (threading via parentEmailId)
+│   - Star / Archive / Trash / Move folder                   │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ API: /api/projects/[id]/mailbox                            │
+│   - GET: list mails in folder (with pagination + search)   │
+│   - POST: compose + send SMTP (leader only)                │
+│   - GET /:mailId: single mail with body + attachments      │
+│   - PATCH /:mailId: per-user state (read/star/archive/trash)
+│   - DELETE /:mailId: permanent (leader) / soft (member)    │
+│   - /ai-rewrite: POST → rewritten HTML                     │
+│   - /attachments: POST (multipart) / GET :attId / DELETE   │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ DB:                                                        │
+│   - Email (1 row per mail sent — from/to/cc/bcc/body/type) │
+│   - EmailAttachment (base64 content)                       │
+│   - Mailbox (per-user state: folder/isRead/isStarred/...)  │
+│   - MailRead (audit log per user)                          │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ External: SMTP via nodemailer (leader credentials)         │
+│   - leaderSmtpPassword lưu trong Project                   │
+│   - Gmail App Password format: "xxxx xxxx xxxx xxxx"       │
+│   - smtpStatus: pending | sent | failed | logged_only      │
+└────────────────────────────────────────────────────────────┘
+                          ↕
+┌────────────────────────────────────────────────────────────┐
+│ Realtime: notification-service (port 3002)                 │
+│   - Khi mail gửi → POST /broadcast-mail                    │
+│   - Socket.io event: mail:new (badge increment on Mail icon)
+│   - Per-user mail_read echo (sync giữa các tab)            │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📐 Mermaid Rendering (3-tier fix)
+
+Mermaid diagram đôi khi bị syntax error (đặc biệt với node ID tiếng Việt). NEXUS AI có 3-tier fix để **luôn render được diagram**:
+
+### Tier 1: `fixMermaid()` (regex)
+
+Fix nhanh các lỗi phổ biến:
+- Thiếu space giữa `graph` và `TD`
+- Node ID có dấu tiếng Việt → giữ nguyên (không ASCII hóa)
+- Thiếu quote cho label có ký tự đặc biệt
+- Sửa `|label|` thành `:label` cho classDiagram
+
+### Tier 2: `aggressiveFix()` (stronger regex)
+
+Fix mạnh hơn:
+- **Node ID normalization**: `Bệnh nhân` → `BenhNhan`, `Dược sĩ` → `DuocSi` (remove dấu tiếng Việt)
+- **Quote labels**: `BenhNhan["Bệnh nhân"]` thay vì `BenhNhan[Bệnh nhân]`
+- **Special chars escape**: escape `[`, `]`, `(`, `)`, `{`, `}` trong labels
+
+### Tier 3: AI Auto-Fix (OpenRouter)
+
+Nếu 2 tier trên vẫn không render được:
+
+```
+MermaidRenderer.tsx
+      │
+      ├─→ Try render với mermaid.render()
+      │
+      ├─→ If error:
+      │     ├─→ Try fixMermaid(code)
+      │     ├─→ Try render again
+      │     │
+      │     ├─→ If still error:
+      │     │     ├─→ Try aggressiveFix(code)
+      │     │     ├─→ Try render again
+      │     │     │
+      │     │     ├─→ If still error:
+      │     │     │     ├─→ POST /api/projects/[id]/fix-mermaid
+      │     │     │     │     { code, error, diagramType }
+      │     │     │     │
+      │     │     │     │     └─→ OpenRouter AI sửa syntax:
+      │     │     │     │          - System prompt với 7 quy tắc
+      │     │     │     │          - 4 models fallback: gpt-oss-120b, nemotron-ultra, gemma-4-31b, qwen3-coder
+      │     │     │     │          - Trả về fixed Mermaid code
+      │     │     │     │
+      │     │     │     ├─→ Try render again với fixed code
+      │     │     │     │
+      │     │     │     └─→ If still error: show error + raw code
+```
+
+> **Design decision:** 3-tier thay vì chỉ AI để:
+> 1. **Tiết kiệm tokens** — regex fix nhanh, không tốn API call
+> 2. **Độ tin cậy cao** — AI có thể fail (rate-limit, model chết), regex luôn deterministic
+> 3. **UX tốt hơn** — AI fix mất 2-5s, regex fix < 10ms
 
 ---
 
 ## 📊 Live Log Console (AsyncLocalStorage)
 
-### Vấn đề
+Live Log Console hiện realtime logs trong 3 overlay:
+- `ProcessingOverlay.tsx` — Pipeline (tạo project mới)
+- `TaskProcessingOverlay.tsx` mode="init" — Sinh todolist
+- `TaskProcessingOverlay.tsx` mode="refine" — AI Refine
 
-`generateTasks` và `refineSections` gọi `callAndParse` → `callModel` → `callOpenRouter` → `callOpenRouterDirect`. Mỗi layer có retry logic, key rotation, etc. Truyền tham số `projectId` qua 5+ layers rất lộn xộn.
-
-### Giải pháp: AsyncLocalStorage
+### AsyncLocalStorage pattern
 
 ```typescript
-// pipeline-progress.ts
-const pipelineAls = new AsyncLocalStorage<string>();
-const initAls = new AsyncLocalStorage<string>();
-const refineAls = new AsyncLocalStorage<string>();
+// src/lib/pipeline-progress.ts
+const pipelineAls = new AsyncLocalStorage<string>();  // projectId
+const initAls = new AsyncLocalStorage<string>();      // projectId
+const refineAls = new AsyncLocalStorage<string>();    // projectId
+
+// Maps: projectId → { status, agents[], logs[], startedAt, ... }
+const pipelineMap = new Map<string, ProgressState>();
+const initMap = new Map<string, InitState>();
+const refineMap = new Map<string, RefineState>();
 
 export function runWithProjectLog<T>(projectId: string, fn: () => T): T {
   return pipelineAls.run(projectId, fn);
 }
+export function runWithInitLog<T>(projectId: string, fn: () => T): T {
+  return initAls.run(projectId, fn);
+}
+export function runWithRefineLog<T>(projectId: string, fn: () => T): T {
+  return refineAls.run(projectId, fn);
+}
 
 export function appendLog(entry: Omit<LogEntry, "id" | "ts">): void {
-  // Try innermost context first (refine > init > pipeline)
+  // Tự route đến đúng context (innermost first):
+  // 1. refineAls (AI Refine đang chạy)
+  // 2. initAls (Task generation đang chạy)
+  // 3. pipelineAls (Pipeline chính đang chạy)
   const refinePid = refineAls.getStore();
-  if (refinePid) {
-    pushLog(refineMap, refinePid, entry);
-    return;
-  }
+  if (refinePid) { pushLog(refineMap, refinePid, entry); return; }
+
   const initPid = initAls.getStore();
-  if (initPid) {
-    pushLog(initMap, initPid, entry);
-    return;
-  }
-  const pipePid = pipelineAls.getStore();
-  if (pipePid) {
-    pushLog(progressMap, pipePid, entry);
-    return;
-  }
-  // No active context — silently drop
+  if (initPid) { pushLog(initMap, initPid, entry); return; }
+
+  const pipelinePid = pipelineAls.getStore();
+  if (pipelinePid) { pushLog(pipelineMap, pipelinePid, entry); return; }
+
+  // Không có context active → log bị drop (silent)
 }
 ```
 
-### Usage
+### Log entry format
 
 ```typescript
-// route.ts
-process.nextTick(() => {
-  runWithProjectLog(project.id, () => {
-    runPipeline(input, onProgress)  // ← all deep callees can appendLog()
-      .then(...)
-      .catch(...);
-  });
-});
-
-// ai.ts (deep inside callAndParse)
-appendLog({
-  level: "info",
-  model,
-  message: `→ [1/2] trying ${model}`,
-});
-
-// openrouter.ts (even deeper)
-appendLog({
-  level: "warn",
-  provider: "openrouter",
-  keyIndex: keyIndex + 1,
-  message: `[KEY ROTATION] Key #${keyIndex + 1} rate-limited for ${ra}s`,
-});
+interface LogEntry {
+  id: string;          // unique per log
+  ts: number;          // timestamp ms
+  level: "info" | "success" | "warn" | "error";
+  agentId?: string;    // "01".."10" | "TASK" | "REFINE" | "PIPELINE"
+  provider?: "pipeline" | "openrouter" | "cache" | "fallback";
+  model?: string;      // "openai/gpt-oss-120b:free"
+  keyIndex?: number;   // 1-based API key index
+  message: string;
+}
 ```
 
-AsyncLocalStorage **tự động propagate qua `await`**, `Promise.all`, `process.nextTick` — không cần传 tham số.
+### Log line format (hiển thị)
 
-### globalThis fix
-
-**Vấn đề:** Next.js dev recompile tạo module instance mới → `Map` reset → mất in-flight progress.
-
-**Giải pháp:** Lưu maps trên `globalThis`:
-
-```typescript
-type GlobalStore = {
-  progressMap?: Map<string, PipelineProgress>;
-  refineMap?: Map<string, RefineProgress>;
-  initMap?: Map<string, InitProgress>;
-  rateLimitedKeys?: Map<number, number>;
-  aiCache?: Map<string, { result: string; timestamp: number }>;
-};
-const g = globalThis as typeof globalThis & GlobalStore;
-
-const progressMap: Map<string, PipelineProgress> = g.progressMap ?? new Map();
-g.progressMap = progressMap;
-// ... same for refineMap, initMap
+```
+14:23:01 [AGENT-01] [OR] [#1] [OpenRouter] Key #1, model: openai/gpt-oss-120b:free
+14:23:02 [AGENT-01] [PIPELINE] [AGENT-01] Requirement Analyst → start (parallel)
+14:23:08 [AGENT-01] [OR] [#1] [OpenRouter] ✓ 200 OK (1.234s, 1500+2000 tokens)
+14:23:08 [AGENT-01] [PIPELINE] ✓ [AGENT-01] Requirement Analyst → done (openai/gpt-oss-120b:free)
 ```
 
 ---
 
 ## 🔑 Multi-Key Rotation
 
-### OpenRouter
+OpenRouter free tier có rate-limit (20 req/min per key). NEXUS AI support **multi-key rotation** để scale.
+
+### Cấu hình
+
+```bash
+# .env
+OPENROUTER_API_KEY=sk-or-v1-key1...
+OPENROUTER_API_KEY_2=sk-or-v1-key2...
+OPENROUTER_API_KEY_3=sk-or-v1-key3...
+# ... thêm bao nhiêu cũng được
+```
+
+### Rotation logic
 
 ```typescript
-function getAvailableKeyIndex(): number {
-  const keys = getAllApiKeys();  // OPENROUTER_API_KEY, _2, _3, ...
-  const now = Date.now();
-  for (let i = 0; i < keys.length; i++) {
-    const resetAt = rateLimitedKeys.get(i);
-    if (!resetAt || resetAt < now) {
-      rateLimitedKeys.delete(i);
-      return i;
-    }
-  }
-  // All rate-limited → return soonest-resetting key
-  return soonestResetting;
+// src/lib/openrouter.ts
+function getApiKeys(): { key: string; index: number }[] {
+  // Đọc tất cả OPENROUTER_API_KEY* từ env
+  // Trả về array theo thứ tự index
 }
 
-function markKeyRateLimited(keyIndex: number, retryAfter: number) {
-  rateLimitedKeys.set(keyIndex, Date.now() + retryAfter * 1000);
-  appendLog({
-    level: "warn",
-    provider: "openrouter",
-    keyIndex: keyIndex + 1,
-    message: `[KEY ROTATION] Key #${keyIndex + 1} rate-limited for ${retryAfter}s`,
-  });
+let currentKeyIndex = 0;
+let lastResetTime = Date.now();
+const requestCount = new Map<number, number>();  // keyIndex → count in window
+
+function nextKey(): { key: string; index: number } {
+  const keys = getApiKeys();
+  if (keys.length === 0) throw new Error("No API keys configured");
+
+  // Reset counter mỗi 60s
+  if (Date.now() - lastResetTime > 60_000) {
+    requestCount.clear();
+    lastResetTime = Date.now();
+  }
+
+  // Round-robin
+  currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+  const k = keys[currentKeyIndex];
+  requestCount.set(k.index, (requestCount.get(k.index) || 0) + 1);
+  return k;
 }
 ```
 
-### Retry strategy
-
-| HTTP status | Action |
-|---|---|
-| 200 | Return content + cache (if temp < 0.5) |
-| 429 | Mark key rate-limited → try next key |
-| 401/403 | Mark key invalid → try next key |
-| 404 | Model unavailable → skip to next model |
-| 5xx | Wait + retry same model (backoff) |
-| Timeout | Wait + retry same model |
-
-### Model fallback
+### Khi bị 429 (rate-limit)
 
 ```typescript
-const AGENTS: AgentDef[] = [
-  {
-    id: "01",
-    name: "Requirement Analyst",
-    models: [
-      "nvidia/nemotron-3-ultra-550b-a55b:free",  // try 1st
-      "qwen/qwen3-next-80b-a3b-instruct:free",   // try 2nd
-      "nvidia/nemotron-3-super-120b-a12b:free",
-      "openai/gpt-oss-120b:free",
-      // ... 5 more fallback models
-    ],
-    // ...
-  },
-  // ...
-];
-
-// callAndParse iterates models, MAX_RETRIES=2 per model
-for (const model of models) {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const raw = await callModel(model, sys, usr, temp);
-      // parse JSON, AI self-fix if needed
-      return { data, model };
-    } catch (e) {
-      // 429 → wait + retry same model
-      // 5xx → backoff + retry same model
-      // 4xx → skip to next model
-    }
-  }
+if (err.status === 429) {
+  // Wait 60s + jitter, retry same key
+  const waitMs = 60_000 + Math.random() * 30_000;
+  await sleep(waitMs);
+  // Continue to next retry attempt
 }
 ```
 
@@ -544,311 +638,272 @@ for (const model of models) {
 
 ## 🗄️ Database Schema
 
-Xem [prisma/schema.prisma](../prisma/schema.prisma) cho full schema.
+21 models (SQLite via Prisma) — chi tiết tại [`prisma/schema.prisma`](../prisma/schema.prisma).
 
-### Entity Relationship
+### ERD Overview
 
 ```
-Project (1) ──── (N) Member
-Project (1) ──── (N) Analysis (versioned)
-Project (1) ──── (N) Task
-Project (1) ──── (N) ChatMessage
-Project (1) ──── (N) EditProposal
-Project (1) ──── (N) EmailLog
-Project (1) ──── (1) ProjectContext  (long-term memory)
-Project (1) ──── (N) TokenLog        (cost tracking)
+Project (1) ─── (N) Member
+Project (1) ─── (N) Analysis      (versioned per section type)
+Project (1) ─── (N) Task          (Kanban + developer-first fields)
+Project (1) ─── (N) ChatMessage
+Project (1) ─── (N) EditProposal
+Project (1) ─── (1) ProjectContext  (long-term memory cache)
+Project (1) ─── (N) TokenLog        (cost tracking)
+Project (1) ─── (N) ActivityLog     (enriched with actor + relations)
+Project (1) ─── (N) Notification
+Project (1) ─── (N) Email
+Project (1) ─── (N) EmailLog        (legacy)
+Project (1) ─── (N) AgentConfig
+Project (1) ─── (N) PipelineStatus
+Project (1) ─── (1) TaskStatistic   (cached aggregate)
 
-Member (1) ──── (N) Task
-Member (1) ──── (N) ChatMessage
-Member (1) ──── (N) EditProposal
+Task (1) ─── (N) TaskLog            (audit trail)
+Task (1) ─── (1) Member             (assignee, optional)
+
+Email (1) ─── (N) EmailAttachment
+Email (1) ─── (N) Mailbox           (per-user state, unique [emailId, userEmail])
+Email (1) ─── (N) MailRead          (audit per user)
+Email (1) ─── (1) Email             (parentEmailId — threading reply/forward)
+
+Notification (1) ─── (N) NotificationRead  (per-user read, unique [notifId, readerEmail])
+
+AgentStatus (1) ─── (1) agentId     (live agent state)
+SystemStatus (1) ─── (1) subsystem  (singleton per subsystem)
+Template (N)                          (project blueprints, standalone)
 ```
 
-### Key fields
+### Key design choices
 
-| Model | Key fields | Notes |
-|---|---|---|
-| `Project` | `leaderToken`, `githubToken` | Token-based auth (no session) |
-| `Member` | `inviteToken` | Member access via link `/?p=ID&token=TOKEN` |
-| `Analysis` | `type`, `version` | 7 types: ANALYSIS/HR/SPRINT/DESIGN/UML/DOCS/GIT |
-| `Task` | `layer`, `targetFile`, `implementationSteps`, `technicalHints` | SMART model |
-| `ProjectContext` | `summary`, `fullResults`, `runCount` | Long-term memory |
-| `TokenLog` | `agentId`, `model`, `apiKeyId`, `totalTokens` | Cost tracking |
+- **SQLite** thay vì PostgreSQL: zero-config, file-based, dễ deploy local/Docker. Đánh đổi: không có enums (dùng `String` + union type), không có native arrays (dùng `String` JSON).
+- **Soft state in Mailbox** thay vì delete: user có thể undo (move từ TRASH về INBOX).
+- **Per-user read tracking** (NotificationRead, MailRead): một notification có thể unread cho user A nhưng read cho user B.
+- **ProjectContext**: cache long-term memory để retry/refine không tốn tokens re-reading.
+- **TaskLog**: audit trail riêng cho task mutations (.CREATED/.UPDATED/.STATUS_CHANGED/.COMPLETED/.ASSIGNED/.DEADLINE_CHANGED).
+- **ActivityLog enriched**: actorName/actorEmail/actorRole/actorAvatar + relatedTaskId/relatedMailId + actionUrl/actionLabel — để dashboard "Recent Activity" widget render rich rows.
 
 ---
 
-## 💬 Real-time (Socket.io + Polling)
+## ⚡ Real-time (Socket.io + Polling)
 
-### Architecture
+### 2 mini-services
 
-```
-Browser (socket.io-client)
-  ↓ io('/?XTransformPort=3001')
-Caddy Gateway
-  ↓ forward to localhost:3001 (path=/)
-Socket.io Chat Service (port 3001)
-  ↓ verify token via HTTP
-Next.js API (port 3000)
-  ↓ GET /api/projects/:id?token=...
-DB
-```
-
-### Fallback: HTTP Polling
-
-Nếu chat service không chạy, frontend tự fallback:
-
-```typescript
-// ChatTab.tsx
-useEffect(() => {
-  const interval = setInterval(async () => {
-    const resp = await fetch(`/api/projects/${projectId}/chat`);
-    if (resp.ok) {
-      const data = await resp.json();
-      setMessages(data.messages);
-    }
-  }, 3000); // 3s polling
-  return () => clearInterval(interval);
-}, [projectId]);
-```
-
-### Room model
-
-Mỗi project = 1 room `project:<projectId>`. Tất cả events scoped trong room.
-
-### Events
-
-| Client → Server | Payload | Mô tả |
+| Service | Port | Purpose |
 |---|---|---|
-| `join` | `{ projectId, name, role, token }` | Join room (verify token) |
-| `send_message` | `{ projectId, name, role, message }` | Broadcast message |
-| `typing` | `{ projectId, name }` | Typing indicator |
+| **chat-service** | 3001 | Realtime chat (Socket.io `chat_message` event) |
+| **notification-service** | 3002 | Realtime notifications + activity + task + status broadcasts |
 
-| Server → Client | Payload | Mô tả |
+### Rooms (notification-service)
+
+| Room | Who joins | Use case |
 |---|---|---|
-| `user_joined` | `{ projectId, name, role, socketId, timestamp }` | User joined |
-| `message` | `{ name, role, message, timestamp }` | New message (excludes sender) |
-| `typing` | `{ projectId, name, timestamp }` | Someone typing |
-| `user_left` | `{ projectId, name, role, socketId, timestamp }` | User left |
-| `error` | `{ message }` | Error |
+| `dashboard` | Tất cả sockets | Broadcast activity/task/status tới Home dashboard widgets |
+| `project:ID` | Members of project | Project-scoped notifications + mail + task updates |
+| `user:EMAIL` | Single user | Targeted notifications + personal mail alerts |
 
-👉 Chi tiết: [mini-services/chat-service/README.md](../mini-services/chat-service/README.md)
+### HTTP broadcast endpoints (internal — Next.js calls these)
+
+| Method | Path | Broadcasts |
+|---|---|---|
+| `POST` | `/broadcast` | `notification:new` → `project:ID` + `user:EMAIL` |
+| `POST` | `/broadcast-mail` | `mail:new` → `project:ID` |
+| `POST` | `/broadcast-activity` | `activity:new` → `dashboard` + `project:ID` |
+| `POST` | `/broadcast-task` | `task:update` → `dashboard` + `project:ID` |
+| `POST` | `/broadcast-status` | `status:update` → `dashboard` |
+| `GET` | `/health` | Health check |
+
+### Fallback (HTTP polling)
+
+Nếu mini-services không chạy:
+- **Chat**: frontend polls `GET /api/projects/:id/chat` mỗi 3s
+- **Notifications**: polls `GET /api/projects/:id/notifications` mỗi 10s
+- **Dashboard widgets**: polls `/api/dashboard/activity|status|tasks` mỗi 10s
+
+> **Note:** Mini-services KHÔNG persist state. Nếu service restart, sockets reconnect + re-fetch via REST.
 
 ---
 
-## 🔌 GitHub Integration
+## 🐙 GitHub Integration
 
 ### OAuth Flow
 
 ```
-1. User clicks "Connect GitHub"
-   ↓
-2. GET /api/github/auth
-   → Redirect to https://github.com/login/oauth/authorize?client_id=...&scope=repo
-   ↓
-3. GitHub redirects back to /api/github/callback?code=xxx
-   ↓
-4. GET /api/github/callback
-   ├─ Exchange code for access_token
-   ├─ Get user info (username)
-   ├─ Save to Project: githubToken, githubUsername
-   └─ Redirect to /?p=PROJECT_ID&token=LEADER_TOKEN
-   ↓
-5. GET /api/github/status?projectId=xxx
-   → { connected: true, username: "vanhoi04082006" }
+1. User click "Connect GitHub" trong Git tab
+2. Browser → GET /api/github/auth?projectId=ID&token=LEADER_TOKEN
+3. Redirect → https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...
+4. User authorize trên GitHub
+5. GitHub redirect → GET /api/github/callback?code=CODE&state=STATE
+6. Server: exchange CODE → access_token (server-to-server)
+7. db.project.update({ githubToken, githubUsername })
+8. Redirect → /?p=PROJECT_ID&token=LEADER_TOKEN
 ```
 
 ### Push Flow
 
 ```
-1. User clicks "Push to GitHub"
-   ↓
-2. POST /api/github/push
-   Body: { projectId, token }
-   ↓
-3. github.ts:
-   ├─ Create repo (private) via POST /user/repos
-   ├─ Generate 15+ files:
-   │   ├─ README.md
-   │   ├─ .gitignore
-   │   ├─ PROJECT_SUMMARY.md
-   │   ├─ FOLDER_STRUCTURE.txt
-   │   ├─ docs/CODING_CONVENTION.md
-   │   ├─ docs/API_STANDARD.md
-   │   ├─ docs/ARCHITECTURE.md
-   │   ├─ docs/DATABASE.md
-   │   ├─ docs/API_ENDPOINTS.md
-   │   ├─ docs/SPRINT_PLAN.md
-   │   ├─ docs/TEAM.md
-   │   ├─ docs/TASKS.md
-   │   ├─ docs/UML/use-case.mmd
-   │   ├─ docs/UML/class-diagram.mmd
-   │   ├─ docs/UML/erd.mmd
-   │   ├─ docs/UML/sequence.mmd
-   │   └─ .github/ISSUE_TEMPLATE/task.md
-   ├─ Create blob for each file
-   ├─ Create tree with all blobs
-   ├─ Create commit on top of default branch
-   ├─ Update ref (master/main)
-   ├─ Create branch nexus-ai/init
-   └─ Create Pull Request
-   ↓
-4. Return { repoUrl, prUrl }
+User click "Push to GitHub" → POST /api/github/push
+      │
+      ├─→ Verify GitHub connected (githubToken !== null)
+      ├─→ Build files (17+ files):
+      │     - README.md
+      │     - .gitignore
+      │     - PROJECT_SUMMARY.md
+      │     - FOLDER_STRUCTURE.txt
+      │     - docs/CODING_CONVENTION.md
+      │     - docs/API_STANDARD.md
+      │     - docs/ARCHITECTURE.md
+      │     - docs/DATABASE.md
+      │     - docs/API_ENDPOINTS.md
+      │     - docs/SPRINT_PLAN.md
+      │     - docs/TEAM.md
+      │     - docs/TASKS.md
+      │     - docs/UML/{use-case,class-diagram,erd,sequence}.mmd
+      │     - .github/ISSUE_TEMPLATE/task.md
+      │
+      ├─→ scripts/push-to-github.js:
+      │     - Create branch "nexus-ai-init"
+      │     - Create tree + commit via GitHub REST API
+      │     - Update ref (push branch)
+      │     - Create Pull Request
+      │
+      ├─→ db.project.update({ githubRepoName, githubPushedAt })
+      ├─→ db.activityLog.create({ type: "GITHUB_PUSH" })
+      │
+      └─→ Response { repoUrl, prUrl, filesPushed }
 ```
 
 ---
 
-## 📧 Email System
+## 🗃️ State Management
 
-### SMTP via Nodemailer
-
-```typescript
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: leaderEmail,
-    pass: leaderSmtpPassword,  // App Password, NOT regular password
-  },
-});
-
-// Verify before sending
-await transporter.verify();
-```
-
-### Email types
-
-| Type | Trigger | Content |
-|---|---|---|
-| `INVITATION` | Tạo project | Lời mời + vai trò + module + invite link |
-| `TASK_ASSIGNED` | Sinh todolist | Danh sách task + deadline |
-| `REMINDER` | (Manual) | Deadline reminder |
-
-### Public URL
-
-Email link dùng URL từ `.public-url` file (Cloudflare Tunnel URL):
-
-```typescript
-const publicUrl = fs.readFileSync('.public-url', 'utf-8').trim();
-const inviteLink = `${publicUrl}/?p=${projectId}&token=${memberToken}`;
-```
-
-Nếu không có `.public-url` → fallback `http://localhost:3000`.
-
----
-
-## 🎯 State Management
-
-### Zustand (client state, persisted)
+### Zustand store (`useNexus.ts`)
 
 ```typescript
 interface NexusState {
-  // routing
-  view: "input" | "workspace" | "home";
+  // Navigation
+  view: "home" | "projects" | "input" | "workspace" | "agenthub";
+  activeTab: SectionType | "chat" | "members" | "tasks" | "mailbox" | "history" | "agenthub";
+
+  // Project context
   projectId: string | null;
   token: string | null;
+  access: AccessInfo | null;
+  project: ProjectInfo | null;
+  result: ProjectResult | null;
 
-  // input form (persisted)
-  input: { topic, description, members, ... };
+  // Collections
+  tasks: TaskItem[];
+  members: MemberInfo[];
+  chatMessages: ChatMessage[];
 
-  // pipeline state
-  pipelineRunning: boolean;
-  agents: AgentProgress[];
-  logs: LogEntry[];
+  // Pipeline progress (Live Log Console)
+  pipelineProgress: ProgressState | null;
+  initProgress: InitState | null;
+  refineProgress: RefineState | null;
 
-  // init state
-  initRunning: boolean;
-  initLogs: LogEntry[];
-
-  // refine state
-  refineRunning: boolean;
-  refineLogs: LogEntry[];
-
-  // workspace data
-  project, result, members, messages, tasks, emails, proposals;
+  // Actions
+  setView(view): void;
+  setActiveTab(tab): void;
+  loadProject(id, token): Promise<void>;
+  startPipeline(input): Promise<void>;
+  pollPipeline(): Promise<void>;
+  // ... (persisted via Zustand persist middleware)
 }
 ```
 
-**Persisted** (qua `localStorage`):
-- `input` (form data across reloads)
-- `projectId`, `token`, `activeTab`
+### Persisted fields
 
-**Not persisted** (transient):
-- `pipelineRunning`, `agents`, `logs`, etc.
+- `view`, `activeTab`, `projectId`, `token` (lưu localStorage để reload page không mất context)
 
-### TanStack Query (server state)
+### TanStack Query
 
-Sử dụng cho:
-- Fetch tasks (Kanban real-time polling 5s)
-- Fetch chat messages (fallback polling 3s)
+Dùng cho dashboard widgets (Recent Activity, NEXUS AI Status, Tasks đang làm) — auto refetch + cache + invalidation.
 
 ---
 
-## 🎨 Design Decisions
+## 🎯 Design Decisions
 
-### 1. Background + Polling thay vì SSE
+### 1. Background + Polling thay vì SSE/WebSocket cho pipeline
 
-**Vấn đề:** SSE (Server-Sent Events) qua Caddy gateway → 504 timeout sau 100s.
+**Vấn đề:** Pipeline chạy 5-10 phút. SSE/WebSocket long-lived bị Cloudflare/Fly.io timeout (504 Gateway Timeout).
 
-**Giải pháp:**
-- POST `/api/projects` trả về ngay `{ projectId, leaderToken }`
-- Pipeline chạy trong `process.nextTick` (background)
-- Client polls `GET /api/projects/:id/progress` mỗi 2.5s
-- Backend lưu progress trong `progressMap` (in-memory, globalThis)
+**Giải pháp:** Pipeline chạy background (không block HTTP request). Client polls mỗi 2.5s. Progress lưu trong in-memory Map (expire 5 phút).
 
-**Trade-off:** Thêm 1.25s latency trung bình (half of 2.5s poll interval), nhưng đáng để đổi lấy reliability.
+**Trade-off:** Tốn thêm HTTP requests, nhưng reliable + scale được.
 
-### 2. Multi-provider fallback
+### 2. Multi-key rotation + Multi-model fallback
 
-**Vấn đề:** Free tier OpenRouter rate-limit nặng. Cần nhiều model + key để đảm bảo pipeline luôn có kết quả.
+**Vấn đề:** OpenRouter free tier rate-limit 20 req/min per key. 10 agents × 9 models = 90 requests có thể spike.
 
 **Giải pháp:**
-- Multi-key rotation (unlimited keys) — tự luân chuyển khi 429
-- Multi-model fallback per agent — thử model 1 → 2 → 3 → ...
-- Static fallback data (always return something)
-- In-memory cache (1h TTL) — skip repeated calls
+- Multi-key: round-robin + 60s window counter
+- Multi-model: 9 models/agent, retry 5 lần/model, full-jitter backoff
+- Concurrency limit: max 3 parallel LLM calls (`p-limit`)
 
 ### 3. AsyncLocalStorage cho log context
 
-**Vấn đề:** `generateTasks` → `callAndParse` → `callModel` → `callOpenRouter` → `callOpenRouterDirect`. Truyền `projectId` qua 5+ layers lộn xộn.
+**Vấn đề:** Log entry cần biết nó thuộc pipeline nào (pipeline/init/refine). Truyền `projectId` qua 10 layers function call rất verbose.
 
-**Giải pháp:** AsyncLocalStorage tự động propagate qua `await`/`Promise.all`. `appendLog()` không cần tham số — tự biết context nào đang chạy.
+**Giải pháp:** AsyncLocalStorage — `runWithProjectLog(pid, fn)` set context, `appendLog()` tự đọc context. Code sạch, không leak abstraction.
 
-### 4. globalThis cho in-memory maps
+### 4. 3-tier Mermaid fix
 
-**Vấn đề:** Next.js dev recompile tạo module instance mới → `Map` reset → mất in-flight progress.
-
-**Giải pháp:** Lưu `progressMap`, `initMap`, `refineMap`, `rateLimitedKeys`, `aiCache` trên `globalThis`.
-
-### 5. Long-term memory (ProjectContext)
-
-**Vấn đề:** Retry/refine cần đọc lại tất cả sections → tốn token + thời gian.
-
-**Giải pháp:** Lưu `summary` (compressed) + `fullResults` (capped 50KB) trong `ProjectContext`. AI đọc summary thay vì full JSON.
-
-### 6. Parallel Phase 2
-
-**Vấn đề:** 7 agents tuần tự = chậm.
-
-**Giải pháp:** Phase 1 (analysis → hr → sprint) tuần tự (có dependency). Phase 2 (design + uml + docs + git) chỉ depend trên Phase 1 → chạy song song qua `Promise.all`.
-
-### 7. Token-based auth (no session)
-
-**Vấn đề:** Next.js App Router + serverless → session phức tạp.
+**Vấn đề:** Mermaid syntax error thường gặp (đặc biệt node ID tiếng Việt). AI fix tốn tokens + có thể fail.
 
 **Giải pháp:**
-- `leaderToken` (cuid) — trong URL `/?p=PROJECT_ID&token=LEADER_TOKEN`
-- `member.inviteToken` (cuid) — trong URL email
-- Mỗi API request verify token vs DB
-- Chat service verify token via HTTP call to Next.js API
+1. Regex `fixMermaid()` — fix nhanh, 0 tokens
+2. Regex `aggressiveFix()` — fix mạnh hơn (ASCII hóa node ID)
+3. AI Auto-Fix — last resort, qua OpenRouter
 
-### 8. SQLite (not Postgres)
+### 5. Per-user read tracking (NotificationRead, MailRead)
 
-**Lý do:**
-- Zero-config — không cần setup database server
-- File-based (`db/custom.db`) — dễ backup (copy file)
-- Đủ performance cho dev / small team
-- Docker volume persist dễ
+**Vấn đề:** Notification/Mail broadcast (`recipientEmail=null`) tới nhiều user. Mỗi user cần read state riêng.
+
+**Giải pháp:** Bảng riêng `NotificationRead` (unique `[notifId, readerEmail]`) + `MailRead`. Notification "unread" cho user khi không có `NotificationRead` row.
+
+### 6. Dark theme only
+
+**Vấn đề:** NEXUS AI là SaaS dashboard phức tạp. Hỗ trợ light + dark tốn effort thiết kế + maintain.
+
+**Giải pháp:** Chỉ dark theme (teal accent). `globals.css` chỉ có 1 theme. Don't need `next-themes` provider cho light/dark switch.
+
+### 7. SQLite + Prisma
+
+**Vấn đề:** Cần DB zero-config, dễ deploy local + Docker + Fly.io.
+
+**Giải pháp:** SQLite + Prisma. File `db/custom.db`. Trade-off: không có enums (dùng String), không có native arrays (dùng JSON String), không có concurrency cao (OK vì single-instance).
+
+### 8. 2 mini-services riêng (chat + notification)
+
+**Vấn đề:** Socket.io trong Next.js API Routes không scale tốt (stateless). Realtime cần stateful WebSocket server.
+
+**Giải pháp:** 2 mini-services Node.js + Socket.io. Next.js gọi HTTP `/broadcast*` khi cần push event. Mini-service có thể restart độc lập.
+
+### 9. Long-term memory (ProjectContext)
+
+**Vấn đề:** Retry/Refine cần re-read toàn bộ context (members, analyses, chat). Tốn tokens + time.
+
+**Giải pháp:** Sau pipeline đầu, cache compressed summary vào `ProjectContext.summary`. Refine đọc cache thay vì re-read. Save ~50% tokens.
+
+### 10. Task dedup + comprehensiveness check
+
+**Vấn đề:** AI có thể sinh task trùng lặp, hoặc thiếu layer quan trọng (chỉ có UI, không có DATABASE).
+
+**Giải pháp:**
+- **Dedup**: compare title + description similarity với task đã có
+- **Comprehensiveness**: đảm bảo mỗi member có task across các layers (DATABASE/BACKEND/UI/CONFIG/TESTING)
+
+---
+
+## 📚 Related Docs
+
+- [README.md](../README.md) — Overview + cài đặt
+- [API.md](API.md) — REST API reference (50+ endpoints)
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Dev setup + cách extend
+- [prisma/schema.prisma](../prisma/schema.prisma) — DB schema
 
 ---
 
 <p align="center">
-  <strong>NEXUS AI Architecture</strong> — Multi-Agent + Live Log + Multi-Key
+  <strong>NEXUS AI Architecture</strong> — 10 agents, 6 phases, 3-tier Mermaid fix, dark theme only
 </p>

@@ -6,24 +6,26 @@ NEXUS AI tuân theo Code of Conduct đơn giản này. Bằng cách tham gia pro
 
 ### ✅ Hành vi tích cực
 
-- **Tôn trọng** — tôn trọng ý kiến, kinh nghiệm, và Background khác biệt của mọi người
+- **Tôn trọng** — tôn trọng ý kiến, kinh nghiệm, và background khác biệt của mọi người
 - **Chào đón** — chào đón người mới, giúp đỡ khi được hỏi
 - **Cấu trúc** — feedback mang tính xây dựng, cụ thể, có thể hành động
 - **Kiên nhẫn** — ai cũng có lúc mắc lỗi, hãy kiên nhẫn
 - **Trực tiếp** — nói thẳng vấn đề, không nói xấu sau lưng
+- **Minh bạch** — thừa nhận sai sót, học từ feedback
 
 ### ❌ Hành vi không chấp nhận
 
-- **Harassment** — quấy rối, đe dọa, hoặcコメント công kích cá nhân
-- **Spam** — quảng cáo, self-promotion không liên quan
-- **Troll** — cố ý gây khó chịu, provoke conflict
-- **Discrimination** — phân biệt giới tính, tuổi tác, dân tộc, tôn giáo, orientation
-- **Doxxing** — tiết lộ thông tin cá nhân của người khác
+- **Harassment** — quấy rối, đe dọa, hoặc bình luận công kích cá nhân
+- **Spam** — quảng cáo, self-promotion không liên quan đến project
+- **Troll** — cố ý gây khó chịu, khiêu khích xung đột
+- **Discrimination** — phân biệt giới tính, tuổi tác, dân tộc, tôn giáo, xu hướng tính dục
+- **Doxxing** — tiết lộ thông tin cá nhân của người khác khi chưa được đồng ý
+- **Plagiarism** — lấy code/ý tưởng của người khác mà không ghi nguồn
 
 ### 📬 Báo cáo vi phạm
 
 Nếu thấy vi phạm, mở issue (private) hoặc email trực tiếp cho maintainer:
-- GitHub: @vanhoi04082006-pixel
+- GitHub: [@vanhoi04082006-pixel](https://github.com/vanhoi04082006-pixel)
 
 Mọi báo cáo sẽ được giữ **bảo mật** và xử lý trong vòng 48h.
 
