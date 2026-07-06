@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState, useEffect } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -376,7 +377,7 @@ export function HistoryTab() {
                   size="sm"
                   className="w-full text-xs"
                   onClick={() => {
-                    navigator.clipboard.writeText(detailLog.details || detailLog.title);
+                    notify.copy(detailLog.details || detailLog.title, "Đã copy log!");
                   }}
                 >
                   Copy log

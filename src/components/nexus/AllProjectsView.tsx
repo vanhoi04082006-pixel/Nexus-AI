@@ -1,10 +1,10 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Cpu,
   Plus,
@@ -212,7 +212,7 @@ export function AllProjectsView() {
       const data = await resp.json();
       setProjects(data.projects || []);
     } catch {
-      toast.error("Không tải được danh sách dự án");
+      notify.error("Không tải được danh sách dự án");
     } finally {
       setLoading(false);
     }
@@ -267,7 +267,7 @@ export function AllProjectsView() {
       });
     } catch {
       setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, isFavorite: project.isFavorite } : p));
-      toast.error("Không thể cập nhật");
+      notify.error("Không thể cập nhật");
     }
   }
 
@@ -280,10 +280,10 @@ export function AllProjectsView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isArchived: !project.isArchived }),
       });
-      toast.success(project.isArchived ? "Đã khôi phục dự án" : "Đã lưu trữ dự án");
+      notify.success(project.isArchived ? "Đã khôi phục dự án" : "Đã lưu trữ dự án");
     } catch {
       setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, isArchived: project.isArchived } : p));
-      toast.error("Không thể cập nhật");
+      notify.error("Không thể cập nhật");
     }
   }
 
@@ -293,33 +293,32 @@ export function AllProjectsView() {
     try {
       await fetch(`/api/projects/${project.id}?token=${project.leaderToken}`, { method: "DELETE" });
       setProjects((prev) => prev.filter((p) => p.id !== project.id));
-      toast.success("Đã xóa dự án");
+      notify.success("Đã xóa dự án");
     } catch {
-      toast.error("Xóa thất bại");
+      notify.error("Xóa thất bại");
     }
   }
 
   async function duplicateProject(project: ProjectItem, e?: React.MouseEvent) {
     e?.stopPropagation();
-    toast.loading("Đang sao chép dự án...", { id: "dup" });
+    notify.loading("Đang sao chép dự án...", { id: "dup" });
     try {
       const resp = await fetch(`/api/projects/${project.id}/duplicate?token=${project.leaderToken}`, { method: "POST" });
       if (resp.ok) {
-        toast.success("Đã sao chép dự án", { id: "dup" });
+        notify.success("Đã sao chép dự án", { id: "dup" });
         loadProjects();
       } else {
-        toast.error("Sao chép thất bại", { id: "dup" });
+        notify.error("Sao chép thất bại", { id: "dup" });
       }
     } catch {
-      toast.error("Sao chép thất bại", { id: "dup" });
+      notify.error("Sao chép thất bại", { id: "dup" });
     }
   }
 
   function shareProject(project: ProjectItem, e?: React.MouseEvent) {
     e?.stopPropagation();
     const url = `${window.location.origin}/?p=${project.id}&token=${project.leaderToken}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Đã copy link chia sẻ!");
+    notify.copy(url, "Đã copy link chia sẻ!");
   }
 
   function startRename(project: ProjectItem, e?: React.MouseEvent) {
@@ -340,10 +339,10 @@ export function AllProjectsView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: renameValue.trim() }),
       });
-      toast.success("Đã đổi tên dự án");
+      notify.success("Đã đổi tên dự án");
     } catch {
       setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, topic: project.topic } : p));
-      toast.error("Đổi tên thất bại");
+      notify.error("Đổi tên thất bại");
     }
     setRenameId(null);
   }

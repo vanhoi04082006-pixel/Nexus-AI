@@ -1,10 +1,10 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useState } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Cpu,
   Search,
@@ -137,7 +137,7 @@ export function WorkspaceView() {
       setTasks(data.tasks || []);
       setProposals(data.proposals || []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Khong tai duoc du an");
+      notify.error(err instanceof Error ? err.message : "Khong tai duoc du an");
     } finally {
       setLoadingProject(false);
     }
@@ -249,17 +249,17 @@ export function WorkspaceView() {
         const taskCount = taskData.tasks?.length || 0;
         const memberCount = new Set(taskData.tasks?.map((t: { assigneeName: string }) => t.assigneeName).filter(Boolean)).size;
         const p0Count = taskData.tasks?.filter((t: { priority: string }) => t.priority === "P0").length || 0;
-        toast.success(
+        notify.success(
           `✅ Sinh todolist thành công!\n📊 ${taskCount} task cho ${memberCount} thành viên\n🔴 ${p0Count} task P0 (bat buoc)\n📧 Email thông báo đã gửi`,
           { duration: 8000 }
         );
       } else {
-        toast.success("✅ Sinh todolist thành công! Email thông báo đã gửi thành viên.");
+        notify.success("✅ Sinh todolist thành công! Email thông báo đã gửi thành viên.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khởi tạo";
       setInitError(msg);
-      toast.error(
+      notify.error(
         `❌ Sinh todolist thất bại!\n📋 Lý do: ${msg}\n🔧 Kiểm tra Live Log Console để xem chi tiết model nào fail`,
         { duration: 10000 }
       );
@@ -278,7 +278,7 @@ export function WorkspaceView() {
   async function handleDeleteProject() {
     if (!projectId || !token) return;
     if (deleteConfirm !== "Delete") {
-      toast.error('Phai nhap chinh xac "Delete" de xac nhan');
+      notify.error('Phai nhap chinh xac "Delete" de xac nhan');
       return;
     }
     setDeleting(true);
@@ -290,14 +290,14 @@ export function WorkspaceView() {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
-      toast.success("Da xoa du an");
+      notify.success("Da xoa du an");
       setDeleteDialogOpen(false);
       setDeleteConfirm("");
       setView("home");
       setRoute(null, null);
       window.history.pushState({}, "", "/");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loi xoa du an");
+      notify.error(err instanceof Error ? err.message : "Loi xoa du an");
     } finally {
       setDeleting(false);
     }
@@ -452,8 +452,7 @@ export function WorkspaceView() {
                 </code>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(publicUrl);
-                    toast.success("Đã copy URL!");
+                    notify.copy(publicUrl, "Đã copy URL!");
                   }}
                   className="text-muted-foreground hover:text-primary p-1 rounded transition-colors flex-shrink-0"
                   title="Copy URL"

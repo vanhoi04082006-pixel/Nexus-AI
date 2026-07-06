@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState } from "react";
 import { useNexus } from "@/store/useNexus";
 import { SectionEditor } from "../SectionEditor";
@@ -78,10 +79,9 @@ export function DocsTab() {
   const rawContent = fixNewlines((r as Record<string, string | undefined>)[active] || "");
 
   function copy() {
-    navigator.clipboard.writeText(rawContent).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    notify.copy(rawContent, "Đã copy nội dung!");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (

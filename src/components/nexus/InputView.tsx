@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Rocket,
   Plus,
@@ -83,39 +82,39 @@ export function InputView() {
 
   function validate(): boolean {
     if (!input.topic.trim()) {
-      toast.error("Vui long nhap ten chu de / du an");
+      notify.error("Vui long nhap ten chu de / du an");
       return false;
     }
     if (!input.leaderName.trim()) {
-      toast.error("Vui long nhap ten nhom truong");
+      notify.error("Vui long nhap ten nhom truong");
       return false;
     }
     const validMembers = input.members.filter((m) => m.name.trim());
     if (validMembers.length < 1) {
-      toast.error("Can it nhat 1 thanh vien co ten");
+      notify.error("Can it nhat 1 thanh vien co ten");
       return false;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const m of validMembers) {
       if (!m.email.trim()) {
-        toast.error(`Thanh vien "${m.name}" thieu email de gui loi moi`);
+        notify.error(`Thanh vien "${m.name}" thieu email de gui loi moi`);
         return false;
       }
       if (!emailRegex.test(m.email.trim())) {
-        toast.error(`Email cua "${m.name}" khong hop le: ${m.email}`);
+        notify.error(`Email cua "${m.name}" khong hop le: ${m.email}`);
         return false;
       }
     }
     if (!input.leaderEmail.trim()) {
-      toast.error("Vui long nhap email nhom truong (de gui mail SMTP)");
+      notify.error("Vui long nhap email nhom truong (de gui mail SMTP)");
       return false;
     }
     if (!emailRegex.test(input.leaderEmail.trim())) {
-      toast.error("Email nhom truong khong hop le");
+      notify.error("Email nhom truong khong hop le");
       return false;
     }
     if (!input.leaderSmtpPassword.trim()) {
-      toast.error("Vui long nhap App Password SMTP de gui email loi moi");
+      notify.error("Vui long nhap App Password SMTP de gui email loi moi");
       return false;
     }
     return true;
@@ -235,12 +234,12 @@ export function InputView() {
 
       // Pipeline done — redirect to workspace
       localStorage.setItem(`nexus_leader_${resultProjectId}`, resultToken);
-      toast.success("8 AI Agents hoan thanh! Email loi moi da gui thanh vien.");
+      notify.success("8 AI Agents hoan thanh! Email loi moi da gui thanh vien.");
       window.location.href = `/?p=${resultProjectId}&token=${resultToken}`;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Loi khong xac dinh";
       setPipelineError(msg);
-      toast.error(msg);
+      notify.error(msg);
       setSubmitting(false);
     }
   }

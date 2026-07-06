@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { useReloadProject } from "../useReload";
 import {
   UserPlus,
@@ -46,7 +46,7 @@ export function MembersTab() {
 
   async function addMember() {
     if (!newMember.name.trim() || !newMember.email.trim()) {
-      toast.error("Vui long nhap ten va email");
+      notify.error("Vui long nhap ten va email");
       return;
     }
     setAdding(true);
@@ -60,12 +60,12 @@ export function MembersTab() {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
-      toast.success(`Da them ${newMember.name} va gui email loi moi`);
+      notify.success(`Da them ${newMember.name} va gui email loi moi`);
       setNewMember({ name: "", email: "", strengths: "", weaknesses: "" });
       setAddOpen(false);
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loi them thanh vien");
+      notify.error(err instanceof Error ? err.message : "Loi them thanh vien");
     } finally {
       setAdding(false);
     }
@@ -74,10 +74,9 @@ export function MembersTab() {
   function copyInviteLink(m: MemberView) {
     if (!m.inviteToken) return;
     const link = `${window.location.origin}/?p=${projectId}&token=${m.inviteToken}`;
-    navigator.clipboard.writeText(link).then(() => {
-      setCopied(m.id);
-      setTimeout(() => setCopied(null), 2000);
-    });
+    notify.copy(link, "Đã copy link mời!");
+    setCopiedId(m.id);
+    setTimeout(() => setCopiedId(null), 2000);
   }
 
   async function handleProposal(p: EditProposalView, status: "APPROVED" | "REJECTED") {
@@ -88,10 +87,10 @@ export function MembersTab() {
         body: JSON.stringify({ status }),
       });
       if (!resp.ok) throw new Error("Loi cap nhat");
-      toast.success(status === "APPROVED" ? "Da duyet de xuat" : "Da tu choi de xuat");
+      notify.success(status === "APPROVED" ? "Da duyet de xuat" : "Da tu choi de xuat");
       await reload();
     } catch {
-      toast.error("Loi cap nhat de xuat");
+      notify.error("Loi cap nhat de xuat");
     }
   }
 

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import { useReloadProject } from "../useReload";
 import { TaskProcessingOverlay } from "../TaskProcessingOverlay";
 import {
@@ -174,7 +173,7 @@ export function ChatTab() {
       });
       if (!resp.ok) throw new Error("Loi gui tin nhan");
     } catch {
-      toast.error("Khong luu duoc tin nhan");
+      notify.error("Khong luu duoc tin nhan");
     }
     // emit via socket (other clients receive this; sender already has it locally)
     socketRef.current?.emit("send_message", {
@@ -209,7 +208,7 @@ export function ChatTab() {
         message: data.message.message,
       });
     } catch {
-      toast.error("AI khong phan hoi duoc");
+      notify.error("AI khong phan hoi duoc");
     } finally {
       setAiThinking(false);
     }
@@ -283,14 +282,14 @@ export function ChatTab() {
       });
 
       await reload();
-      toast.success(
+      notify.success(
         "✅ AI Refine thành công!\n🔄 Đã sinh lại tất cả 9 sections\n📋 Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security\n💡 Xem tab tương ứng để kiểm tra thay đổi",
         { duration: 8000 }
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi AI refine";
       setRefineError(msg);
-      toast.error(
+      notify.error(
         `❌ AI Refine thất bại!\n📋 Lý do: ${msg}\n🔧 Kiểm tra Live Log Console để xem chi tiết`,
         { duration: 10000 }
       );

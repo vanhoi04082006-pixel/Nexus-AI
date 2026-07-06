@@ -24,7 +24,6 @@ import {
   ExternalLink,
   AlertCircle,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -199,7 +198,7 @@ export function NotificationBell() {
       );
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch {
-      toast.error("Không thể đánh dấu đã đọc");
+      notify.error("Không thể đánh dấu đã đọc");
     }
   }
 
@@ -213,9 +212,9 @@ export function NotificationBell() {
       });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true, readAt: new Date().toISOString() })));
       setUnreadCount(0);
-      toast.success("Đã đánh dấu tất cả là đã đọc");
+      notify.success("Đã đánh dấu tất cả là đã đọc");
     } catch {
-      toast.error("Thất bại");
+      notify.error("Thất bại");
     }
   }
 
@@ -227,9 +226,9 @@ export function NotificationBell() {
         { method: "DELETE" }
       );
       setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-      toast.success("Đã xóa thông báo");
+      notify.success("Đã xóa thông báo");
     } catch {
-      toast.error("Xóa thất bại");
+      notify.error("Xóa thất bại");
     }
   }
 

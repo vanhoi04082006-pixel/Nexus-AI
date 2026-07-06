@@ -5,7 +5,6 @@ import { io, Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Cpu,
   Plus,
@@ -333,7 +332,7 @@ export function HomeView() {
       setProjects(data.projects || []);
     } catch {
       setLoadError(true);
-      toast.error("Không tải được danh sách dự án — kiểm tra kết nối DB");
+      notify.error("Không tải được danh sách dự án — kiểm tra kết nối DB");
     } finally {
       setLoading(false);
     }
@@ -371,7 +370,7 @@ export function HomeView() {
     setRoute(null, null);
     setView("input");
     window.history.pushState({}, "", `/`);
-    toast.success(`Đã áp dụng template "${template.name}" — điền thông tin còn lại rồi bấm Khởi tạo`);
+    notify.success(`Đã áp dụng template "${template.name}" — điền thông tin còn lại rồi bấm Khởi tạo`);
   }
 
   const heroProject = projects[heroIndex] || projects[0];
