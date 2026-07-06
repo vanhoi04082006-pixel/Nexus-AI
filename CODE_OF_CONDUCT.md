@@ -12,6 +12,7 @@ NEXUS AI tuân theo Code of Conduct đơn giản này. Bằng cách tham gia pro
 - **Kiên nhẫn** — ai cũng có lúc mắc lỗi, hãy kiên nhẫn
 - **Trực tiếp** — nói thẳng vấn đề, không nói xấu sau lưng
 - **Minh bạch** — thừa nhận sai sót, học từ feedback
+- **Chuẩn xác** — khi đóng góp docs/code, mô tả đúng trạng thái thực tế của project, không phóng đại
 
 ### ❌ Hành vi không chấp nhận
 
@@ -21,6 +22,7 @@ NEXUS AI tuân theo Code of Conduct đơn giản này. Bằng cách tham gia pro
 - **Discrimination** — phân biệt giới tính, tuổi tác, dân tộc, tôn giáo, xu hướng tính dục
 - **Doxxing** — tiết lộ thông tin cá nhân của người khác khi chưa được đồng ý
 - **Plagiarism** — lấy code/ý tưởng của người khác mà không ghi nguồn
+- **AI hallucination trong docs** — mô tả feature không tồn tại, hoặc nói "đã xong" khi chưa xong
 
 ### 📬 Báo cáo vi phạm
 

@@ -33,7 +33,7 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 | 02 | **HR Planner** | Phân vai trò cho từng thành viên dựa trên ưu/nhược điểm |
 | 03 | **Sprint Planner** | Chia sprint 2 tuần, gán task, deadline, milestones |
 | 04 | **System Architect** | Thiết kế database schema, API endpoints, folder structure |
-| 05 | **UML Generator** | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) |
+| 05 | **UML Generator** | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) — **enterprise-grade prompt**, đọc analysis/design/sprint, self-validate, no hallucination |
 | 06 | **Technical Writer** | Viết README, Coding Convention, API Standard |
 | 07 | **Git/DevOps** | Git commands, branch strategy, issue template, CI/CD |
 | 08 | **Software Tester** | Unit/integration/E2E/API/performance tests + bug report |
@@ -51,14 +51,14 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 | **Phase 5 — Fallback** | Agent vẫn fail | Sinh dữ liệu tĩnh (không crash) |
 | **Phase 6 — Quality Review** | Agent 10 | Tổng hợp + đồng bộ tất cả sections |
 
-> Mỗi agent có 9 free models OpenRouter với retry 5 lần/model, full-jitter backoff, và fallback tĩnh nếu tất cả model fail. Multi-key rotation tự động khi bị 429.
+> Mỗi agent có 9 free models OpenRouter với retry 5 lần/model, full-jitter backoff, và fallback tĩnh nếu tất cả model fail. **429 rate-limit** → wait **60s + jitter** rồi retry (áp dụng cho mọi model). Multi-key rotation tự động khi bị 429.
 
 ---
 
 ## ✨ Tính năng nổi bật
 
 ### 📊 Dashboard & Views
-- **Trang tổng quan (Home)** — Dashboard với 3 widget realtime:
+- **Trang tổng quan (Home)** — Dashboard với 3 widget realtime (toàn bộ data thật từ DB):
   - **Recent Activity** — Feed hoạt động từ `ActivityLog` (20+ event types)
   - **NEXUS AI Status** — Agent/API key/Pipeline/DB/Redis/Storage status realtime
   - **Tasks đang làm** — Task in_progress/overdue/due_soon của user
@@ -91,7 +91,7 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 - **Relations** (relatedTaskId, relatedMailId, actionUrl) cho click-through
 
 ### ✅ Task Generation & Kanban
-- **Dedup + comprehensiveness check** — không sinh task trùng lặp
+- **Dedup + comprehensiveness check** — không sinh task trùng lặp, đảm bảo đủ layer (DATABASE/BACKEND/UI/CONFIG/TESTING)
 - **Developer-First model** — mỗi task có: `layer` (DATABASE/BACKEND/UI/CONFIG/TESTING), `targetFile`, `implementationSteps[]`, `technicalHints` (snippet + note)
 - **Kanban board** — drag & drop 4 cột: `todo` / `in_progress` / `review` / `done` (qua `@hello-pangea/dnd`)
 - **Task statistics** cache (`TaskStatistic` model) — completion rate, overdue, due soon
@@ -111,12 +111,20 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 - **AI Assistant** — `/api/projects/[id]/chat/ai` để trigger AI reply
 - Fallback HTTP polling nếu chat-service không chạy
 
+### 🧠 UML Enterprise Prompt
+- **UML Generator (Agent 05)** dùng enterprise-grade prompt:
+  - Đọc dữ liệu từ `analysis` + `design` + `sprint` đã sinh ở Phase 1-2
+  - Self-validate tính nhất quán giữa các diagram (Use Case ↔ Class ↔ ERD ↔ Sequence)
+  - No hallucination — chỉ vẽ entity/relation có thật trong analysis/design
+  - Synchronize actor list, module list, DB tables giữa các diagram
+
 ### 🎨 Theme & UX
 - **Dark theme only** — teal accent, no light mode
 - **Neural background** animation
 - **3D AI brain** hero animation
 - **Sonner toasts** cho notifications
 - **shadcn/ui (New York)** — 50+ components
+- **Lenient Zod schemas** — `toString` / `toStringArray` / `toNumber` preprocessors xử lý biến thể output AI (string vs number, single vs array)
 
 ---
 
@@ -127,15 +135,16 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 | **Frontend** | Next.js 16 (App Router, Turbopack), React 19, TypeScript 5 |
 | **Styling** | Tailwind CSS 4, shadcn/ui (New York), tw-animate-css |
 | **State** | Zustand 5 (persisted), TanStack Query 5, TanStack Table 8 |
-| **Backend** | Next.js API Routes (Node.js runtime) |
-| **Database** | Prisma 6 ORM + SQLite |
-| **AI** | OpenRouter (multi-key rotation, 9 free models/agent, multi-model fallback) |
+| **Animation** | Framer Motion 12 |
+| **Backend** | Next.js API Routes (Node.js runtime) — 50+ endpoints |
+| **Database** | Prisma 6 ORM + SQLite (23 models) |
+| **AI** | OpenRouter (multi-key rotation, 9 free models/agent, multi-model fallback, 60s retry cho 429) |
 | **Realtime** | Socket.io (chat port 3001 + notifications port 3002) |
-| **Diagrams** | Mermaid.js 11 + React Flow 11 |
+| **Diagrams** | Mermaid.js 11 (CDN) + React Flow 11 |
 | **Kanban** | @hello-pangea/dnd 18 |
 | **Email** | Nodemailer 9 (SMTP), @mdxeditor/editor (rich text) |
-| **Forms** | react-hook-form 7 + zod 4 |
-| **Runtime** | Bun 1 |
+| **Forms** | react-hook-form 7 + zod 4 (lenient preprocessors) |
+| **Runtime** | Bun 1 (dev + production) |
 
 ---
 
@@ -144,7 +153,7 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 ### Yêu cầu
 
 - [Bun](https://bun.sh) v1+ (runtime + package manager)
-- [Node.js](https://nodejs.org) v20+ (cho Prisma CLI)
+- [Node.js](https://nodejs.org) v20+ (cho Prisma CLI + scripts/run.js)
 - [OpenRouter API key](https://openrouter.ai/keys) (free)
 
 ### Quick start
@@ -169,6 +178,26 @@ bun run dev
 # → http://localhost:3000
 ```
 
+### ⚡ Shortcut: `bun run run` (cross-platform)
+
+Lệnh **một bước** để chạy dev server + Cloudflare Tunnel/ngrok (share local ra internet) — tự động detect OS:
+
+```bash
+bun run run
+```
+
+Cách hoạt động (xem [`scripts/run.js`](scripts/run.js)):
+- **Windows** → chạy `scripts/run-local.bat`
+- **Linux/Mac** → chạy `scripts/run-local.sh`
+
+Cả 2 script trên đều:
+1. Check dependencies (Bun, cloudflared/ngrok)
+2. Chạy `bun run dev` (port 3000)
+3. Mở tunnel (Quick / Named / Ngrok — cấu hình trong `tunnel.conf`)
+4. Parse tunnel URL → ghi vào `.public-url` (dùng cho email links)
+
+> Nếu chỉ muốn chạy local không cần tunnel → dùng `bun run dev`.
+
 ### Chạy mini-services (optional, cho realtime)
 
 ```bash
@@ -183,15 +212,16 @@ bun install
 bun run dev
 ```
 
-> Nếu không chạy mini-services, frontend tự fallback sang HTTP polling. Notification Center + Mail vẫn hoạt động qua REST API.
+> Nếu không chạy mini-services, frontend tự fallback sang HTTP polling. Notification Center + Mail vẫn hoạt động qua REST API (chỉ không realtime).
 
 ### Scripts có sẵn
 
 | Script | Mô tả |
 |---|---|
 | `bun run dev` | Chạy dev server (port 3000, Turbopack, log ra `dev.log`) |
+| `bun run run` | **Shortcut cross-platform** — chạy dev + tunnel (Win/Mac/Linux) |
 | `bun run build` | Build production (standalone output) |
-| `bun run start` | Chạy production server |
+| `bun run start` | Chạy production server (Bun runtime) |
 | `bun run lint` | ESLint + Next.js rules |
 | `bun run db:push` | Push schema → SQLite (dev) |
 | `bun run db:generate` | Regenerate Prisma Client |
@@ -243,7 +273,7 @@ APP_URL=http://localhost:3000
 ```
 Nexus-AI/
 ├── prisma/
-│   └── schema.prisma              # DB schema (21 models)
+│   └── schema.prisma              # DB schema (23 models)
 ├── src/
 │   ├── app/
 │   │   ├── api/                   # REST API routes (50+ endpoints)
@@ -281,7 +311,7 @@ Nexus-AI/
 │   │   ├── activity.ts            # Activity log + system/pipeline status
 │   │   ├── pipeline-progress.ts   # AsyncLocalStorage log + progress maps
 │   │   ├── access.ts              # Token auth (leader/member)
-│   │   ├── schemas.ts             # Zod validators
+│   │   ├── schemas.ts             # Zod validators (lenient preprocessors)
 │   │   ├── db.ts                  # Prisma client
 │   │   └── types.ts
 │   └── store/
@@ -289,7 +319,7 @@ Nexus-AI/
 ├── mini-services/
 │   ├── chat-service/              # Socket.io chat (port 3001)
 │   └── notification-service/      # Socket.io notifications (port 3002)
-├── scripts/                       # run-local (Win/Mac/Linux), deploy-fly, push-to-github
+├── scripts/                       # run.js (cross-platform), run-local.{sh,bat}, deploy-fly, push-to-github
 ├── docs/                          # Documentation
 ├── db/
 │   └── custom.db                  # SQLite (auto-created)
@@ -327,7 +357,7 @@ Nexus-AI/
 
 ## 🗄️ Database
 
-21 models (SQLite via Prisma) — xem đầy đủ tại [`prisma/schema.prisma`](prisma/schema.prisma):
+23 models (SQLite via Prisma) — xem đầy đủ tại [`prisma/schema.prisma`](prisma/schema.prisma):
 
 | Model | Mô tả |
 |---|---|
@@ -372,6 +402,8 @@ Xem chi tiết: [`DEPLOY.md`](DEPLOY.md)
 ### Local với Cloudflare Tunnel (share tạm thời)
 
 ```bash
+bun run run          # Cross-platform shortcut (tự detect Win/Linux/Mac)
+# Hoặc chạy trực tiếp:
 ./scripts/run-local.sh    # Linux/Mac
 ./scripts/run-local.bat   # Windows
 # → Tự động parse tunnel URL → ghi vào .public-url

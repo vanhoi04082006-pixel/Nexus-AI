@@ -6,7 +6,7 @@ Tài liệu đầy đủ cho NEXUS AI — Multi-Agent Project Architect.
 
 | Document | Mô tả | Audience |
 |---|---|---|
-| [**README.md**](../README.md) | Overview, features, cài đặt nhanh | Tất cả users |
+| [**README.md**](../README.md) | Overview, features, cài đặt nhanh (kèm `bun run run` shortcut) | Tất cả users |
 | [**LOCAL_RUN.md**](../LOCAL_RUN.md) | Hướng dẫn chạy local + Cloudflare Tunnel | Users chạy local |
 | [**DEPLOY.md**](../DEPLOY.md) | Deploy Fly.io + Docker | DevOps |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System design, data flow, components, design decisions | Developers |
@@ -31,9 +31,15 @@ bun run db:push
 bun run dev            # → http://localhost:3000
 ```
 
-### Muốn chạy local + share tạm thời?
+### Muốn chạy local + share tạm thời (1 lệnh)?
 
-Đọc [LOCAL_RUN.md](../LOCAL_RUN.md) để setup Cloudflare Tunnel.
+```bash
+bun run run           # Cross-platform: tự detect Windows/Linux/Mac
+                      # → Chạy dev + mở Cloudflare Tunnel/ngrok
+                      # → Ghi tunnel URL vào .public-url (cho email links)
+```
+
+Chi tiết: [LOCAL_RUN.md](../LOCAL_RUN.md)
 
 ### Muốn deploy?
 
@@ -57,6 +63,7 @@ bun run dev            # → http://localhost:3000
 - Thêm API Route mới
 - Log từ code mới (Live Log Console qua AsyncLocalStorage)
 - Thêm Activity event type mới
+- Thêm Notification type mới
 
 ---
 
@@ -67,6 +74,7 @@ bun run dev            # → http://localhost:3000
 │                         BROWSER (Client)                         │
 │  React 19 + Next.js 16 (App Router, Turbopack) + Zustand 5     │
 │  Tailwind 4 + shadcn/ui (New York) + TanStack Query 5          │
+│  Framer Motion 12 + Mermaid 11 (CDN) + React Flow 11           │
 └─────────────────────────────────────────────────────────────────┘
         ↕ HTTP (REST)              ↕ WebSocket (Socket.io)
 ┌──────────────────────────┐   ┌──────────────────────────────────┐
@@ -79,7 +87,7 @@ bun run dev            # → http://localhost:3000
         ▼                          ▼
 ┌──────────────────────────┐   ┌──────────────────────────────────┐
 │  SQLite (Prisma 6)       │   │  External APIs                   │
-│  21 models               │   │  OpenRouter (multi-key, 9 models) │
+│  23 models               │   │  OpenRouter (multi-key, 9 models) │
 │                          │   │  GitHub (OAuth + push)            │
 │                          │   │  SMTP (nodemailer)                │
 └──────────────────────────┘   └──────────────────────────────────┘
@@ -124,13 +132,13 @@ bun run dev            # → http://localhost:3000
 | 02 | HR Planner | `hr` | Vai trò, workload, rủi ro |
 | 03 | Sprint Planner | `sprint` | Sprints, milestones |
 | 04 | System Architect | `design` | DB schema, API, folder structure |
-| 05 | UML Generator | `uml` | 4 diagrams (Use Case, Class, ERD, Sequence) |
+| 05 | UML Generator | `uml` | 4 diagrams (Use Case, Class, ERD, Sequence) — **enterprise prompt** (đọc analysis/design/sprint, self-validate, no hallucination) |
 | 06 | Technical Writer | `docs` | README, Convention, API Standard |
 | 07 | Git/DevOps | `git` | Git commands, branch strategy, CI/CD |
 | 08 | Software Tester | `test` | Unit/integration/E2E/API/performance tests |
 | 09 | Security Reviewer | `security` | Threats, auth flow, OWASP Top 10 |
 | 10 | Quality Reviewer | (all) | Tổng hợp + đồng bộ 9 sections |
-| — | Task Generator | (Kanban) | SMART tasks + code snippets + dedup |
+| — | Task Generator | (Kanban) | SMART tasks + code snippets + dedup + comprehensiveness check |
 | — | Chat Assistant | (chat) | AI hội thoại |
 | — | AI Refine | (all) | Re-generate sections |
 
@@ -142,8 +150,10 @@ bun run dev            # → http://localhost:3000
 | **Phase 2** | Design parallel/sequential (04 + 05 + 06 + 07) |
 | **Phase 3** | Quality gates (08 + 09) |
 | **Phase 4** | Retry failed agents (1 lần, sau 5s) |
-| **Phase 5** | Fallback cho agent vẫn fail (dữ liệu tĩnh) |
+| **Phase 5** | Fallback cho agent vẫn fail (dữ liệu tĩnh — không crash) |
 | **Phase 6** | Quality Reviewer (Agent 10) tổng hợp + đồng bộ |
+
+> **429 rate-limit retry:** Trong một model call, nếu bị 429 → wait **60s + jitter** rồi retry (áp dụng cho mọi model, mọi agent).
 
 👉 Chi tiết: [ARCHITECTURE.md → Multi-Agent Pipeline](ARCHITECTURE.md#-multi-agent-pipeline)
 
@@ -151,7 +161,7 @@ bun run dev            # → http://localhost:3000
 
 ## 📊 Dashboard Widgets
 
-Trang tổng quan (Home view) có 3 widget realtime:
+Trang tổng quan (Home view) có 3 widget realtime (toàn bộ data thật từ DB):
 
 | Widget | Data source | Refresh |
 |---|---|---|
@@ -189,7 +199,7 @@ Khi render Mermaid diagram gặp lỗi syntax:
 
 ## 🗄️ Database Schema
 
-21 models (SQLite via Prisma):
+23 models (SQLite via Prisma):
 
 ```
 Project ─┬─ Member
@@ -226,14 +236,15 @@ Template (project blueprints)
 | **Frontend** | Next.js 16 (App Router, Turbopack), React 19, TypeScript 5 |
 | **Styling** | Tailwind CSS 4, shadcn/ui (New York), tw-animate-css |
 | **State** | Zustand 5 (persisted), TanStack Query 5, TanStack Table 8 |
-| **Backend** | Next.js API Routes (Node.js runtime) |
-| **Database** | Prisma 6 ORM + SQLite |
-| **AI** | OpenRouter (multi-key rotation, 9 free models/agent) |
+| **Animation** | Framer Motion 12 |
+| **Backend** | Next.js API Routes (Node.js runtime) — 50+ endpoints |
+| **Database** | Prisma 6 ORM + SQLite (23 models) |
+| **AI** | OpenRouter (multi-key rotation, 9 free models/agent, 60s retry cho 429) |
 | **Realtime** | Socket.io (chat 3001 + notifications 3002) |
-| **Diagrams** | Mermaid.js 11 + React Flow 11 |
+| **Diagrams** | Mermaid.js 11 (CDN) + React Flow 11 |
 | **Kanban** | @hello-pangea/dnd 18 |
 | **Email** | Nodemailer 9 (SMTP), @mdxeditor/editor (rich text) |
-| **Forms** | react-hook-form 7 + zod 4 |
+| **Forms** | react-hook-form 7 + zod 4 (lenient preprocessors) |
 | **Runtime** | Bun 1 |
 
 ---

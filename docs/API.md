@@ -23,6 +23,7 @@
 - [Fix Mermaid](#-fix-mermaid)
 - [Config & Templates](#-config--templates)
 - [Error Responses](#-error-responses)
+- [Mini-service HTTP endpoints (internal)](#-mini-service-http-endpoints-internal)
 
 ---
 

@@ -25,7 +25,7 @@ Cảm ơn bạn quan tâm đóng góp cho NEXUS AI! Tài liệu này hướng d�
 ### Yêu cầu
 
 - [Bun](https://bun.sh) v1+ (runtime + package manager)
-- [Node.js](https://nodejs.org) v20+ (cho Prisma CLI)
+- [Node.js](https://nodejs.org) v20+ (cho Prisma CLI + scripts/run.js)
 - [OpenRouter API key](https://openrouter.ai/keys) (free)
 
 ### Cài đặt
@@ -51,6 +51,22 @@ Dev server auto-reload khi save file. Log ghi ra `dev.log`:
 ```bash
 tail -f dev.log
 ```
+
+### ⚡ Shortcut: `bun run run` (cross-platform)
+
+Một lệnh để chạy dev + Cloudflare Tunnel/ngrok (share local ra internet):
+
+```bash
+bun run run
+```
+
+`scripts/run.js` tự detect OS:
+- **Windows** → chạy `scripts/run-local.bat`
+- **Linux/Mac** → chạy `scripts/run-local.sh`
+
+Cả 2 script trên đều: chạy `bun run dev` + mở tunnel + parse tunnel URL → ghi vào `.public-url` (cho email links).
+
+> Nếu chỉ muốn chạy local không cần tunnel → dùng `bun run dev`.
 
 ### Chạy mini-services (optional, cho realtime)
 
@@ -93,7 +109,7 @@ bun run db:reset     # Reset DB (xóa hết data!)
 ```
 Nexus-AI/
 ├── prisma/
-│   └── schema.prisma              # DB schema (21 models) — edit here then `bun run db:push`
+│   └── schema.prisma              # DB schema (23 models) — edit here then `bun run db:push`
 ├── src/
 │   ├── app/
 │   │   ├── api/                   # REST API routes (50+ endpoints)
@@ -131,7 +147,7 @@ Nexus-AI/
 │   │   ├── activity.ts            # Activity log + system/pipeline status
 │   │   ├── pipeline-progress.ts   # AsyncLocalStorage log + progress maps
 │   │   ├── access.ts              # Token auth (leader/member)
-│   │   ├── schemas.ts             # Zod validators
+│   │   ├── schemas.ts             # Zod validators (lenient preprocessors)
 │   │   ├── db.ts                  # Prisma client
 │   │   └── types.ts
 │   └── store/
@@ -139,7 +155,7 @@ Nexus-AI/
 ├── mini-services/
 │   ├── chat-service/              # Socket.io chat (port 3001)
 │   └── notification-service/      # Socket.io notifications (port 3002)
-├── scripts/                       # run-local (Win/Mac/Linux), deploy-fly, push-to-github
+├── scripts/                       # run.js (cross-platform), run-local.{sh,bat}, deploy-fly, push-to-github
 ├── docs/                          # Documentation
 ├── db/
 │   └── custom.db                  # SQLite (auto-created)
@@ -270,6 +286,28 @@ export async function GET(
 - **Responsive** — mobile-first, dùng `sm:`, `md:`, `lg:`, `xl:`
 - **Sticky footer** — `min-h-screen flex flex-col`, footer `mt-auto`
 
+### Zod Schemas (lenient preprocessors)
+
+Khi define Zod schema cho AI output, dùng **lenient preprocessors** từ `src/lib/schemas.ts` để handle biến thể output:
+
+```typescript
+// ✅ Good — lenient
+import { toString, toStringArray, toNumber } from "@/lib/schemas";
+
+const mySchema = z.object({
+  name: toString,           // accept string | number | null
+  tags: toStringArray,      // accept string | string[]
+  count: toNumber,          // accept string | number
+});
+
+// ❌ Bad — strict, sẽ reject AI output
+const mySchema = z.object({
+  name: z.string(),
+  tags: z.array(z.string()),
+  count: z.number(),
+});
+```
+
 ---
 
 ## 🗄️ Database Changes
@@ -375,10 +413,10 @@ const PROMPT_MAP: Record<SectionType, () => string> = {
 };
 ```
 
-### 4. Add to MIN_KEYS + fallback + Zod schema
+### 4. Add to MIN_KEYS + fallback + Zod schema (lenient)
 
 ```typescript
-// src/lib/schemas.ts — add Zod schema for performance
+// src/lib/schemas.ts — add Zod schema for performance (dùng toString/toStringArray/toNumber)
 // src/lib/ai.ts
 const MIN_KEYS: Record<SectionType, string[]> = {
   // ... existing
@@ -485,6 +523,8 @@ bun run dev
 ### 3. (Optional) Update DEFAULT_AGENTS
 
 Update `src/app/api/agents/route.ts` nếu model default của agent thay đổi.
+
+> **Note:** 429 retry 60s áp dụng cho **mọi model**. Không cần config riêng.
 
 ---
 
@@ -780,16 +820,18 @@ Hiện tại project chưa có automated tests. Khi thêm feature mới:
 - [ ] Workspace load đúng data (13 tabs)
 - [ ] Edit section → save → version bumped → ActivityLog tạo
 - [ ] AI Refine → tất cả 9 sections regenerated
-- [ ] Khởi tạo todolist → Kanban có tasks
+- [ ] Khởi tạo todolist → Kanban có tasks (đủ 5 layer: DB/BACKEND/UI/CONFIG/TESTING)
 - [ ] Drag-drop task giữa 4 cột (todo/in_progress/review/done)
 - [ ] Notification Center: bell badge, mark read, mark all read, detail modal
 - [ ] Mail: compose + send SMTP, AI rewrite, attachments, reply/forward, 7 folders
-- [ ] Dashboard widgets: Recent Activity, NEXUS AI Status, Tasks đang làm
+- [ ] Dashboard widgets: Recent Activity, NEXUS AI Status, Tasks đang làm (data thật)
 - [ ] All Projects: search, filter, sort, grid/list, context menu
 - [ ] Chat realtime (nếu chat service chạy port 3001)
 - [ ] Push GitHub → repo + PR tạo
 - [ ] Mermaid render → 3-tier fix hoạt động (regex → aggressive → AI)
 - [ ] Dark theme only — không có light mode
+- [ ] UML Tab: 4 diagram nhất quán với analysis/design/sprint (no hallucination)
+- [ ] 429 retry: khi bị rate-limit, log hiện "wait 60s" rồi retry
 
 ### Lint check
 
@@ -839,6 +881,7 @@ PR phải:
 - [ ] Responsive (test mobile + desktop)
 - [ ] Không thêm dependencies mới nếu không cần thiết
 - [ ] Database changes: đã chạy `bun run db:push` và test
+- [ ] Zod schemas mới dùng lenient preprocessors (`toString`/`toStringArray`/`toNumber`)
 
 ---
 

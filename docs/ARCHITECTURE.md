@@ -14,6 +14,7 @@
 - [Mermaid Rendering (3-tier fix)](#-mermaid-rendering-3-tier-fix)
 - [Live Log Console (AsyncLocalStorage)](#-live-log-console-asynclocalstorage)
 - [Multi-Key Rotation](#-multi-key-rotation)
+- [Lenient Zod Schemas](#-lenient-zod-schemas)
 - [Database Schema](#-database-schema)
 - [Real-time (Socket.io + Polling)](#-real-time-socketio--polling)
 - [GitHub Integration](#-github-integration)
@@ -30,13 +31,14 @@ NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local 
 
 1. **Background + Polling** thay vì SSE (fix 504 gateway timeout)
 2. **Multi-provider fallback** — không bao giờ crash, luôn có kết quả (5 retries/model × 9 models/agent × multi-key)
-3. **Multi-key rotation** — tối ưu free tier, auto-switch khi 429
+3. **Multi-key rotation** — tối ưu free tier, auto-switch khi 429 (wait 60s + jitter)
 4. **AsyncLocalStorage** cho log context (không truyền tham số qua 10 layers)
 5. **Long-term memory** — AI nhớ dự án qua `ProjectContext`
 6. **Parallel execution** — Phase 2 + Phase 3 agents chạy song song (mặc định)
 7. **3-tier Mermaid fix** — regex → aggressive → AI (luôn render được diagram)
 8. **Per-user state** — notifications và mail có read tracking riêng cho mỗi user
 9. **Dark theme only** — single theme, teal accent, no light mode
+10. **Lenient Zod schemas** — preprocessors (`toString`/`toStringArray`/`toNumber`) handle biến thể output AI
 
 ---
 
@@ -49,6 +51,7 @@ NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local 
 │  │  React 19 + Next.js 16 (App Router, Turbopack)             │ │
 │  │  Tailwind 4 + shadcn/ui (New York)                         │ │
 │  │  Zustand 5 (persisted) + TanStack Query 5                  │ │
+│  │  Framer Motion 12 + Mermaid 11 (CDN) + React Flow 11      │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
         ↕ HTTP (REST)                  ↕ WebSocket (Socket.io)
@@ -70,7 +73,7 @@ NEXUS AI là một **single-page Next.js application** chạy hoàn toàn local 
         ▼                                              ▼
 ┌──────────────────────────────────────┐   ┌──────────────────────────────┐
 │  SQLite (Prisma 6)                   │   │  External APIs               │
-│  21 models                           │   │  OpenRouter (multi-key,      │
+│  23 models                           │   │  OpenRouter (multi-key,      │
 │  ┌────────────────────────────────┐  │   │   9 free models/agent)      │
 │  │ Project + Member + Analysis    │  │   │  GitHub (OAuth + push)       │
 │  │ Task + TaskLog                 │  │   │  SMTP (nodemailer)           │
@@ -141,7 +144,7 @@ src/lib/
 ├── activity.ts            ← logActivity + updateSystemStatus + updatePipelineStatus
 ├── pipeline-progress.ts   ← AsyncLocalStorage + progress maps (pipeline/init/refine)
 ├── access.ts              ← resolveAccess + requireLeader
-├── schemas.ts             ← Zod validators per section type
+├── schemas.ts             ← Zod validators per section type (lenient preprocessors)
 ├── db.ts                  ← Prisma client singleton
 ├── types.ts               ← ProjectResult, TaskItem, SectionType, ...
 └── utils.ts               ← cn() helper
@@ -167,6 +170,10 @@ src/lib/
 │   Agent 05 (UML Generator)     │ → Promise.all()               │
 │   Agent 06 (Technical Writer)  │                               │
 │   Agent 07 (Git/DevOps)        ┘                               │
+│   Agent 05 dùng enterprise prompt:                              │
+│     - Đọc analysis + design + sprint đã sinh                   │
+│     - Self-validate consistency giữa 4 diagram                 │
+│     - No hallucination (chỉ vẽ entity có thật)                 │
 └────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -202,7 +209,7 @@ src/lib/
 Mỗi agent có **9 free models** OpenRouter. Mỗi model có **5 retries** với:
 
 - **Full-jitter backoff** — random delay trong window `[0, base × 2^attempt]`, max 60s
-- **429 rate-limit** — wait 60s + jitter, retry same model
+- **429 rate-limit** — wait **60s + jitter** (user requirement), retry same model. Áp dụng cho **mọi model, mọi agent**.
 - **5xx/timeout** — wait 60s, retry same model (model có thể chậm, không hỏng)
 - **Network error** — try next model ngay
 - **Concurrency limit** — max 3 parallel LLM calls (`p-limit`) để tránh memory blowup + rate-limit spikes
@@ -297,7 +304,7 @@ POST /api/projects/:id/refine?token=xxx  (leader only)
       │         │     - read current content (from Analysis hoặc ProjectContext)
       │         │     - build refine prompt (current + edit request + chat context)
       │         │     - call AI (multi-model fallback)
-      │         │     - Zod validate
+      │         │     - Zod validate (lenient preprocessors)
       │         │     - db.analysis.update() with version bump
       │         │     - mark sections[section] = true trong progress map
       │         │
@@ -312,7 +319,7 @@ Client polls GET /api/projects/:id/refine/progress mỗi 2.5s
 
 ## 📊 Dashboard Widgets
 
-Trang tổng quan (Home view) có 3 widget realtime:
+Trang tổng quan (Home view) có 3 widget realtime (toàn bộ data thật từ DB):
 
 ### 1. Recent Activity
 
@@ -627,18 +634,77 @@ function nextKey(): { key: string; index: number } {
 
 ```typescript
 if (err.status === 429) {
-  // Wait 60s + jitter, retry same key
+  // Wait 60s + jitter, retry same key (user requirement — 60s fixed wait)
   const waitMs = 60_000 + Math.random() * 30_000;
   await sleep(waitMs);
   // Continue to next retry attempt
 }
 ```
 
+> **Note:** 60s retry áp dụng cho **mọi model, mọi agent** — không phải chỉ agent nào đó.
+
+---
+
+## 🛡️ Lenient Zod Schemas
+
+AI output thường có biến thể (string vs number, single value vs array, missing fields). NEXUS AI dùng **lenient Zod preprocessors** trong `src/lib/schemas.ts` để handle:
+
+```typescript
+import { z } from "zod";
+
+// Coerce bất kỳ giá trị nào thành string (number → string, null → "", object → JSON)
+const toString = z.preprocess((v) => {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}, z.string());
+
+// Coerce thành string array (single string → [string], array → as-is)
+const toStringArray = z.preprocess((v) => {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.map(String);
+  if (typeof v === "string") return v.split(",").map((s) => s.trim()).filter(Boolean);
+  return [String(v)];
+}, z.array(z.string()));
+
+// Coerce thành number (string → Number, fallback 0)
+const toNumber = z.preprocess((v) => {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}, z.number());
+```
+
+### Ví dụ sử dụng
+
+```typescript
+const analysisSchema = z.object({
+  techStack: z.object({
+    frontend: z.object({ name: toString, ver: toString, reason: toString }),
+    backend: z.object({ name: toString, ver: toString, reason: toString }),
+    // ...
+  }),
+  teamSize: toNumber,
+  features: z.array(z.object({
+    name: toString,
+    module: toString,
+    pri: toString,
+  })),
+  modules: toStringArray,   // ← accept string OR array
+  // ...
+});
+```
+
+> **Lợi ích:** Giảm false-negative Zod errors khi AI trả `"Next.js"` thay vì `["Next.js"]`, hoặc `"8"` thay vì `8`. Pipeline ít fail hơn, retry/fallback ít trigger hơn.
+
 ---
 
 ## 🗄️ Database Schema
 
-21 models (SQLite via Prisma) — chi tiết tại [`prisma/schema.prisma`](../prisma/schema.prisma).
+23 models (SQLite via Prisma) — chi tiết tại [`prisma/schema.prisma`](../prisma/schema.prisma).
 
 ### ERD Overview
 
@@ -831,13 +897,14 @@ Dùng cho dashboard widgets (Recent Activity, NEXUS AI Status, Tasks đang làm)
 
 **Trade-off:** Tốn thêm HTTP requests, nhưng reliable + scale được.
 
-### 2. Multi-key rotation + Multi-model fallback
+### 2. Multi-key rotation + Multi-model fallback + 60s retry cho 429
 
 **Vấn đề:** OpenRouter free tier rate-limit 20 req/min per key. 10 agents × 9 models = 90 requests có thể spike.
 
 **Giải pháp:**
 - Multi-key: round-robin + 60s window counter
 - Multi-model: 9 models/agent, retry 5 lần/model, full-jitter backoff
+- **429 rate-limit: wait 60s + jitter** (áp dụng mọi model, mọi agent)
 - Concurrency limit: max 3 parallel LLM calls (`p-limit`)
 
 ### 3. AsyncLocalStorage cho log context
@@ -865,7 +932,7 @@ Dùng cho dashboard widgets (Recent Activity, NEXUS AI Status, Tasks đang làm)
 
 **Vấn đề:** NEXUS AI là SaaS dashboard phức tạp. Hỗ trợ light + dark tốn effort thiết kế + maintain.
 
-**Giải pháp:** Chỉ dark theme (teal accent). `globals.css` chỉ có 1 theme. Don't need `next-themes` provider cho light/dark switch.
+**Giải pháp:** Chỉ dark theme (teal accent). `globals.css` chỉ có 1 theme. Không cần `next-themes` provider cho light/dark switch (dù package vẫn được install).
 
 ### 7. SQLite + Prisma
 
@@ -892,6 +959,22 @@ Dùng cho dashboard widgets (Recent Activity, NEXUS AI Status, Tasks đang làm)
 **Giải pháp:**
 - **Dedup**: compare title + description similarity với task đã có
 - **Comprehensiveness**: đảm bảo mỗi member có task across các layers (DATABASE/BACKEND/UI/CONFIG/TESTING)
+
+### 11. Lenient Zod schemas
+
+**Vấn đề:** AI output có biến thể (`"Next.js"` vs `["Next.js"]`, `"8"` vs `8`). Strict Zod sẽ reject → trigger retry/fallback tốn tokens.
+
+**Giải pháp:** `toString` / `toStringArray` / `toNumber` preprocessors coerce biến thể về dạng chuẩn trước khi validate. Giảm false-negative, pipeline ít fail hơn.
+
+### 12. UML Enterprise Prompt
+
+**Vấn đề:** UML diagrams (Use Case, Class, ERD, Sequence) thường không nhất quán với analysis/design/sprint. AI hallucinate entity không có.
+
+**Giải pháp:** UML Generator (Agent 05) dùng enterprise prompt:
+- Đọc `analysis` (actors, modules, features) + `design` (dbTables) + `sprint` (tasks)
+- Self-validate: actor trong Use Case phải có trong analysis; table trong ERD phải có trong design
+- No hallucination — chỉ vẽ entity có thật
+- Synchronize actor list, module list, DB tables giữa 4 diagram
 
 ---
 
