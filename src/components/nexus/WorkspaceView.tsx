@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, memo, lazy, Suspense, useMemo } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { LoadingState } from "@/components/states";
 import {
   Cpu,
   Search,
@@ -29,19 +30,21 @@ import {
   History,
   Brain,
 } from "lucide-react";
-import { AnalysisTab } from "./tabs/AnalysisTab";
-import { HRTab } from "./tabs/HRTab";
-import { SprintTab } from "./tabs/SprintTab";
-import { DesignTab } from "./tabs/DesignTab";
-import { UMLTab } from "./tabs/UMLTab";
-import { DocsTab } from "./tabs/DocsTab";
-import { GitTab } from "./tabs/GitTab";
-import { ChatTab } from "./tabs/ChatTab";
-import { MembersTab } from "./tabs/MembersTab";
-import { TasksTab } from "./tabs/TasksTab";
-import { MailboxTab } from "./tabs/MailboxTab";
-import { HistoryTab } from "./tabs/HistoryTab";
-import { AgentHubTab } from "./tabs/AgentHubTab";
+// Code splitting: lazy-load each tab so initial bundle is smaller.
+// Each tab loads on-demand when user clicks it (suspense fallback = skeleton).
+const AnalysisTab = lazy(() => import("./tabs/AnalysisTab").then(m => ({ default: m.AnalysisTab })));
+const HRTab = lazy(() => import("./tabs/HRTab").then(m => ({ default: m.HRTab })));
+const SprintTab = lazy(() => import("./tabs/SprintTab").then(m => ({ default: m.SprintTab })));
+const DesignTab = lazy(() => import("./tabs/DesignTab").then(m => ({ default: m.DesignTab })));
+const UMLTab = lazy(() => import("./tabs/UMLTab").then(m => ({ default: m.UMLTab })));
+const DocsTab = lazy(() => import("./tabs/DocsTab").then(m => ({ default: m.DocsTab })));
+const GitTab = lazy(() => import("./tabs/GitTab").then(m => ({ default: m.GitTab })));
+const ChatTab = lazy(() => import("./tabs/ChatTab").then(m => ({ default: m.ChatTab })));
+const MembersTab = lazy(() => import("./tabs/MembersTab").then(m => ({ default: m.MembersTab })));
+const TasksTab = lazy(() => import("./tabs/TasksTab").then(m => ({ default: m.TasksTab })));
+const MailboxTab = lazy(() => import("./tabs/MailboxTab").then(m => ({ default: m.MailboxTab })));
+const HistoryTab = lazy(() => import("./tabs/HistoryTab").then(m => ({ default: m.HistoryTab })));
+const AgentHubTab = lazy(() => import("./tabs/AgentHubTab").then(m => ({ default: m.AgentHubTab })));
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
 import { NotificationBell } from "./NotificationBell";
@@ -143,9 +146,12 @@ export function WorkspaceView() {
     }
   }
 
+  // Stable callback — avoids re-creating on every render
+  const loadProjectCb = useCallback(loadProject, [projectId, token]);
+
   useEffect(() => {
-    loadProject();
-  }, [projectId, token]);
+    loadProjectCb();
+  }, [loadProjectCb]);
 
   async function handleInitialize() {
     if (!projectId || !token) return;
@@ -303,6 +309,54 @@ export function WorkspaceView() {
     }
   }
 
+  // ===== Hooks (MUST be before any early return — rules of hooks) =====
+  // Memoize nav groups so they don't recompute on every render
+  const navGroups = useMemo<{ label: string; items: NavItem[] }[]>(
+    () => [
+      { label: "Phan Tich & Thiet Ke", items: NAV.filter((n) => n.group === "analysis") },
+      { label: "Lam Viec Nhom", items: NAV.filter((n) => n.group === "collab") },
+      { label: "Trien Khai", items: NAV.filter((n) => n.group === "delivery") },
+    ],
+    []
+  );
+
+  // Lazy-loaded tab renderer with Suspense fallback
+  const renderTab = useCallback(() => {
+    const tab = (() => {
+      switch (activeTab) {
+        case "analysis":
+          return <AnalysisTab />;
+        case "hr":
+          return <HRTab />;
+        case "sprint":
+          return <SprintTab />;
+        case "design":
+          return <DesignTab />;
+        case "uml":
+          return <UMLTab />;
+        case "docs":
+          return <DocsTab />;
+        case "git":
+          return <GitTab />;
+        case "chat":
+          return <ChatTab />;
+        case "members":
+          return <MembersTab />;
+        case "tasks":
+          return <TasksTab />;
+        case "mailbox":
+          return <MailboxTab />;
+        case "history":
+          return <HistoryTab />;
+        case "agenthub":
+          return <AgentHubTab />;
+        default:
+          return <AnalysisTab />;
+      }
+    })();
+    return <Suspense fallback={<LoadingState variant="text" className="py-16" />}>{tab}</Suspense>;
+  }, [activeTab]);
+
   if (loadingProject || !project || !result) {
     return (
       <main className="flex-1 flex items-center justify-center">
@@ -323,45 +377,6 @@ export function WorkspaceView() {
     ANALYZING: { text: "Đang phân tích" },
     DRAFT: { text: "Bản nháp" },
   };
-
-  function renderTab() {
-    switch (activeTab) {
-      case "analysis":
-        return <AnalysisTab />;
-      case "hr":
-        return <HRTab />;
-      case "sprint":
-        return <SprintTab />;
-      case "design":
-        return <DesignTab />;
-      case "uml":
-        return <UMLTab />;
-      case "docs":
-        return <DocsTab />;
-      case "git":
-        return <GitTab />;
-      case "chat":
-        return <ChatTab />;
-      case "members":
-        return <MembersTab />;
-      case "tasks":
-        return <TasksTab />;
-      case "mailbox":
-        return <MailboxTab />;
-      case "history":
-        return <HistoryTab />;
-      case "agenthub":
-        return <AgentHubTab />;
-      default:
-        return <AnalysisTab />;
-    }
-  }
-
-  const navGroups: { label: string; items: NavItem[] }[] = [
-    { label: "Phan Tich & Thiet Ke", items: NAV.filter((n) => n.group === "analysis") },
-    { label: "Lam Viec Nhom", items: NAV.filter((n) => n.group === "collab") },
-    { label: "Trien Khai", items: NAV.filter((n) => n.group === "delivery") },
-  ];
 
   return (
     <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-nexus-bg/95 nexus-grid-bg nexus-boot">

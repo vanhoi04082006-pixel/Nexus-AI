@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { NeuralBackground } from "@/components/nexus/NeuralBackground";
+import { NotificationProvider } from "@/components/providers/NotificationProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -85,11 +87,16 @@ export default function RootLayout({
       >
         {/* Sci-fi neural network background — living AI brain visualization */}
         <NeuralBackground />
-        {/* Content above background */}
+        {/* Content above background — wrapped with ErrorBoundary + NotificationProvider */}
         <div className="relative z-10">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </div>
+        {/* Legacy radix toaster (kept for backward compat) */}
         <Toaster />
+        {/* Modern Sonner toaster with typed notify API */}
+        <NotificationProvider />
       </body>
     </html>
   );
