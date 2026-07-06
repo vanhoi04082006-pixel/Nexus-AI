@@ -480,29 +480,37 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
       {error && !aiFixing && (
         <>
           <div className="text-destructive text-sm mb-2">Loi render Mermaid: {error}</div>
-          {retryCount === 0 && (
-            <p className="text-[11px] text-muted-foreground mb-3">
-              Bấm "Thử lại" để áp dụng bộ sửa lỗi nâng cao + AI auto-fix.
-            </p>
-          )}
-          {retryCount > 0 && !aiFixedCode && (
+          {code && code.trim() ? (
+            <>
+              {retryCount === 0 && (
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  Bấm "Thử lại" để áp dụng bộ sửa lỗi nâng cao + AI auto-fix.
+                </p>
+              )}
+              {retryCount > 0 && !aiFixedCode && (
+                <p className="text-[11px] text-amber-400 mb-3">
+                  Đã thử {retryCount} lần. Bấm "Thử lại" để AI sửa diagram.
+                </p>
+              )}
+              {aiFixedCode && (
+                <p className="text-[11px] text-amber-400 mb-3">
+                  AI đã sửa nhưng vẫn lỗi — diagram có thể quá phức tạp. Thử edit section.
+                </p>
+              )}
+              <button
+                onClick={() => {
+                  setRetryCount((c) => c + 1);
+                }}
+                className="mb-3 px-3 py-1 text-xs border border-primary text-primary rounded hover:bg-primary/10 transition-colors"
+              >
+                ↻ Thu lai {retryCount > 0 && `(${retryCount})`}
+              </button>
+            </>
+          ) : (
             <p className="text-[11px] text-amber-400 mb-3">
-              Đã thử {retryCount} lần. Bấm "Thử lại" để AI sửa diagram.
+              Không có dữ liệu diagram. Agent UML có thể chưa sinh diagram — thử chạy lại pipeline hoặc edit section này.
             </p>
           )}
-          {aiFixedCode && (
-            <p className="text-[11px] text-amber-400 mb-3">
-              AI đã sửa nhưng vẫn lỗi — diagram có thể quá phức tạp. Thử edit section.
-            </p>
-          )}
-          <button
-            onClick={() => {
-              setRetryCount((c) => c + 1);
-            }}
-            className="mb-3 px-3 py-1 text-xs border border-primary text-primary rounded hover:bg-primary/10 transition-colors"
-          >
-            ↻ Thu lai {retryCount > 0 && `(${retryCount})`}
-          </button>
           <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap max-h-64 overflow-auto nexus-scroll w-full">
             {lastFixedCode || code}
           </pre>

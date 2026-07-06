@@ -1029,18 +1029,49 @@ function fallback(
     case "design":
       return { architectureDesc: "N/A", dbTables: [], apiEndpoints: [], folderStructure: "N/A" };
     case "uml":
-      // Generate basic ERD + Sequence from analysis data as fallback
+      // Generate ALL 4 UML diagrams from analysis/design data as fallback
       const tables = (results.design?.dbTables || []).map((t) => t.name);
       const actors = (results.analysis?.actors || []).map((a) => a.name);
+      const features = (results.analysis?.features || []).map((f) => f.name);
+      const modules = (results.analysis?.modules || []);
+
+      // Use Case diagram — from actors + features
+      const useCaseActors = actors.length > 0 ? actors : ["User"];
+      const useCaseFeatures = features.length > 0 ? features : modules.length > 0 ? modules : ["Core Feature"];
+      const useCaseLines = useCaseActors.map((a, i) => {
+        const actorId = `Actor${i}`;
+        return useCaseFeatures.map((f, j) => {
+          const featId = `F${j}`;
+          return `${actorId}["${a}"] --> ${featId}["${f}"]`;
+        }).join("\n    ");
+      }).join("\n    ");
+      const useCaseFallback = `graph TD\n    ${useCaseLines}`;
+
+      // Class diagram — from DB tables
+      const classTables = tables.length > 0 ? tables : modules.length > 0 ? modules : ["Core"];
+      const classLines = classTables.map((t) => {
+        const className = t.replace(/[^A-Za-z0-9]/g, "");
+        return `class ${className} {\n    +int id\n    +string name\n    +DateTime createdAt\n}`;
+      }).join("\n\n");
+      const classRelations = classTables.length > 1
+        ? `\n${classTables[0].replace(/[^A-Za-z0-9]/g, "")} "1" --> "*" ${classTables[1].replace(/[^A-Za-z0-9]/g, "")} : "has"`
+        : "";
+      const classFallback = `classDiagram\n${classLines}${classRelations}`;
+
+      // ERD — from DB tables
+      const erdFallback = tables.length > 0
+        ? `erDiagram\n${tables.map((t) => `    ${t.replace(/[^A-Za-z0-9_]/g, "_")} {\n        int id PK\n        string name\n    }`).join("\n")}\n${tables.length > 1 ? `    ${tables[0].replace(/[^A-Za-z0-9_]/g, "_")} ||--o{ ${tables[1].replace(/[^A-Za-z0-9_]/g, "_")} : "has"` : ""}`
+        : `erDiagram\n    CORE {\n        int id PK\n        string name\n    }`;
+
+      // Sequence — from actors
+      const seqActor = actors.length > 0 ? actors[0] : "User";
+      const seqFallback = `sequenceDiagram\n    participant U as ${seqActor}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response\n    Note over U,S: Default sequence diagram`;
+
       return {
-        useCase: results.uml?.useCase || "",
-        classDiagram: results.uml?.classDiagram || "",
-        erd: results.uml?.erd || (tables.length > 0
-          ? `erDiagram\n${tables.map((t) => `    ${t} {\n        int id PK\n    }`).join("\n")}\n${tables.length > 1 ? `    ${tables[0]} ||--o{ ${tables[1]} : "has"` : ""}`
-          : ""),
-        sequence: results.uml?.sequence || (actors.length > 0
-          ? `sequenceDiagram\n    participant U as ${actors[0]}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response`
-          : ""),
+        useCase: results.uml?.useCase || useCaseFallback,
+        classDiagram: results.uml?.classDiagram || classFallback,
+        erd: results.uml?.erd || erdFallback,
+        sequence: results.uml?.sequence || seqFallback,
       };
     case "docs":
       return {

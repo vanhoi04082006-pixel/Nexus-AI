@@ -47,6 +47,39 @@ export async function GET(
       }
     }
 
+    // Fallback: generate UML diagrams if empty (from analysis + design data)
+    const umlData = (result.uml || {}) as { useCase?: string; classDiagram?: string; erd?: string; sequence?: string };
+    if (!umlData.useCase || !umlData.classDiagram || !umlData.erd || !umlData.sequence) {
+      const analysis = (result.analysis || {}) as { actors?: { name: string }[]; features?: { name: string }[]; modules?: string[] };
+      const design = (result.design || {}) as { dbTables?: { name: string }[] };
+      const actors = (analysis.actors || []).map((a) => a.name);
+      const features = (analysis.features || []).map((f) => f.name);
+      const modules = analysis.modules || [];
+      const tables = (design.dbTables || []).map((t) => t.name);
+
+      if (!umlData.useCase) {
+        const aList = actors.length > 0 ? actors : ["User"];
+        const fList = features.length > 0 ? features : modules.length > 0 ? modules : ["Core"];
+        umlData.useCase = `graph TD\n    ${aList.map((a, i) => fList.map((f, j) => `Actor${i}["${a}"] --> F${j}["${f}"]`).join("\n    ")).join("\n    ")}`;
+      }
+      if (!umlData.classDiagram) {
+        const tList = tables.length > 0 ? tables : modules.length > 0 ? modules : ["Core"];
+        const classes = tList.map((t) => `class ${t.replace(/[^A-Za-z0-9]/g, "")} {\n    +int id\n    +string name\n    +DateTime createdAt\n}`).join("\n\n");
+        const rel = tList.length > 1 ? `\n${tList[0].replace(/[^A-Za-z0-9]/g, "")} "1" --> "*" ${tList[1].replace(/[^A-Za-z0-9]/g, "")} : "has"` : "";
+        umlData.classDiagram = `classDiagram\n${classes}${rel}`;
+      }
+      if (!umlData.erd) {
+        umlData.erd = tables.length > 0
+          ? `erDiagram\n${tables.map((t) => `    ${t.replace(/[^A-Za-z0-9_]/g, "_")} {\n        int id PK\n        string name\n    }`).join("\n")}\n${tables.length > 1 ? `    ${tables[0].replace(/[^A-Za-z0-9_]/g, "_")} ||--o{ ${tables[1].replace(/[^A-Za-z0-9_]/g, "_")} : "has"` : ""}`
+          : `erDiagram\n    CORE {\n        int id PK\n        string name\n    }`;
+      }
+      if (!umlData.sequence) {
+        const seqActor = actors.length > 0 ? actors[0] : "User";
+        umlData.sequence = `sequenceDiagram\n    participant U as ${seqActor}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response`;
+      }
+      result.uml = umlData;
+    }
+
     // Recent chat messages (last 50)
     const chatMessages = await db.chatMessage.findMany({
       where: { projectId: id },
