@@ -614,9 +614,22 @@ async function callAndParse(
 =========================================================== */
 const JSON_INSTRUCTION = `TRA VE JSON THUAN TUY (pure JSON). He thong da bat response_format: json_object — model bat buoc tra JSON hop le. Tuyet doi KHONG dung markdown code block, KHONG comment, KHONG trailing comma. Tat ca string phai dung \\n cho xuong dong. Neu khong biet gia tri thi dung "" hoac [].`;
 
+// ===== Few-shot + Negative examples (shared across agents) =====
+const FEW_SHOT_NOTE = `
+FEW-SHOT EXAMPLE (dung de huong dan):
+  DUNG: "desc": "He thong quan ly nhan su cho cong ty 500 nhan vien. Nguoi dung cuoi la HR Manager va Employee. Giai quyet van de quan ly cham cong, nghi phep, luong. Quy mo: web app voi 8 module chinh."
+  SAI: "desc": "Quan ly nhan su" (qua ngan, khong co chi tiet)
+
+NEGATIVE EXAMPLE (KHONG DUOC lam):
+  - KHONG dung ten chung chung nhu "User", "Course", "Student" neu du an la "quan ly benh vien" — phai dung "Bệnh nhân", "Bác sĩ", "Đơn thuốc"
+  - KHONG bo trong bat ky field nao — moi field phai co noi dung day du
+  - KHONG trung lap entity/module — kiem tra lai danh sach truoc khi them
+  - KHONG dat ten khong phu hop voi chu de du an`;
+
 function analystPrompt(): string {
   return `Ban la Senior Requirement Analyst & Tech Lead. Phan tich du an KY LUONG, CHI TIET va DAY DU.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "desc" (string): mo ta du an 5-7 cau, ro rang chi tiet cho nguoi moi hieu. Ghi ro: muc dich chinh, nguoi dung cuoi, van de giai quyet, quy mo du kien, cac tinh nang noi bat.
 - "techStack" (object): { "frontend": {name, ver, reason}, "backend": {name, ver, reason}, "database": {name, ver, reason}, "cache": {name, ver, reason}, "tools": [string] }. Reason phai giai thich tai sao chon, it nhat 2-3 ly do.
@@ -631,6 +644,7 @@ Tra object voi cac key BAT BUOC:
 function hrPrompt(): string {
   return `Ban la HR Manager & Team Lead. Phan vai tro phu hop cho tung thanh vien dua tren uu/nhuoc diem va kha nang.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "assignments" (array): moi phan tu { "name", "role", "reason", "modules" (array string), "workload" (number 0-100), "strengths", "weaknesses" }. Role phai cu the (vd: "Frontend Developer", "Backend Developer", "Database Engineer", "DevOps", "QA/Tester", "Tech Lead"). Reason giai thich tai sao chon vai tro nay. Modules la danh sach module nguoi nay phu trach.
 - "coverage" (string): vi du "95%"
@@ -642,6 +656,7 @@ function sprintPrompt(): string {
   return `Ban la Scrum Master. Chia du an thanh Sprint (moi Sprint 2 tuan), gan task cu the cho tung nguoi, dat deadline ro rang.
 QUAN TRONG: Ngay hom nay la ${today}. Sprint 1 bat dau tu ${today}. Moi sprint ke tiep bat dau ngay sau sprint truoc ket thuc.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "totalSprints" (number): thuong 2-4
 - "sprintDuration" (string): "2 tuan"
@@ -653,6 +668,7 @@ function architectPrompt(): string {
   return `Ban la Senior Software Architect. Thiet ke database schema, API endpoints, va folder structure CHI TIET va DAY DU de developer co the code ngay KHONG can hoi them.
 QUAN TRONG: Tat ca dbTables, apiEndpoints, folderStructure PHAI PHU HOP VOI CHU DE DU AN — dung ten entity that cua du an (vd: neu la "quan ly khach san" thi co Bang Rooms, Reservations, Guests, Branches; KHONG dung User/Course chung chung).
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "architectureDesc" (string): 6-8 cau mo ta kien truc he thong chi tiet. Ghi ro: cac layer (frontend-backend-db-cache), luong du lieu chinh, cach cac module giao tiep, security, scalability.
 - "dbTables" (array): moi phan tu { "name" (vi du "users"), "columns" (array string, moi cot kem kieu du lieu va constraint vd "id: INT PRIMARY KEY AUTO_INCREMENT", "email: VARCHAR(255) UNIQUE NOT NULL", "created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP"), "relations" (array string vd "has_many: tasks", "belongs_to: department") }. It nhat 8 bang, moi bang it nhat 5 cot.
@@ -764,6 +780,7 @@ After generating each diagram, verify:
 If any inconsistency exists: REPAIR before output. Never output inconsistent UML.
 
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "useCase" (string): Mermaid graph TD — actors from requirement, use cases from features, include/extend
 - "classDiagram" (string): Mermaid classDiagram — classes from DB/domain, attributes+methods+relationships
@@ -778,6 +795,7 @@ function docsPrompt(): string {
 QUAN TRONG: Tat ca tai lieu PHAI DE CAP CHU DE DU AN CU THE — vi du neu la "quan ly khach san" thi README phai noi ve khach san, dat phong, check-in/check-out, KHONG dung vi du chung chung.
 QUAN TRONG: KHONG DUOC DE TRONG bat ky field nao. Tat ca 3 field (readme, convention, apiStandard) phai co noi dung day du, it nhat 500 ky tu moi field.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "readme" (string): noi dung README.md day du (gioi thieu du an cu the, cai dat, chay, cau truc, huong dan code, vi du API call cu the cua du an). It nhat 800 ky tu.
 - "convention" (string): Coding Convention CHI TIET — ten bien (camelCase/snake_case), ten file (kebab-case/PascalCase), function naming, class naming, comment format (JSDoc), git commit message format (conventional commits), import order, error handling pattern. Kem vi du cu the cho tung rule. It nhat 500 ky tu. KHONG DE TRONG.
@@ -790,6 +808,7 @@ QUAN TRONG:
 - branchStrategy: Mermaid "graph LR", KHONG dung [("text")]
 - issueTemplate: YAML front matter, escape newline bang \\n
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "gitCommands" (string): cac lenh git setup (clone, branch, commit, push, pull request) - day du
 - "branchStrategy" (string): code mermaid graph LR mo ta main/develop/Feature/HotFix
@@ -800,6 +819,7 @@ Tra object voi cac key BAT BUOC:
 function testerPrompt(): string {
   return `Ban la Senior QA Engineer & Software Tester. Lap ke hoach test CHI TIET cho du an: test strategy, unit tests, integration tests, E2E tests, API tests, performance tests.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "testStrategy" (string): 4-6 cau mo ta chien luoc test (pyramid test, coverage target, tools su dung vd Vitest/Jest/Playwright)
 - "unitTests" (array): moi phan tu { "module" (string), "cases" (array: moi { "name", "desc", "input", "expected" }) }. It nhat 5 module, moi module it nhat 3 case.
@@ -813,6 +833,7 @@ Tra object voi cac key BAT BUOC:
 function securityPrompt(): string {
   return `Ban la Security Architect. Phan tich security cho du an: threats, auth flow, authorization model, data protection, OWASP checklist, rate limiting, secrets management.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cac key BAT BUOC:
 - "threats" (array): moi phan tu { "risk", "severity" ("Critical"|"High"|"Medium"|"Low"), "mitigation" }. It nhat 6 threats (vd: SQL Injection, XSS, CSRF, broken auth, sensitive data exposure, missing rate limit).
 - "authFlow" (string): 4-6 cau mo ta auth flow (JWT/Session/OAuth, token generation, refresh, expiry, storage).
@@ -826,6 +847,7 @@ Tra object voi cac key BAT BUOC:
 function reviewerPrompt(): string {
   return `Ban la Quality Reviewer. Ban nhan toan bo ket qua cua 9 Agent va kiem tra dong bo, bo sung thong tin thieu, sua loi sai.
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi cung cau truc giong input (analysis, hr, sprint, design, uml, docs, git, test, security). Chi sua nhung gi can sua, giu nguyen nhung gi da dung. Dam bao:
 - HR assignments phu hop voi danh sach thanh vien that
 - Sprint tasks gan dung assignee voi ten thanh vien
@@ -862,6 +884,7 @@ DAM BAO DAO (phu hop toan bo he thong):
 - Moi member phai co task phu hop voi role va modules duoc gan
 
 ${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
 Tra object voi key "tasks" (array). Moi task co:
 - "assigneeName" (string): ten thanh vien (phai khop voi danh sach)
 - "title" (string): ten task bat dau bang dong tu, cu the (vd: "Thiet ke Schema Prisma cho Bang Users")

@@ -150,6 +150,12 @@ export function isModelDead(model: string): boolean {
   if (Date.now() > expiry) {
     deadModels.delete(model); // Auto-recovery: remove from dead list after cooldown
     console.log(`  [DEAD MODEL] ${model} auto-recovered (cooldown expired)`);
+    appendLog({
+      level: "success",
+      provider: "openrouter",
+      model,
+      message: `[DEAD MODEL] ${model} auto-recovered — back in rotation`,
+    });
     return false;
   }
   return true;
@@ -168,9 +174,18 @@ function markModelDead(model: string, reason: string): void {
 }
 
 function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
-  const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
-  return `${model}:${temperature}:${content.substring(0, 500)}`;
+  // Hash both system + user content for cache key
+  // Truncate to 1000 chars for efficiency (longer = more unique but slower hash)
+  const content = messages.map((m) => `${m.role}:${m.content.substring(0, 1000)}`).join("|");
+  return `${model}:${temperature}:${content}`;
 }
+
+// ===== Prompt Cache =====
+// Cache the FULL system prompt per agent+model so we don't re-send
+// 400+ line prompts every time. OpenRouter doesn't charge for cached
+// system prompts, saving tokens.
+const promptCache: Map<string, string> = (gc as typeof globalThis & { promptCache?: Map<string, string> }).promptCache ?? new Map<string, string>();
+(gc as typeof globalThis & { promptCache?: Map<string, string> }).promptCache = promptCache;
 
 export function getCachedResult(key: string): string | null {
   const cached = aiCache.get(key);
