@@ -55,6 +55,10 @@ export { diffSections, analyzeImpact, type ChangeDiff, type ImpactAnalysis } fro
 export { saveVersion, getVersionHistory, getCurrentVersion, type ArtifactVersion } from "./ai/utils/versionManager";
 export { analyzeDependencies, reviewArtifact, optimizePrompt, type DependencyReport } from "./ai/utils/dependencyAnalyzer";
 
+// Cache + Queue
+export { semanticCache } from "./ai/cache/semanticCache";
+export { taskQueue, type QueueTask } from "./ai/queue/taskQueue";
+
 // Config
 export { AGENTS, type AgentDef } from "./ai/agents/definitions";
 export { PROMPT_MAP } from "./ai/prompts";
