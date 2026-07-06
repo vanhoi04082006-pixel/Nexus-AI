@@ -1,34 +1,63 @@
 // NEXUS AI - Zod schemas for all 9 agent sections
-// Replaces heuristic JFix parsing with strict runtime validation.
-// If AI output doesn't match schema → Zod throws → callAndParse retries.
+// Lenient schemas that accept common AI output variations.
+// Uses preprocessors to coerce array↔string before validation.
 
 import { z } from "zod";
+
+/* ===========================================================
+   Preprocessors — coerce common AI mistakes before Zod validates
+=========================================================== */
+
+// Accept both string and array → return string (join with ", ")
+const toString = z.preprocess((v) => {
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return String(v);
+}, z.string());
+
+// Accept both string and array → return array (split by comma/newline)
+const toStringArray = z.preprocess((v) => {
+  if (Array.isArray(v)) return v.map(String);
+  if (typeof v === "string" && v.trim()) return v.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+  return [];
+}, z.array(z.string()));
+
+// Accept string/number → number
+const toNumber = z.preprocess((v) => {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    if (!isNaN(n)) return n;
+  }
+  return 0;
+}, z.number());
 
 /* ===========================================================
    01 - Requirement Analyst
 =========================================================== */
 export const analysisSchema = z.object({
-  desc: z.string().min(10),
+  desc: z.string().min(5),
   techStack: z.object({
-    frontend: z.object({ name: z.string(), ver: z.string(), reason: z.string() }),
-    backend: z.object({ name: z.string(), ver: z.string(), reason: z.string() }),
-    database: z.object({ name: z.string(), ver: z.string(), reason: z.string() }),
-    cache: z.object({ name: z.string(), ver: z.string(), reason: z.string() }),
-    tools: z.array(z.string()),
+    frontend: z.object({ name: toString, ver: toString, reason: toString }),
+    backend: z.object({ name: toString, ver: toString, reason: toString }),
+    database: z.object({ name: toString, ver: toString, reason: toString }),
+    cache: z.object({ name: toString, ver: toString, reason: toString }),
+    tools: toStringArray,
   }),
-  teamSize: z.number(),
-  estimatedDuration: z.string(),
-  complexity: z.string(),
+  teamSize: toNumber,
+  estimatedDuration: toString,
+  complexity: toString,
   features: z.array(z.object({
-    name: z.string(),
-    module: z.string(),
-    pri: z.string(),
-  })).min(3),
+    name: toString,
+    module: toString,
+    pri: toString,
+  })).min(1),
   actors: z.array(z.object({
-    name: z.string(),
-    desc: z.string(),
-  })).min(2),
-  modules: z.array(z.string()).min(3),
+    name: toString,
+    desc: toString,
+  })).min(1),
+  modules: toStringArray,
 });
 
 /* ===========================================================
@@ -36,128 +65,128 @@ export const analysisSchema = z.object({
 =========================================================== */
 export const hrSchema = z.object({
   assignments: z.array(z.object({
-    name: z.string(),
-    role: z.string(),
-    reason: z.string(),
-    modules: z.array(z.string()),
-    workload: z.number(),
-    strengths: z.string(),
-    weaknesses: z.string(),
+    name: toString,
+    role: toString,
+    reason: toString,
+    modules: toStringArray,
+    workload: toNumber,
+    strengths: toString,
+    weaknesses: toString,
   })).min(1),
-  coverage: z.string(),
+  coverage: toString.default(""),
   risks: z.array(z.object({
-    risk: z.string(),
-    mitigation: z.string(),
-  })),
+    risk: toString,
+    mitigation: toString,
+  })).default([]),
 });
 
 /* ===========================================================
    03 - Sprint Planner
 =========================================================== */
 export const sprintSchema = z.object({
-  totalSprints: z.number(),
-  sprintDuration: z.string(),
+  totalSprints: toNumber,
+  sprintDuration: toString,
   sprints: z.array(z.object({
-    name: z.string(),
-    start: z.string(),
-    end: z.string(),
-    goals: z.array(z.string()),
+    name: toString,
+    start: toString,
+    end: toString,
+    goals: toStringArray,
     tasks: z.array(z.object({
-      task: z.string(),
-      assignee: z.string(),
-      hours: z.number(),
-      status: z.string(),
-    })),
-    color: z.string(),
+      task: toString,
+      assignee: toString,
+      hours: toNumber,
+      status: toString,
+    })).default([]),
+    color: toString.default(""),
   })).min(1),
   milestones: z.array(z.object({
-    date: z.string(),
-    event: z.string(),
-  })),
+    date: toString,
+    event: toString,
+  })).default([]),
 });
 
 /* ===========================================================
    04 - System Architect
 =========================================================== */
 export const designSchema = z.object({
-  architectureDesc: z.string().min(10),
+  architectureDesc: z.string().min(5),
   dbTables: z.array(z.object({
-    name: z.string(),
-    columns: z.array(z.string()),
-    relations: z.array(z.string()),
-  })).min(3),
+    name: toString,
+    columns: toStringArray,
+    relations: toStringArray,
+  })).min(1),
   apiEndpoints: z.array(z.object({
-    method: z.string(),
-    path: z.string(),
-    desc: z.string(),
-  })).min(3),
-  folderStructure: z.string().min(10),
+    method: toString,
+    path: toString,
+    desc: toString,
+  })).min(1),
+  folderStructure: z.string().min(5),
 });
 
 /* ===========================================================
    05 - UML Generator
 =========================================================== */
 export const umlSchema = z.object({
-  useCase: z.string(),
-  classDiagram: z.string(),
-  erd: z.string(),
-  sequence: z.string(),
+  useCase: toString,
+  classDiagram: toString,
+  erd: toString,
+  sequence: toString,
 });
 
 /* ===========================================================
    06 - Technical Writer
 =========================================================== */
 export const docsSchema = z.object({
-  readme: z.string().min(50),
-  convention: z.string().min(50),
-  apiStandard: z.string().min(50),
+  readme: z.string().min(10),
+  convention: z.string().min(10),
+  apiStandard: z.string().min(10),
 });
 
 /* ===========================================================
    07 - Git / DevOps
 =========================================================== */
 export const gitSchema = z.object({
-  gitCommands: z.string(),
-  branchStrategy: z.string(),
-  issueTemplate: z.string(),
-  repoUrl: z.string(),
+  gitCommands: toString,
+  branchStrategy: toString,
+  issueTemplate: toString,
+  repoUrl: toString,
 });
 
 /* ===========================================================
    08 - Software Tester
 =========================================================== */
 export const testSchema = z.object({
-  testStrategy: z.string().min(10),
+  testStrategy: z.string().min(5),
   unitTests: z.array(z.object({
-    module: z.string(),
+    module: toString,
     cases: z.array(z.object({
-      name: z.string(),
-      desc: z.string(),
-      input: z.string(),
-      expected: z.string(),
-    })),
+      name: toString,
+      desc: toString,
+      input: toString,
+      expected: toString,
+    })).default([]),
   })).min(1),
   integrationTests: z.array(z.object({
-    name: z.string(),
-    desc: z.string(),
-    flow: z.string(),
-  })),
+    name: toString,
+    desc: toString,
+    flow: toString,
+  })).default([]),
   e2eTests: z.array(z.object({
-    name: z.string(),
-    desc: z.string(),
-    steps: z.array(z.string()),
-  })),
+    name: toString,
+    desc: toString,
+    steps: toStringArray,
+  })).default([]),
   apiTests: z.array(z.object({
-    endpoint: z.string(),
-    method: z.string(),
-    cases: z.string(),
-  })),
+    endpoint: toString,
+    method: toString,
+    cases: toString,
+  })).default([]),
   performanceTests: z.array(z.object({
-    scenario: z.string(),
-    metric: z.string(),
-    target: z.string(),
-  })),
-  bugReportTemplate: z.string(),
+    scenario: toString,
+    metric: toString,
+    target: toString,
+  })).default([]),
+  bugReportTemplate: toString.default(""),
 });
 
 /* ===========================================================
@@ -165,20 +194,20 @@ export const testSchema = z.object({
 =========================================================== */
 export const securitySchema = z.object({
   threats: z.array(z.object({
-    risk: z.string(),
-    severity: z.string(),
-    mitigation: z.string(),
+    risk: toString,
+    severity: toString,
+    mitigation: toString,
   })).min(1),
-  authFlow: z.string().min(10),
-  authzModel: z.string(),
-  dataProtection: z.string(),
+  authFlow: z.string().min(5),
+  authzModel: toString.default(""),
+  dataProtection: toString.default(""),
   owaspChecklist: z.array(z.object({
-    category: z.string(),
-    status: z.string(),
-    note: z.string(),
-  })),
-  rateLimit: z.string(),
-  secrets: z.string(),
+    category: toString,
+    status: toString,
+    note: toString,
+  })).default([]),
+  rateLimit: toString.default(""),
+  secrets: toString.default(""),
 });
 
 /* ===========================================================

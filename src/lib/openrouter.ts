@@ -311,13 +311,53 @@ async function callOpenRouterDirect(
         throw err;
       }
 
-      const data = await resp.json();
-      const content = data?.choices?.[0]?.message?.content;
+      // Parse response body defensively — OpenRouter sometimes returns 200 OK
+      // with an empty body or truncated JSON (network/proxy interruption).
+      let data: unknown;
+      try {
+        const text = await resp.text();
+        if (!text || !text.trim()) {
+          throw { message: "Empty response body", keyIndex } as OpenRouterError;
+        }
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        // If it's already an OpenRouterError (thrown above), re-throw
+        if (parseErr && typeof parseErr === "object" && "message" in parseErr && "keyIndex" in parseErr) {
+          throw parseErr;
+        }
+        // JSON parse error → treat as network error, retry with next key
+        const err: OpenRouterError = {
+          code: "ENET",
+          message: parseErr instanceof Error ? parseErr.message : "JSON parse failed",
+          keyIndex,
+        };
+        console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} JSON parse error: ${err.message}`);
+        appendLog({
+          level: "error",
+          provider: "openrouter",
+          model: params.model,
+          keyIndex: keyIndex + 1,
+          message: `✗ [Key #${keyIndex + 1}] ${params.model} → JSON parse error: ${err.message}`,
+        });
+        lastError = err;
+        continue;
+      }
+      const content = (data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message?.content;
       if (!content) {
-        throw { message: "Null response", keyIndex } as OpenRouterError;
+        // Null response — retry with next key instead of throwing
+        console.log(`  [KEY ROTATION] OpenRouter Key #${keyIndex + 1} null response (no content)`);
+        appendLog({
+          level: "error",
+          provider: "openrouter",
+          model: params.model,
+          keyIndex: keyIndex + 1,
+          message: `✗ [Key #${keyIndex + 1}] ${params.model} → [Null response] no content in choices`,
+        });
+        lastError = { message: "Null response (no content in choices)", keyIndex } as OpenRouterError;
+        continue;
       }
 
-      const usage = data?.usage;
+      const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })?.usage;
       if (usage) {
         lastTokenUsage = {
           model: params.model,
