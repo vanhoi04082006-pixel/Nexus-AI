@@ -6,11 +6,15 @@ export async function register() {
   // Only register in Node.js runtime (not Edge)
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  process.on("unhandledRejection", (reason) => {
+  // Assign to local variable so Turbopack doesn't statically analyze
+  // the Node.js API call (process.on is not supported in Edge Runtime)
+  const nodeProcess = process;
+
+  nodeProcess.on("unhandledRejection", (reason: unknown) => {
     console.error(">> [UNHANDLED REJECTION]", reason);
   });
 
-  process.on("uncaughtException", (err) => {
+  nodeProcess.on("uncaughtException", (err: Error) => {
     console.error(">> [UNCAUGHT EXCEPTION]", err.message);
     // Don't exit — keep the server alive
   });
