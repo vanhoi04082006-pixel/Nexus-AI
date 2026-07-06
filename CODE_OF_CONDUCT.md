@@ -23,6 +23,7 @@ NEXUS AI tuân theo Code of Conduct đơn giản này. Bằng cách tham gia pro
 - **Doxxing** — tiết lộ thông tin cá nhân của người khác khi chưa được đồng ý
 - **Plagiarism** — lấy code/ý tưởng của người khác mà không ghi nguồn
 - **AI hallucination trong docs** — mô tả feature không tồn tại, hoặc nói "đã xong" khi chưa xong
+- **Fake claims về architecture** — ghi "modular" khi code vẫn là god-file, ghi "36 features" khi thực tế ít hơn, ghi "đã test" khi chưa test
 
 ### 📬 Báo cáo vi phạm
 
@@ -36,6 +37,15 @@ Mọi báo cáo sẽ được giữ **bảo mật** và xử lý trong vòng 48h
 - Vi phạm nhẹ → warning
 - Vi phạm nặng → block khỏi repo
 - Vi phạm nghiêm trọng → report GitHub
+
+### 📏 Tiêu chuẩn đóng góp docs/code
+
+Đặc biệt quan trọng cho project có nhiều enterprise features như NEXUS AI:
+
+- **Verify trước khi ghi:** Trước khi mô tả một feature trong docs, hãy verify feature đó thực sự tồn tại trong code (đọc source, không đoán).
+- **Số liệu chính xác:** Đếm thực tế số modules, số models, số endpoints, số agents — không "khoảng", không "30+" khi thực tế là 24.
+- **Cập nhật khi refactor:** Khi code thay đổi (vd: god-file → modular), docs phải update theo. Không để docs cũ mô tả architecture đã không còn.
+- **Không claim "đã xong" khi chưa xong:** Nếu feature đang WIP, ghi rõ "WIP" hoặc "Planned" — không ghi vào danh sách "Completed".
 
 ---
 

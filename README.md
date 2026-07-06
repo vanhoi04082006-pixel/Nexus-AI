@@ -2,10 +2,11 @@
 
 # 🤖 NEXUS AI
 
-### Multi-Agent Project Architect
+### Multi-Agent Project Architect — v6.0 Modular Architecture
 
-> Hệ thống AI đa tác tử — Nhập chủ đề dự án → **10 AI Agent** tự động phân tích, thiết kế, lập sprint, sinh todolist Kanban, push GitHub, gửi email mời thành viên. Có Live Log Console realtime, Notification Center, Mail System, và Dashboard widgets.
+> Hệ thống AI đa tác tử **modular**: Nhập chủ đề dự án → **10 AI Agent cốt lõi + 5 Agent plugin** tự động phân tích, thiết kế, lập sprint, sinh todolist Kanban, push GitHub, gửi email mời thành viên. Kiến trúc v6.0 modular: 1 file 2291 dòng → 70 dòng hub + 24 module độc lập, 36 enterprise features.
 
+![Version](https://img.shields.io/badge/Version-6.0-blueviolet)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss)
@@ -13,6 +14,8 @@
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-Multi--Key-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
 ![Bun](https://img.shields.io/badge/Bun-1-f472b6?logo=bun)
+![Modules](https://img.shields.io/badge/AI_Modules-24-success)
+![Features](https://img.shields.io/badge/Enterprise_Features-36-success)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 [📖 Documentation](docs/) · [🚀 Cài đặt](#-cài-đặt) · [🔧 Cấu hình](#️-cấu-hình-env) · [📐 Architecture](docs/ARCHITECTURE.md) · [🔌 API](docs/API.md) · [🤝 Contributing](docs/CONTRIBUTING.md)
@@ -23,35 +26,69 @@
 
 ## 📖 NEXUS AI là gì?
 
-NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn local (hoặc Docker/Fly.io) — bạn chỉ cần nhập chủ đề + danh sách thành viên, **10 AI Agent** sẽ tự động phân tích, thiết kế, lập kế hoạch, sinh todolist, push GitHub, và gửi email mời thành viên.
+NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn local (hoặc Docker/Fly.io). Bạn chỉ cần nhập chủ đề + danh sách thành viên, **15 AI Agent** (10 core + 5 plugin) sẽ tự động phân tích, thiết kế, lập kế hoạch, sinh todolist, push GitHub, và gửi email mời thành viên.
 
-### 🤖 10 AI Agents
+### 🏗️ Phiên bản v6.0 — Modular Architecture
 
-| # | Agent | Nhiệm vụ |
-|---|---|---|
-| 01 | **Requirement Analyst** | Phân tích chủ đề → tech stack, features, actors, modules |
-| 02 | **HR Planner** | Phân vai trò cho từng thành viên dựa trên ưu/nhược điểm |
-| 03 | **Sprint Planner** | Chia sprint 2 tuần, gán task, deadline, milestones |
-| 04 | **System Architect** | Thiết kế database schema, API endpoints, folder structure |
-| 05 | **UML Generator** | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) — **enterprise-grade prompt**, đọc analysis/design/sprint, self-validate, no hallucination |
-| 06 | **Technical Writer** | Viết README, Coding Convention, API Standard |
-| 07 | **Git/DevOps** | Git commands, branch strategy, issue template, CI/CD |
-| 08 | **Software Tester** | Unit/integration/E2E/API/performance tests + bug report |
-| 09 | **Security Reviewer** | Threats, auth flow, OWASP Top 10, rate limit, secrets |
-| 10 | **Quality Reviewer** | Tổng hợp + đồng bộ 9 sections, Zod validation, feedback loop |
+Bản v6.0 đã refactor toàn bộ god-file `src/lib/ai.ts` từ **2291 dòng → 70 dòng** (re-export hub) + **24 module độc lập** dưới `src/lib/ai/`. Mỗi module có trách nhiệm đơn nhất, có thể test và phát triển độc lập. Tổng cộng **36 enterprise features** đã được triển khai (xem [danh sách đầy đủ](#-36-enterprise-features)).
 
-### 🔄 Pipeline (6 giai đoạn)
+---
+
+## 🤖 15 AI Agents
+
+### 10 Core Agents (pipeline chính)
+
+| # | Agent | Section | Nhiệm vụ |
+|---|---|---|---|
+| 01 | **Requirement Analyst** | `analysis` | Phân tích chủ đề → tech stack, features, actors, modules |
+| 02 | **HR Planner** | `hr` | Phân vai trò cho từng thành viên dựa trên ưu/nhược điểm |
+| 03 | **Sprint Planner** | `sprint` | Chia sprint 2 tuần, gán task, deadline, milestones |
+| 04 | **System Architect** | `design` | Thiết kế database schema, API endpoints, folder structure |
+| 05 | **UML Generator** | `uml` | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) — **enterprise-grade prompt**, đọc analysis/design/sprint, self-validate, no hallucination |
+| 06 | **Technical Writer** | `docs` | Viết README, Coding Convention, API Standard |
+| 07 | **Git/DevOps** | `git` | Git commands, branch strategy, issue template, CI/CD |
+| 08 | **Software Tester** | `test` | Unit/integration/E2E/API/performance tests + bug report |
+| 09 | **Security Reviewer** | `security` | Threats, auth flow, OWASP Top 10, rate limit, secrets |
+| 10 | **Quality Reviewer** | (all) | Tổng hợp + đồng bộ 9 sections, Zod validation, feedback loop |
+
+### 5 Plugin Agents (mở rộng, đăng ký qua Plugin Registry)
+
+| Plugin | Vai trò |
+|---|---|
+| **Planner Agent** | Phase 0 — phân rã chủ đề thành modules trước khi Analysis chạy |
+| **Business Analyst** | Phân tích business rules, domain logic, workflows độc lập với requirement |
+| **Database Designer** | Chuyên viên DB — chỉ thiết kế schema, indexes, relations |
+| **API Designer** | Chuyên viên API — REST/GraphQL endpoints, request/response schemas |
+| **UI/UX Designer** | Wireframes, screen flows, user journeys, accessibility guidelines |
+
+### Auxiliary Agents (chạy trong pipeline)
+
+| Agent | Module |
+|---|---|
+| **Task Generator** | `ai/pipeline/taskGen.ts` — sinh SMART todolist (dedup by title+assignee) |
+| **Chat Assistant** | `ai/pipeline/taskGen.ts` — AI hội thoại trong project chat |
+| **AI Refine** | `ai/pipeline/refine.ts` — tái sinh sections theo yêu cầu leader |
+| **Reflection Agent** | `ai/pipeline/reflection.ts` — rule-based quality review (no LLM call) |
+| **Memory Agent** | `ai/memory/memoryService.ts` — ghi shared memory sau mỗi agent |
+| **Retrieval Agent** | `ai/memory/memoryService.ts` — truy xuất context liên quan trước khi agent chạy |
+| **3 Consensus Reviewers** | `ai/pipeline/consensus.ts` — Architect + QA + Security (≥2/3 approve) |
+
+---
+
+## 🔄 Pipeline (8 giai đoạn)
 
 | Phase | Agents | Chế độ |
 |---|---|---|
+| **Phase 0 — Planner** | Planner Agent | Decompose topic → modules (trước Analysis) |
 | **Phase 1 — Analysis** | 01 → 02 → 03 | Sequential (mỗi agent phụ thuộc cái trước) |
 | **Phase 2 — Design** | 04 + 05 + 06 + 07 | Parallel (mặc định) hoặc Sequential |
 | **Phase 3 — Quality Gates** | 08 + 09 | Parallel hoặc Sequential |
 | **Phase 4 — Retry** | Các agent thất bại | Retry 1 lần sau 5s |
 | **Phase 5 — Fallback** | Agent vẫn fail | Sinh dữ liệu tĩnh (không crash) |
-| **Phase 6 — Quality Review** | Agent 10 | Tổng hợp + đồng bộ tất cả sections |
+| **Phase 5.5 — Normalize + Consistency** | Normalizer | Trim, dedup, validate cross-section (HR ↔ members) |
+| **Phase 6 — Quality Review** | Agent 10 + Metrics | Tổng hợp + đồng bộ + log per-model success rate |
 
-> Mỗi agent có 9 free models OpenRouter với retry 5 lần/model, full-jitter backoff, và fallback tĩnh nếu tất cả model fail. **429 rate-limit** → wait **60s + jitter** rồi retry (áp dụng cho mọi model). Multi-key rotation tự động khi bị 429.
+> Mỗi agent có **3-9 free models** OpenRouter với retry 5 lần/model, full-jitter backoff, và fallback tĩnh nếu tất cả model fail. **429 rate-limit** → wait **60s + jitter** rồi retry (áp dụng cho mọi model). Multi-key rotation tự động khi bị 429.
 
 ---
 
@@ -60,11 +97,11 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 ### 📊 Dashboard & Views
 - **Trang tổng quan (Home)** — Dashboard với 3 widget realtime (toàn bộ data thật từ DB):
   - **Recent Activity** — Feed hoạt động từ `ActivityLog` (20+ event types)
-  - **NEXUS AI Status** — Agent/API key/Pipeline/DB/Redis/Storage status realtime
+  - **NEXUS AI Status** — Agent/API key/Pipeline/DB/Storage status realtime
   - **Tasks đang làm** — Task in_progress/overdue/due_soon của user
-- **All Projects** — Premium SaaS dashboard: stats cards, search, filter (priority/status/tag), sort, grid/list toggle, context menu (favorite/archive/duplicate/delete)
+- **All Projects** — Premium SaaS dashboard: stats cards, search, filter, sort, grid/list toggle, context menu (favorite/archive/duplicate/delete)
 - **Input** — Tạo project form (topic, description, purpose, tech prefs, members, deadline, priority, tags, cover color)
-- **Workspace** — Project workspace với 13 sidebar tabs
+- **Workspace** — Project workspace với **13 sidebar tabs**
 - **Agent Hub** — Dashboard cho 10 AI agents (status, model, skills, stats)
 
 ### 🔔 Notification Center
@@ -91,10 +128,10 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 - **Relations** (relatedTaskId, relatedMailId, actionUrl) cho click-through
 
 ### ✅ Task Generation & Kanban
-- **Dedup + comprehensiveness check** — không sinh task trùng lặp, đảm bảo đủ layer (DATABASE/BACKEND/UI/CONFIG/TESTING)
+- **Dedup + comprehensiveness check** — không sinh task trùng lặp (by title+assignee), đảm bảo đủ layer (DATABASE/BACKEND/UI/CONFIG/TESTING)
 - **Developer-First model** — mỗi task có: `layer` (DATABASE/BACKEND/UI/CONFIG/TESTING), `targetFile`, `implementationSteps[]`, `technicalHints` (snippet + note)
 - **Kanban board** — drag & drop 4 cột: `todo` / `in_progress` / `review` / `done` (qua `@hello-pangea/dnd`)
-- **Task statistics** cache (`TaskStatistic` model) — completion rate, overdue, due soon
+- **Task statistics** cache (`TaskStatistic` model)
 
 ### 📐 Mermaid Rendering (3-tier fix)
 1. **`fixMermaid`** — regex fix nhanh (lỗi syntax phổ biến)
@@ -122,9 +159,110 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 - **Dark theme only** — teal accent, no light mode
 - **Neural background** animation
 - **3D AI brain** hero animation
-- **Sonner toasts** cho notifications
-- **shadcn/ui (New York)** — 50+ components
-- **Lenient Zod schemas** — `toString` / `toStringArray` / `toNumber` preprocessors xử lý biến thể output AI (string vs number, single vs array)
+- **Sonner toasts** qua unified Notification Provider (`src/lib/notify.ts`)
+- **shadcn/ui (New York)** — 48 components
+- **Lenient Zod schemas** — `toString` / `toStringArray` / `toNumber` preprocessors xử lý biến thể output AI
+
+---
+
+## 🧠 24-Module AI Architecture
+
+```
+src/lib/ai.ts (70 dòng — re-export hub)
+│
+└── src/lib/ai/  (24 module độc lập)
+    │
+    ├── config/
+    │   └── constants.ts            — Config + helpers (timeout, jitter, compression)
+    │
+    ├── prompts/
+    │   └── index.ts                — 10 agent system prompts (enterprise UML prompt)
+    │
+    ├── agents/
+    │   └── definitions.ts          — AgentDef[] + model priority lists + MIN_KEYS
+    │
+    ├── utils/
+    │   ├── helpers.ts              — buildCtx, buildReviewSummary, isValidSchema
+    │   ├── jfix.ts                 — JSON repair utility
+    │   ├── diff.ts                 — Change Impact Analyzer (diffSections + analyzeImpact)
+    │   ├── versionManager.ts       — Artifact versioning (saveVersion, getVersionHistory)
+    │   └── dependencyAnalyzer.ts   — Dependency Analyzer + Artifact Reviewer + Prompt Optimizer
+    │
+    ├── contracts/
+    │   ├── agent.ts                — AgentContract interface (AgentManifest, AgentInput, AgentOutput)
+    │   └── registry.ts             — Plugin Registry (singleton, auto-discovery)
+    │
+    ├── plugins/
+    │   └── index.ts                — 15 Agent Plugins (10 core + 5 new) — register via registry
+    │
+    ├── core/
+    │   ├── eventBus.ts             — Event Bus (EventEmitter pub/sub, no Redis)
+    │   └── workflow.ts             — Workflow DSL (declarative pipeline, NEXUS_WORKFLOW)
+    │
+    ├── memory/
+    │   └── memoryService.ts        — Shared Memory + Memory Agent + Retrieval Agent (no Vector DB)
+    │
+    ├── cache/
+    │   └── semanticCache.ts        — Semantic Cache (cosine similarity, no Vector DB)
+    │
+    ├── queue/
+    │   └── taskQueue.ts            — Distributed Queue (in-memory worker pool, no Redis)
+    │
+    └── pipeline/
+        ├── runner.ts               — callModel + callAndParse (Priority Sorting + Self-Critic + AI self-fix)
+        ├── fallback.ts             — Fallback data generators
+        ├── taskGen.ts              — Task generation (dedup) + Chat assistant
+        ├── refine.ts               — AI Refine sections
+        ├── reflection.ts           — Reflection Agent (rule-based quality review)
+        ├── index.ts                — Main pipeline orchestrator (8 phases)
+        ├── dag.ts                  — DAG Workflow Engine (dependency graph)
+        └── consensus.ts            — Multi-Reviewer Consensus (3 reviewers, ≥2/3 approve)
+```
+
+> 📐 **Chi tiết từng module + data flow:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+---
+
+## 🏆 36 Enterprise Features
+
+| # | Feature | Module | Mô tả |
+|---|---|---|---|
+| 1 | **God File Refactor** | `ai.ts` (hub) | 2291 → 70 dòng, 24 module độc lập |
+| 2 | **Circuit Breaker** | `lib/openrouter.ts` | 3 failures → open → half-open (3 phút cooldown) |
+| 3 | **Dead Model Recovery** | `lib/openrouter.ts` | Auto-mark dead + auto-recovery sau 2 phút |
+| 4 | **Health Score** | `lib/openrouter.ts` | `getModelHealth(model)` — success rate + total calls |
+| 5 | **Priority Model** | `pipeline/runner.ts` | Sort models by success rate (best first) |
+| 6 | **Adaptive Timeout** | `config/constants.ts` | Per-model timeout (90s–300s) |
+| 7 | **Context Compression** | `config/constants.ts` | Truncate long JSON (head 60% + tail 30%) |
+| 8 | **Self-Critic** | `pipeline/runner.ts` | Empty data check (`length < 20`) → retry |
+| 9 | **Few-shot Examples** | `config/constants.ts` | `FEW_SHOT_NOTE` — ví dụ DUNG cho AI |
+| 10 | **Negative Examples** | `config/constants.ts` | `FEW_SHOT_NOTE` — ví dụ SAI cho AI tránh |
+| 11 | **Prompt Cache** | `lib/openrouter.ts` | Cache system prompt per agent+model (save tokens) |
+| 12 | **Planner Agent** | `pipeline/index.ts` | Phase 0 — decompose topic thành modules |
+| 13 | **Output Normalizer** | `pipeline/index.ts` | Trim strings + dedup arrays + strip null bytes |
+| 14 | **Consistency Checker** | `pipeline/index.ts` | Cross-section validation (HR ↔ members) |
+| 15 | **DAG Workflow Engine** | `pipeline/dag.ts` | Dependency graph scheduler (max parallelism) |
+| 16 | **Multi-Reviewer Consensus** | `pipeline/consensus.ts` | 3 reviewers (Architect + QA + Security), ≥2/3 approve |
+| 17 | **Observability/Metrics** | `pipeline/index.ts` | Per-model success rate logging ở cuối pipeline |
+| 18 | **Enterprise UML Prompt** | `prompts/index.ts` | Đọc project context, self-validate, no hallucination |
+| 19 | **Lenient Zod Schemas** | `lib/schemas.ts` | `toString` / `toStringArray` / `toNumber` preprocessors |
+| 20 | **60s Retry for 429** | `pipeline/runner.ts` | 429 → wait 60s + jitter → retry |
+| 21 | **Mermaid AI Auto-Fixer** | `nexus/MermaidRenderer.tsx` | 3-tier: regex → aggressive → AI |
+| 22 | **Task Dedup** | `pipeline/taskGen.ts` | By `title + assignee` (no duplicates) |
+| 23 | **Notification Provider** | `lib/notify.ts` | Unified toast system (success/error/info/copy/promise) |
+| 24 | **`bun run run`** | `scripts/run.js` | Cross-platform shortcut (Win/Mac/Linux auto-detect) |
+| 25 | **Agent Contract** | `contracts/agent.ts` | TypeScript interface cho mọi agent |
+| 26 | **Plugin Registry** | `contracts/registry.ts` | Auto-discovery + register/getById/getByKey/getSorted |
+| 27 | **Plugin System** | `plugins/index.ts` | 15 agents (10 core + 5 new), register via `registry.register()` |
+| 28 | **Change Impact Analyzer** | `utils/diff.ts` | `diffSections` + `analyzeImpact` (severity low/med/high) |
+| 29 | **Version Manager** | `utils/versionManager.ts` | Artifact versioning per section |
+| 30 | **Event Bus** | `core/eventBus.ts` | EventEmitter pub/sub (no Redis) |
+| 31 | **Workflow DSL** | `core/workflow.ts` | Declarative pipeline (sequential/parallel/conditional/retry/fallback) |
+| 32 | **Shared Memory** | `memory/memoryService.ts` | In-memory + DB persistence (no Vector DB) |
+| 33 | **Reflection Agent** | `pipeline/reflection.ts` | Rule-based quality review (no LLM, fast + free) |
+| 34 | **Dependency Analyzer** | `utils/dependencyAnalyzer.ts` | Orphan / missing / circular detection |
+| 35 | **Semantic Cache** | `cache/semanticCache.ts` | Cosine similarity (no Vector DB) |
+| 36 | **Distributed Queue** | `queue/taskQueue.ts` | In-memory worker pool + dead letter queue (no Redis) |
 
 ---
 
@@ -138,7 +276,7 @@ NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn lo
 | **Animation** | Framer Motion 12 |
 | **Backend** | Next.js API Routes (Node.js runtime) — 50+ endpoints |
 | **Database** | Prisma 6 ORM + SQLite (23 models) |
-| **AI** | OpenRouter (multi-key rotation, 9 free models/agent, multi-model fallback, 60s retry cho 429) |
+| **AI** | OpenRouter (multi-key rotation, 3-9 free models/agent, multi-model fallback, 60s retry cho 429) |
 | **Realtime** | Socket.io (chat port 3001 + notifications port 3002) |
 | **Diagrams** | Mermaid.js 11 (CDN) + React Flow 11 |
 | **Kanban** | @hello-pangea/dnd 18 |
@@ -288,7 +426,7 @@ Nexus-AI/
 │   │   ├── layout.tsx             # Root layout (Mermaid CDN, dark theme)
 │   │   └── page.tsx               # Main page (router: home/projects/input/workspace)
 │   ├── components/
-│   │   ├── ui/                    # shadcn/ui (50+ components — KHÔNG sửa)
+│   │   ├── ui/                    # shadcn/ui (48 components — KHÔNG sửa)
 │   │   └── nexus/
 │   │       ├── tabs/              # 13 workspace tabs
 │   │       ├── HomeView.tsx       # Dashboard widgets
@@ -303,11 +441,13 @@ Nexus-AI/
 │   │       ├── NeuralBackground.tsx
 │   │       └── AI3DBrain.tsx
 │   ├── lib/
-│   │   ├── ai.ts                  # 10-agent pipeline + retry + fallback
-│   │   ├── openrouter.ts          # Multi-key rotation client
+│   │   ├── ai.ts                  # 70-line re-export hub (v6.0 modular)
+│   │   ├── ai/                    # 24 AI modules (config, prompts, agents, utils, contracts, plugins, core, memory, cache, queue, pipeline)
+│   │   ├── openrouter.ts          # Multi-key rotation + Circuit Breaker + Dead Model + Health Score
 │   │   ├── github.ts              # Push + PR
 │   │   ├── email.ts               # SMTP (nodemailer)
 │   │   ├── notifications.ts       # Notification service broadcaster
+│   │   ├── notify.ts              # Unified Notification Provider (toasts)
 │   │   ├── activity.ts            # Activity log + system/pipeline status
 │   │   ├── pipeline-progress.ts   # AsyncLocalStorage log + progress maps
 │   │   ├── access.ts              # Token auth (leader/member)
@@ -392,12 +532,12 @@ Nexus-AI/
 curl -L https://fly.io/install.sh | sh
 
 # Deploy
-fly deploy          # Main app (port 3000)
-fly deploy -c fly.chat.toml        # Chat service (port 3001)
-fly deploy -c fly.notification.toml # Notification service (port 3002)
+fly deploy                              # Main app (port 3000)
+fly deploy -c fly.chat.toml             # Chat service (port 3001)
+# Notification service có thể chạy cùng main app hoặc tách riêng
 ```
 
-Xem chi tiết: [`DEPLOY.md`](DEPLOY.md)
+> Deploy script tự động: `bash scripts/deploy-fly.sh` — tạo apps + persistent volume + set secrets + build + verify.
 
 ### Local với Cloudflare Tunnel (share tạm thời)
 
@@ -409,8 +549,6 @@ bun run run          # Cross-platform shortcut (tự detect Win/Linux/Mac)
 # → Tự động parse tunnel URL → ghi vào .public-url
 ```
 
-Xem chi tiết: [`LOCAL_RUN.md`](LOCAL_RUN.md)
-
 ### Docker
 
 ```bash
@@ -418,20 +556,20 @@ docker build -t nexus-ai .
 docker run -p 3000:3000 -v $(pwd)/db:/app/db nexus-ai
 ```
 
+> Docker mode KHÔNG chạy chat service (port 3001). Frontend tự fallback sang HTTP polling.
+
 ---
 
 ## 📚 Documentation
 
 | Document | Mô tả | Audience |
 |---|---|---|
-| [README.md](README.md) | Overview + cài đặt nhanh | Tất cả users |
+| [README.md](README.md) | Overview + cài đặt nhanh + 36 features | Tất cả users |
 | [docs/README.md](docs/README.md) | Documentation index | Tất cả |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, design decisions | Developers |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design + 24-module AI structure + data flow + design decisions | Developers |
 | [docs/API.md](docs/API.md) | Full REST API reference (50+ endpoints) | Developers |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Dev setup, code style, how to extend | Contributors |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Dev setup, code style, how to extend (Agent / Plugin / Tab / API) | Contributors |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Code of conduct | Tất cả |
-| [LOCAL_RUN.md](LOCAL_RUN.md) | Chạy local + Cloudflare Tunnel | Users local |
-| [DEPLOY.md](DEPLOY.md) | Deploy Fly.io + Docker | DevOps |
 
 ---
 
@@ -439,8 +577,9 @@ docker run -p 3000:3000 -v $(pwd)/db:/app/db nexus-ai
 
 Xem [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) để biết:
 - Setup dev environment
-- Code style (TypeScript strict, shadcn/ui, Tailwind)
+- Code style (TypeScript strict, shadcn/ui, Tailwind, lenient Zod)
 - Cách thêm AI Agent mới (đã có hướng dẫn từng bước)
+- Cách đăng ký Agent Plugin qua `registry.register()`
 - Cách thêm API Route + log qua AsyncLocalStorage
 - Pull Request process
 
@@ -460,5 +599,5 @@ Xem [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) để biết:
 ---
 
 <p align="center">
-  <strong>NEXUS AI</strong> — Multi-Agent Project Architect 🤖
+  <strong>NEXUS AI v6.0</strong> — Modular Multi-Agent Project Architect 🤖
 </p>
