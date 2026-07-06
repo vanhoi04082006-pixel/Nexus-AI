@@ -22,7 +22,7 @@ export interface LogEntry {
   ts: number; // epoch ms
   level: LogLevel;
   agentId?: string; // "01".."08" | "PIPELINE" | "TASK" | "REVIEWER"
-  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline" | "eventbus" | "memory" | "workflow";
   model?: string;
   keyIndex?: number; // 1-based
   message: string;
