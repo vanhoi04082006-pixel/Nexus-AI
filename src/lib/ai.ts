@@ -3,7 +3,7 @@
 // Each Agent has a tailored model list, 2 retries per model with exponential
 // backoff, a JSON fixer, an AI self-fix pass, and graceful fallbacks.
 
-import { callOpenRouter, type OpenRouterError, isModelDead } from "./openrouter";
+import { callOpenRouter, type OpenRouterError, isModelDead, getModelHealth } from "./openrouter";
 import { appendLog } from "./pipeline-progress";
 import { validateSection } from "./schemas";
 import pLimit from "p-limit";
@@ -410,7 +410,18 @@ async function callAndParse(
   temp: number,
   sectionKey?: string // for Zod validation (analysis, hr, sprint, etc.)
 ): Promise<ParseResult | null> {
-  for (const model of models) {
+  // ===== Priority Model Sorting =====
+  // Sort models by health score (success rate) — highest success rate first
+  // Models with no history get default 1.0 (trusted until proven bad)
+  const sortedModels = [...models].sort((a, b) => {
+    const ha = getModelHealth(a);
+    const hb = getModelHealth(b);
+    // Higher success rate first; if equal, fewer total calls = less tested = lower priority
+    if (hb.successRate !== ha.successRate) return hb.successRate - ha.successRate;
+    return hb.totalCalls - ha.totalCalls;
+  });
+
+  for (const model of sortedModels) {
     // Skip dead models (all keys exhausted / 404 unavailable recently)
     // This saves significant time when many agents share the same model list
     if (isModelDead(model)) {
@@ -1727,6 +1738,18 @@ Hay chia nho du an thanh cac module cu the:`,
         model: res.model,
         message: `✓ [AGENT-10] Reviewer → done (${res.model}, ${sec}s total)`,
       });
+
+      // ===== Observability: Pipeline Metrics Summary (success branch) =====
+      const sectionsOK = Object.keys(rev).length;
+      const failedCnt = failed.length;
+      const sRate = ((AGENTS.length - failedCnt) / AGENTS.length * 100).toFixed(0);
+      appendLog({
+        level: "info",
+        agentId: "PIPELINE",
+        provider: "pipeline",
+        message: `📊 [METRICS] Pipeline: ${sec}s | ${sectionsOK}/9 sections | ${sRate}% success | ${failedCnt} failed`,
+      });
+
       return rev as unknown as ProjectResult;
     }
   } catch (e) {
@@ -1742,6 +1765,40 @@ Hay chia nho du an thanh cac module cu the:`,
   onProgress?.({ type: "agent_fail", id: "10", name: "Quality Reviewer", index: 9, total });
   const sec = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`>> Tra ket qua goc (${sec}s)\n`);
+
+  // ===== Observability: Pipeline Metrics Summary =====
+  const totalDuration = Date.now() - t0;
+  const sectionsGenerated = Object.keys(results).length;
+  const failedCount = failed.length;
+  const successRate = ((AGENTS.length - failedCount) / AGENTS.length * 100).toFixed(0);
+
+  // Collect per-model health stats
+  const allModelsUsed = new Set<string>();
+  for (const ag of AGENTS) {
+    ag.models.forEach(m => allModelsUsed.add(m));
+  }
+  const modelStats = Array.from(allModelsUsed).map(m => {
+    const h = getModelHealth(m);
+    return { model: m, ...h };
+  }).filter(s => s.totalCalls > 0);
+
+  appendLog({
+    level: "info",
+    agentId: "PIPELINE",
+    provider: "pipeline",
+    message: `📊 [METRICS] Pipeline: ${sec}s | ${sectionsGenerated}/9 sections | ${successRate}% success | ${failedCount} failed | ${modelStats.length} models used`,
+  });
+
+  for (const stat of modelStats) {
+    appendLog({
+      level: stat.successRate >= 0.8 ? "success" : stat.successRate >= 0.5 ? "warn" : "error",
+      agentId: "METRICS",
+      provider: "openrouter",
+      model: stat.model,
+      message: `📊 ${stat.model}: ${(stat.successRate * 100).toFixed(0)}% success (${stat.totalCalls} calls)`,
+    });
+  }
+
   appendLog({
     level: "warn",
     agentId: "10",
