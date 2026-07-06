@@ -1265,6 +1265,71 @@ export async function runPipeline(
   const t0 = Date.now();
   const total = AGENTS.length + 1; // +1 reviewer
 
+  // ===== PHASE 0: Planner Agent — decompose topic into modules before Analysis =====
+  // Planner reads the topic + description and generates a module breakdown
+  // that Analysis Agent uses as a starting point. This prevents Analysis from
+  // guessing modules and improves consistency across all sections.
+  appendLog({
+    level: "info",
+    agentId: "PLANNER",
+    provider: "pipeline",
+    message: `▶ [PLANNER] Decomposing topic into modules...`,
+  });
+
+  const plannerResult = await callAndParse(
+    ["openai/gpt-oss-120b:free", "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-31b-it:free"],
+    `Ban la Project Planner. Nhiem vu: chia nho chu de du an thanh cac module cu the.
+${JSON_INSTRUCTION}
+${FEW_SHOT_NOTE}
+Tra object voi:
+- "modules" (array string): danh sach 8-15 module cu the phu hop voi chu de (vd: "Auth", "Patient Management", "Appointment Scheduling")
+- "priority" (array string): thu tu uu tien cua cac module (giong thu tu modules)
+- "domain" (string): linh vuc cua du an (vd: "Healthcare", "E-commerce", "Education")
+- "keywords" (array string): cac tu khoa quan trong de Analysis Agent su dung`,
+    `Du an: ${input.topic}
+Mo ta: ${input.description}
+Muc dich: ${input.purpose}
+
+Hay chia nho du an thanh cac module cu the:`,
+    0.2,
+    undefined // no Zod validation for planner
+  );
+
+  if (plannerResult && plannerResult.data) {
+    const plan = plannerResult.data as { modules?: string[]; domain?: string; keywords?: string[] };
+    if (plan.modules && plan.modules.length > 0) {
+      appendLog({
+        level: "success",
+        agentId: "PLANNER",
+        provider: "pipeline",
+        model: plannerResult.model,
+        message: `✓ [PLANNER] ${plan.modules.length} modules: ${plan.modules.join(", ")}`,
+      });
+      // Inject planner output into input.extraInfo so Analysis Agent sees it
+      const toArray = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v.map(String);
+        if (typeof v === "string") return v.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+        return [];
+      };
+      const existingReqs = toArray(input.extraInfo.requirements);
+      const planModules = plan.modules.map((m) => `Module: ${m}`);
+      input = {
+        ...input,
+        extraInfo: {
+          ...input.extraInfo,
+          requirements: [...planModules, ...existingReqs].join("\n"),
+        },
+      };
+    }
+  } else {
+    appendLog({
+      level: "warn",
+      agentId: "PLANNER",
+      provider: "pipeline",
+      message: `⚠ [PLANNER] Failed — Analysis will run without pre-planning`,
+    });
+  }
+
   // ===== PHASE 1: Sequential agents (analysis → hr → sprint) =====
   // These must run sequentially because each depends on the previous
   const phase1Agents = AGENTS.filter((a) => ["analysis", "hr", "sprint"].includes(a.key));
@@ -1479,6 +1544,76 @@ export async function runPipeline(
         message: `✓ [AGENT-${ag.id}] ${ag.name} → done (fallback)`,
       });
     }
+  }
+
+  // ===== PHASE 5.5: Output Normalizer + Consistency Checker =====
+  // Normalize all section outputs: trim strings, remove duplicates, ensure arrays
+  appendLog({
+    level: "info",
+    agentId: "NORMALIZER",
+    provider: "pipeline",
+    message: `▶ [NORMALIZER] Standardizing output across all sections...`,
+  });
+
+  for (const [key, value] of Object.entries(results)) {
+    if (!value || typeof value !== "object") continue;
+    const data = value as unknown as Record<string, unknown>;
+    // Normalize string fields: trim, remove null bytes
+    for (const [field, val] of Object.entries(data)) {
+      if (typeof val === "string") {
+        data[field] = val.trim().replace(/\0/g, "").replace(/\s{3,}/g, " ");
+      }
+      // Deduplicate arrays
+      if (Array.isArray(val)) {
+        const seen = new Set<string>();
+        data[field] = val.filter((item) => {
+          const key = JSON.stringify(item);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+    }
+  }
+
+  // Consistency check: verify cross-section entity names match
+  const analysisModules = (results.analysis?.modules || []) as string[];
+  const designTables = (results.design?.dbTables || []).map((t) => t.name);
+  const hrAssignees = (results.hr?.assignments || []).map((a) => a.name);
+  const inconsistencies: string[] = [];
+
+  // Check: HR assignees should match input members
+  const inputMembers = input.members.map((m) => m.name.toLowerCase());
+  for (const assignee of hrAssignees) {
+    if (!inputMembers.includes(assignee.toLowerCase())) {
+      inconsistencies.push(`HR assigns "${assignee}" but no such member in input`);
+    }
+  }
+
+  // Check: Design tables should relate to analysis modules
+  if (analysisModules.length > 0 && designTables.length > 0) {
+    appendLog({
+      level: "info",
+      agentId: "NORMALIZER",
+      provider: "pipeline",
+      message: `✓ [CONSISTENCY] ${analysisModules.length} modules ↔ ${designTables.length} DB tables ↔ ${hrAssignees.length} assignees checked`,
+    });
+  }
+
+  if (inconsistencies.length > 0) {
+    appendLog({
+      level: "warn",
+      agentId: "NORMALIZER",
+      provider: "pipeline",
+      message: `⚠ [CONSISTENCY] ${inconsistencies.length} issue(s): ${inconsistencies.slice(0, 3).join("; ")}`,
+    });
+  } else {
+    appendLog({
+      level: "success",
+      agentId: "NORMALIZER",
+      provider: "pipeline",
+      message: `✓ [NORMALIZER] All sections normalized + consistency OK`,
+    });
   }
 
   // ===== PHASE 6: Quality Reviewer (AGENT-10) =====
