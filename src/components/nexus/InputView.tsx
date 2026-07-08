@@ -210,6 +210,7 @@ export function InputView() {
                 if (a.status === "running") setAgentStatus(a.id, "running");
                 else if (a.status === "done") setAgentStatus(a.id, "done");
                 else if (a.status === "failed") setAgentStatus(a.id, "failed", a.error);
+                // pending/undefined → leave as-is (will be resolved on pipeline done)
               }
             }
 
@@ -219,12 +220,28 @@ export function InputView() {
             }
 
             if (prog.status === "done") {
+              // CRITICAL FIX: Force-complete ALL agents to "done" before resolving.
+              // Without this, agents stuck in "running"/"pending" (UI sync bug)
+              // would appear as "Đang xử lý..." forever even though data is saved.
+              // Backend may have emitted agent_done events between polls that we missed.
+              if (prog.agents) {
+                for (const a of prog.agents) {
+                  if (a.status !== "failed") {
+                    setAgentStatus(a.id, "done");
+                  }
+                }
+              }
               resolve();
             } else if (prog.status === "error") {
               reject(new Error(prog.error || "Pipeline that bai"));
             } else {
-              // still running — poll again
-              setTimeout(poll, 2500);
+              // still running — poll again.
+              // Use shorter interval (1.5s) when most agents are done (last-mile speedup)
+              // to catch the final "done" state faster + reduce stale UI window.
+              const doneCount = prog.agents?.filter(a => a.status === "done" || a.status === "failed").length || 0;
+              const totalAgents = prog.agents?.length || 10;
+              const interval = doneCount >= totalAgents - 2 ? 1500 : 2500; // speed up near the end
+              setTimeout(poll, interval);
             }
           } catch (err) {
             reject(err instanceof Error ? err : new Error("Loi poll"));
