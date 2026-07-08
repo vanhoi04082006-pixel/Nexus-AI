@@ -85,8 +85,169 @@ export function fallback(
         erd: results.uml?.erd || erdFallback,
         sequence: results.uml?.sequence || `sequenceDiagram\n    participant U as ${seqActor}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response`,
       };
-    case "docs":
-      return { readme: `# ${input.topic}\n\nTai lieu chua duoc tao tu dong.`, convention: "", apiStandard: "" };
+    case "docs": {
+      const techFe = results.analysis?.techStack?.frontend?.name || "React";
+      const techBe = results.analysis?.techStack?.backend?.name || "Node.js";
+      const techDb = results.analysis?.techStack?.database?.name || "PostgreSQL";
+      const modules = (results.analysis?.modules || ["Core", "Auth", "Dashboard"]).slice(0, 8);
+      const features = (results.analysis?.features || []).slice(0, 10).map((f) => f.name);
+
+      const readme = `# ${input.topic}
+
+## Giới thiệu
+${input.description || "Dự án được phân tích tự động bởi NEXUS AI."}
+
+## Mục đích
+${input.purpose || "Đồ án tốt nghiệp"}
+
+## Tech Stack
+- **Frontend**: ${techFe}
+- **Backend**: ${techBe}
+- **Database**: ${techDb}
+- **Cache**: ${results.analysis?.techStack?.cache?.name || "Redis"}
+
+## Modules
+${modules.map((m) => `- ${m}`).join("\n")}
+
+## Tính năng chính
+${features.length > 0 ? features.map((f) => `- ${f}`).join("\n") : "- Core functionality"}
+
+## Cài đặt
+\`\`\`bash
+# Clone repo
+git clone <repo-url>
+cd ${input.topic.toLowerCase().replace(/[^a-z0-9]/g, "-")}
+
+# Install dependencies
+bun install  # hoặc npm install
+
+# Setup database
+bun run db:push
+
+# Chạy dev server
+bun run dev  # http://localhost:3000
+\`\`\`
+
+## Cấu trúc thư mục
+\`\`\`
+src/
+├── app/              # Next.js App Router
+│   ├── api/          # API routes
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/       # React components
+│   ├── ui/           # shadcn/ui components
+│   └── nexus/        # Feature components
+├── lib/              # Utilities
+│   ├── ai.ts         # AI pipeline
+│   ├── db.ts         # Prisma client
+│   └── schemas.ts    # Zod schemas
+├── prisma/
+│   └── schema.prisma # Database schema
+└── package.json
+\`\`\`
+
+## Đội ngũ
+${members.map((m) => `- **${m.name}** — ${results.hr?.assignments?.find((a) => a.name === m.name)?.role || "Developer"}`).join("\n")}
+
+## License
+MIT
+`;
+
+      const convention = `# Coding Convention
+
+## TypeScript
+- Sử dụng TypeScript strict mode
+- Type mọi function params + return values
+- Tránh \`any\` — dùng \`unknown\` + type guard
+
+## Naming
+- **Files**: kebab-case (\`user-service.ts\`)
+- **Components**: PascalCase (\`UserProfile.tsx\`)
+- **Functions**: camelCase (\`getUserById()\`)
+- **Constants**: UPPER_SNAKE (\`MAX_RETRY\`)
+- **Types/Interfaces**: PascalCase (\`UserDto\`)
+
+## React Components
+- Functional components + hooks (no class)
+- \`"use client"\` directive cho client components
+- Props interface đặt ngay trước component
+- Memoize với \`memo\` + \`useMemo\` + \`useCallback\`
+
+## API Routes
+- \`export const dynamic = "force-dynamic"\`
+- \`export const runtime = "nodejs"\`
+- Validate input với Zod
+- Try-catch mọi logic, return \`{ error }\` + status code
+
+## Database (Prisma)
+- CUID cho primary keys
+- \`@@index\` cho foreign keys
+- \`onDelete: Cascade\` cho owned relations
+- Migration trước khi deploy
+
+## Git
+- Conventional commits: \`feat:\`, \`fix:\`, \`refactor:\`, \`docs:\`, \`chore:\`
+- Branch: \`main\` (production), \`dev\` (staging), \`feature/*\`, \`fix/*\`
+- PR require review + pass lint
+
+## ESLint + Prettier
+- ESLint: \`next/core-web-vitals\` + \`@typescript-eslint\`
+- Prettier: 2 spaces, single quote, no semicolon (hoặc theo config)
+`;
+
+      const apiStandard = `# API Standard
+
+## RESTful Conventions
+- **GET**    \`/api/resources\`         — List (with pagination)
+- **GET**    \`/api/resources/:id\`    — Get one
+- **POST**   \`/api/resources\`        — Create
+- **PATCH**  \`/api/resources/:id\`    — Update (partial)
+- **PUT**    \`/api/resources/:id\`    — Replace (full)
+- **DELETE** \`/api/resources/:id\`    — Delete
+
+## Response Format
+\`\`\`json
+// Success
+{ "data": {...}, "meta": { "page": 1, "total": 100 } }
+
+// Error
+{ "error": "Message", "details": "Optional details" }
+\`\`\`
+
+## Status Codes
+- \`200\` OK — Success
+- \`201\` Created — Resource created
+- \`400\` Bad Request — Validation error
+- \`401\` Unauthorized — Missing/invalid token
+- \`403\` Forbidden — No permission
+- \`404\` Not Found
+- \`429\` Too Many Requests — Rate limited
+- \`500\` Server Error
+
+## Authentication
+- JWT trong \`Authorization: Bearer <token>\` header
+- Access token: 15 phút
+- Refresh token: 7 ngày (httpOnly cookie)
+
+## Pagination
+\`GET /api/resources?page=1&limit=20&sort=createdAt&order=desc\`
+
+## Error Handling
+- Try-catch mọi route handler
+- Log error + return user-friendly message
+- Never expose stack trace trong production
+
+## Rate Limiting
+- 100 req/phút per IP
+- 5 req/phút cho login/register
+
+## Modules API
+${modules.map((m) => `### ${m}\n- \`GET /api/${m.toLowerCase().replace(/[^a-z0-9]/g, "-")}\`\n- \`POST /api/${m.toLowerCase().replace(/[^a-z0-9]/g, "-")}\`\n- \`GET /api/${m.toLowerCase().replace(/[^a-z0-9]/g, "-")}/:id\`\n- \`PATCH /api/${m.toLowerCase().replace(/[^a-z0-9]/g, "-")}/:id\`\n- \`DELETE /api/${m.toLowerCase().replace(/[^a-z0-9]/g, "-")}/:id\``).join("\n\n")}
+`;
+
+      return { readme, convention, apiStandard };
+    }
     case "git":
       return { gitCommands: "", branchStrategy: "", issueTemplate: "", repoUrl: "https://github.com/your-org/project" };
     case "test":

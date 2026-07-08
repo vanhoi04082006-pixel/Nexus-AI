@@ -369,12 +369,23 @@ export async function POST(req: Request) {
             const doneCount = p?.agents.filter((a) => a.status === "done").length || 0;
             const failedCount = p?.agents.filter((a) => a.status === "failed").length || 0;
             const logCount = p?.logs.length || 0;
+            // Build full log text for HistoryTab detail modal (user can view all log lines)
+            const summary = `✅ ${doneCount}/10 agents hoàn thành${failedCount > 0 ? `, ${failedCount} fallback` : ""}. Tất cả sections đã lưu. Email lời mời đã gửi ${memberRows.length} thành viên. ${logCount} log lines.`;
+            const fullLogs = p?.logs?.length
+              ? p.logs.map((l) => {
+                  const time = new Date(l.ts).toLocaleTimeString("vi-VN");
+                  const level = l.level.toUpperCase().padEnd(7);
+                  const model = l.model ? ` [${l.model.substring(0, 30)}]` : "";
+                  const keyIdx = l.keyIndex != null ? ` Key#${l.keyIndex}` : "";
+                  return `${time} ${level}${model}${keyIdx} ${l.message}`;
+                }).join("\n")
+              : summary;
             await logActivity({
               projectId: project.id,
               type: "PROJECT_CREATED",
               status: "SUCCESS",
               title: `Pipeline hoàn thành — 10 AI Agents`,
-              details: `✅ ${doneCount}/10 agents hoàn thành${failedCount > 0 ? `, ${failedCount} fallback` : ""}. Tất cả sections đã lưu. Email lời mời đã gửi ${memberRows.length} thành viên. ${logCount} log lines.`,
+              details: `${summary}\n\n═══════════════════════════════════════════\nLIVE LOG (${logCount} lines):\n═══════════════════════════════════════════\n${fullLogs}`,
               actorName: input.leaderName,
               actorEmail: input.leaderEmail,
               actorRole: "Leader",

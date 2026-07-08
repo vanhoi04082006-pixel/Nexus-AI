@@ -39,17 +39,42 @@ export async function generateTasks(
     const res = await callAndParse(TASK_GEN_MODELS, TASK_GEN_PROMPT, context, 0.25, undefined);
     onProgress?.(true);
     if (res && res.data) {
+      // Extract tasks array from any key (tasks, items, list, etc.)
+      let rawTasks: TaskItem[] | null = null;
       const data = res.data as { tasks?: TaskItem[] };
       if (data.tasks && Array.isArray(data.tasks) && data.tasks.length > 0) {
-        // DEDUP
+        rawTasks = data.tasks;
+      } else {
+        // Try to find tasks under any array key
+        const d = res.data as Record<string, unknown>;
+        for (const key of Object.keys(d)) {
+          if (Array.isArray(d[key]) && d[key].length > 0 && d[key][0] && typeof d[key][0] === "object" && "title" in d[key][0]) {
+            rawTasks = d[key] as TaskItem[];
+            appendLog({ level: "info", agentId: "TASK", provider: "pipeline", model: res.model, message: `[TASK GEN] Tìm thấy ${rawTasks.length} task dưới key "${key}"` });
+            break;
+          }
+        }
+      }
+
+      if (rawTasks && rawTasks.length > 0) {
+        // DEDUP — applied to ALL code paths (was missing before, causing duplicate tasks)
+        // Normalize title for fuzzy matching (lowercase, trim, remove extra spaces, remove punctuation)
+        const normalize = (s: string) =>
+          (s || "").toLowerCase().trim()
+            .replace(/\s+/g, " ")
+            .replace(/[^\w\s]/g, "");
         const seen = new Set<string>();
-        const uniqueTasks = data.tasks.filter((t) => {
-          const key = `${(t.title || "").toLowerCase().trim()}|${(t.assigneeName || "").toLowerCase().trim()}`;
+        const uniqueTasks = rawTasks.filter((t) => {
+          const titleNorm = normalize(t.title || "");
+          const assigneeNorm = normalize(t.assigneeName || "");
+          // Dedup by (title + assignee) — same task for same person = duplicate
+          // Also dedup by title alone if assignee empty (prevent global dupes)
+          const key = assigneeNorm ? `${titleNorm}|${assigneeNorm}` : `|${titleNorm}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
         });
-        const dupesRemoved = data.tasks.length - uniqueTasks.length;
+        const dupesRemoved = rawTasks.length - uniqueTasks.length;
         if (dupesRemoved > 0) {
           appendLog({ level: "warn", agentId: "TASK", provider: "pipeline", model: res.model, message: `⚠ [TASK GEN] Loại bỏ ${dupesRemoved} task trùng lặp` });
         }
@@ -58,14 +83,6 @@ export async function generateTasks(
           appendLog({ level: "success", agentId: "TASK", provider: "pipeline", message: `✓ Sinh task cho ${t.assigneeName || "?"}: ${t.title || "Untitled"}` });
         }
         return uniqueTasks;
-      }
-      // Try to find tasks under any array key
-      const d = res.data as Record<string, unknown>;
-      for (const key of Object.keys(d)) {
-        if (Array.isArray(d[key]) && d[key].length > 0) {
-          appendLog({ level: "success", agentId: "TASK", provider: "pipeline", model: res.model, message: `✓ [TASK GEN] Tìm thấy ${d[key].length} task dưới key "${key}"` });
-          return d[key] as TaskItem[];
-        }
       }
     }
     return generateFallbackTasks(input, result);

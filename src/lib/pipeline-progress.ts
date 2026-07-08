@@ -66,7 +66,7 @@ function pushLog(
     id: `log-${Date.now()}-${++logSeq}`,
     ts: Date.now(),
   });
-  if (p.logs.length > 500) p.logs.shift();
+  if (p.logs.length > 2000) p.logs.shift();
 }
 
 /**
