@@ -208,8 +208,7 @@ export function HomeView() {
   const [taskCounts, setTaskCounts] = useState({ total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
   const socketRef = useRef<Socket | null>(null);
 
-  // Resolve the current user's token (leader token from access)
-  const userToken = access?.email ? projects[0]?.leaderToken || "" : "";
+  // FIX: Removed dead variable `userToken` (was declared but never used)
 
   const loadActivities = useCallback(async () => {
     // Find the leader token from the first project (the Home view lists all user's projects)
@@ -251,11 +250,12 @@ export function HomeView() {
 
   useEffect(() => {
     loadProjects();
+    // Poll notifications every 30s — FIX: use ref to avoid stale closure on `projects`
+    // (was: empty deps → loadNotifications captured projects=[] → never loaded)
     loadNotifications();
-    // Poll notifications every 30s
     const notifInterval = setInterval(loadNotifications, 30000);
     return () => clearInterval(notifInterval);
-  }, []);
+  }, [projects]); // re-run when projects change (so loadNotifications sees fresh data)
 
   // Load dashboard widgets once projects are available
   useEffect(() => {

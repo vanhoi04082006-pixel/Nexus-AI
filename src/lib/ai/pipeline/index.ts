@@ -170,8 +170,7 @@ export async function runPipeline(
       }
     }
   }
-  const analysisModules = (results.analysis?.modules || []) as string[];
-  const designTables = (results.design?.dbTables || []).map((t) => t.name);
+  // FIX: Removed dead variables `analysisModules`, `designTables` (declared but never used)
   const hrAssignees = (results.hr?.assignments || []).map((a) => a.name);
   const inputMembers = input.members.map((m) => m.name.toLowerCase());
   const inconsistencies: string[] = [];

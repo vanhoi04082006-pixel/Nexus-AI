@@ -46,6 +46,7 @@ import { AgentHubTab } from "./tabs/AgentHubTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
 import { NotificationBell } from "./NotificationBell";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface NavItem {
   id: string;
@@ -569,15 +570,19 @@ export function WorkspaceView() {
         </div>
       </aside>
 
-      {/* Delete confirmation dialog */}
-      {deleteDialogOpen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-xl z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-destructive/30 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-base font-bold text-destructive mb-2">Xóa dự án?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+      {/* Delete confirmation dialog — FIX: uses Radix Dialog for accessibility (focus trap, ESC, aria) */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) setDeleteConfirm(""); }}>
+        <DialogContent className="max-w-md bg-card border-destructive/30">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" /> Xóa dự án?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
               Hành động này không thể hoàn tác. Tất cả dữ liệu (phân tích, todolist, chat, email) sẽ bị xóa vĩnh viễn.
             </p>
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-xs text-muted-foreground">
               Nhập <code className="text-destructive font-mono">Delete</code> để xác nhận:
             </p>
             <input
@@ -585,10 +590,10 @@ export function WorkspaceView() {
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               placeholder="Delete"
-              className="w-full px-3 py-2 mb-4 bg-nexus-surface-2 border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
+              className="w-full px-3 py-2 bg-nexus-surface-2 border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
               autoFocus
             />
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end pt-2">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -609,8 +614,8 @@ export function WorkspaceView() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">

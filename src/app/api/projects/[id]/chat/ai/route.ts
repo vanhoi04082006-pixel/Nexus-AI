@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { chatAssistant } from "@/lib/ai";
 import { resolveAccess } from "@/lib/access";
+import { rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import {
   reconstructInput,
   reconstructResult,
@@ -12,6 +13,10 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Rate limit: 10 AI chat messages per minute per user
+const RL_MAX = 10;
+const RL_WINDOW = 60_000;
 
 export async function POST(
   req: Request,
@@ -25,6 +30,15 @@ export async function POST(
     const access = await resolveAccess(id, token);
     if (!access) {
       return Response.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Rate limit per user (prevent AI cost abuse + chat flooding)
+    const rlKey = `chat-ai:${access.email || access.name}`;
+    if (!rateLimit(rlKey, RL_MAX, RL_WINDOW)) {
+      return Response.json(
+        { error: "Quá nhiều tin nhắn AI — thử lại sau 1 phút" },
+        { status: 429, headers: rateLimitHeaders(rlKey, RL_MAX, RL_WINDOW) }
+      );
     }
 
     const body = (await req.json()) as { recentMessages: string };

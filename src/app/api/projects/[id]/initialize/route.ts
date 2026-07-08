@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { generateTasks } from "@/lib/ai";
 import { resolveAccess, requireLeader } from "@/lib/access";
 import { sendTaskAssignedEmail } from "@/lib/email";
+import { getInitialize } from "@/lib/pipeline-progress";
 import {
   logActivity,
   updateAgentStatus,
@@ -71,12 +72,22 @@ export async function POST(
     });
     if (!project) return Response.json({ error: "Project not found" }, { status: 404 });
 
+    // FIX: Mutex guard — prevent double-click / concurrent initialize runs
+    // (was: two parallel runs would deleteMany + create interleave → duplicate tasks)
+    const existing = getInitialize(id);
+    if (existing && existing.status === "running") {
+      return Response.json(
+        { error: "Đang sinh todolist — vui lòng đợi hoàn thành" },
+        { status: 409 }
+      );
+    }
+
     const input = await reconstructInput(id);
     if (!input) return Response.json({ error: "Project input not reconstructable" }, { status: 500 });
     const result = await reconstructResult(id);
 
-    // Delete old tasks first (clean slate — fixes "stale tasks" issue)
-    await db.task.deleteMany({ where: { projectId: id } });
+    // FIX: Removed redundant deleteMany here — background task already does it at line ~124.
+    // (was: 2 deleteMany calls, race condition between them)
 
     // Initialize progress tracker BEFORE starting background task
     // This ensures the progress endpoint returns "running" immediately

@@ -14,9 +14,14 @@
 
 import { resolveAccess, requireLeader } from "@/lib/access";
 import { callOpenRouter } from "@/lib/openrouter";
+import { rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Rate limit: 10 AI rewrites per minute per leader
+const RL_MAX = 10;
+const RL_WINDOW = 60_000;
 
 interface RewriteBody {
   subject: string;
@@ -53,6 +58,15 @@ export async function POST(
     if (!access) return Response.json({ error: "Access denied" }, { status: 403 });
     if (!requireLeader(access)) {
       return Response.json({ error: "Chỉ leader được dùng AI rewrite" }, { status: 403 });
+    }
+
+    // Rate limit per leader (prevent AI cost abuse)
+    const rlKey = `ai-rewrite:${access.email || access.name}`;
+    if (!rateLimit(rlKey, RL_MAX, RL_WINDOW)) {
+      return Response.json(
+        { error: "Quá nhiều yêu cầu AI rewrite — thử lại sau 1 phút" },
+        { status: 429, headers: rateLimitHeaders(rlKey, RL_MAX, RL_WINDOW) }
+      );
     }
 
     const body = (await req.json()) as RewriteBody;

@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
 import { callOpenRouter } from "@/lib/openrouter";
+import { rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +18,10 @@ const FIX_MODELS = [
   "google/gemma-4-31b-it:free",
   "qwen/qwen3-coder:free",
 ];
+
+// Rate limit: 5 requests per minute per user (fix-mermaid is expensive — calls AI)
+const RL_MAX = 5;
+const RL_WINDOW = 60_000;
 
 export async function POST(
   req: Request,
@@ -30,6 +35,15 @@ export async function POST(
     const access = await resolveAccess(id, token);
     if (!access) {
       return Response.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Rate limit per user (prevent AI cost abuse)
+    const rlKey = `fix-mermaid:${access.email || access.name}`;
+    if (!rateLimit(rlKey, RL_MAX, RL_WINDOW)) {
+      return Response.json(
+        { error: "Quá nhiều yêu cầu — thử lại sau 1 phút" },
+        { status: 429, headers: rateLimitHeaders(rlKey, RL_MAX, RL_WINDOW) }
+      );
     }
 
     const body = (await req.json()) as {
