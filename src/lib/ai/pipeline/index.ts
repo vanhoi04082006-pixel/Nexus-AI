@@ -181,20 +181,62 @@ export async function runPipeline(
   appendLog({ level: "info", agentId: "10", provider: "pipeline", message: `[AGENT-10] Quality Reviewer → start` });
 
   try {
-    const summary = buildReviewSummary(results as ProjectResult, input.topic);
+    // FIX: Gửi FULL results (compressed) thay vì chỉ summary — Reviewer cần data thật để review/sửa.
+    // Summary chỉ có boolean flags (hasDesc, featuresCount...) → Reviewer không có gì để sửa.
+    const fullResultsStr = compressContext(JSON.stringify(results), 10000);
     const res = await callAndParse(
       REVIEWER_MODELS,
-      PROMPT_MAP.security() + `\n\nBan la Quality Reviewer. Kiem tra dong bo toan bo ket qua.\n${JSON_INSTRUCTION}`,
-      `${summary}\n\nTra lai object voi cung cau truc, chi sua nhung gi can sua.`,
+      PROMPT_MAP.security() + `\n\nBan la Quality Reviewer. Kiem tra dong bo toan bo ket qua.\n${JSON_INSTRUCTION}\n\nIMPORTANT: Tra lai object JSON voi 9 keys: analysis, hr, sprint, design, uml, docs, git, test, security. Moi key phai co day du noi dung nhu input. Chi sua nhung gi can sua, giu nguyen phan con lai.`,
+      `Du an: ${input.topic}\n\nKET QA DAY DU CUA 9 AGENT (JSON):\n${fullResultsStr}\n\nTra lai object JSON day du voi 9 keys.`,
       0.1, undefined
     );
     if (res && res.data) {
-      const rev = res.data as ProjectResult;
+      const rev = res.data as Record<string, unknown>;
+
+      // CRITICAL FIX: Safe merge — Reviewer chỉ nhận summary (không phải full results),
+      // nên rev có thể thiếu sections hoặc rỗng. Phải merge với results gốc để KHÔNG MẤT DATA.
+      const merged = { ...results } as Record<string, unknown>;
+      let mergeCount = 0;
+      let keepCount = 0;
+      for (const key of Object.keys(results) as SectionType[]) {
+        const rv = rev[key];
+        // Case 1: Reviewer không trả section này → giữ results gốc
+        if (rv == null) {
+          keepCount++;
+          continue; // merged[key] đã = results[key]
+        }
+        // Case 2: Reviewer trả section rỗng → giữ results gốc
+        if (typeof rv === "object" && rv !== null && Object.keys(rv).length === 0) {
+          keepCount++;
+          continue;
+        }
+        // Case 3: Reviewer trả section nhưng schema sai → giữ results gốc
+        if (!isValidSchema(rv, key)) {
+          merged[key] = results[key]; // explicit
+          keepCount++;
+          appendLog({ level: "warn", agentId: "10", provider: "pipeline", message: `⚠ [REVIEW] Section "${key}" từ reviewer sai schema → giữ data gốc` });
+          continue;
+        }
+        // Case 4: Reviewer trả section hợp lệ → dùng reviewer's version
+        merged[key] = rv;
+        mergeCount++;
+      }
+
+      // Bổ sung: nếu reviewer trả thêm sections mà results không có (vd test/security)
+      for (const key of Object.keys(rev) as SectionType[]) {
+        if (!merged[key] && rev[key] != null && isValidSchema(rev[key], key)) {
+          merged[key] = rev[key];
+          mergeCount++;
+        }
+      }
+
+      appendLog({ level: "info", agentId: "10", provider: "pipeline", message: `📋 [REVIEW] Merge: ${mergeCount} section(s) từ reviewer, ${keepCount} section(s) giữ data gốc` });
+
       const sec = ((Date.now() - t0) / 1000).toFixed(1);
       onProgress?.({ type: "agent_done", id: "10", name: "Quality Reviewer", index: 9, total });
       appendLog({ level: "success", agentId: "10", provider: "pipeline", model: res.model, message: `✓ [AGENT-10] Reviewer → done (${res.model}, ${sec}s total)` });
-      appendLog({ level: "info", agentId: "PIPELINE", provider: "pipeline", message: `📊 [METRICS] Pipeline: ${sec}s | ${Object.keys(rev).length}/9 sections | ${((AGENTS.length - failed.length) / AGENTS.length * 100).toFixed(0)}% success` });
-      return rev;
+      appendLog({ level: "info", agentId: "PIPELINE", provider: "pipeline", message: `📊 [METRICS] Pipeline: ${sec}s | ${Object.keys(merged).length}/9 sections | ${((AGENTS.length - failed.length) / AGENTS.length * 100).toFixed(0)}% success` });
+      return merged as unknown as ProjectResult;
     }
   } catch (e) {
     appendLog({ level: "error", agentId: "10", provider: "pipeline", message: `✗ [AGENT-10] Reviewer → ${(e as Error).message?.substring(0, 100)}` });
