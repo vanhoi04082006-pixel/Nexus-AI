@@ -424,9 +424,20 @@ export function WorkspaceView() {
       <button
         onClick={() => setSidebarOpen((v) => !v)}
         className="md:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-lg bg-card border border-border flex items-center justify-center backdrop-blur-xl"
+        aria-label={sidebarOpen ? "Đóng menu" : "Mở menu"}
+        aria-expanded={sidebarOpen}
       >
         <Cpu className="w-5 h-5 text-primary" />
       </button>
+
+      {/* FIX: Mobile sidebar backdrop — click to close */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Sidebar */}
       <aside

@@ -432,7 +432,8 @@ export function MermaidRenderer({ code, id }: { code: string; id: string }) {
     a.href = url;
     a.download = `${id}-diagram.svg`;
     a.click();
-    URL.revokeObjectURL(url);
+    // FIX: Delay revoke — Firefox hasn't started download yet when URL is revoked
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function downloadPNG() {

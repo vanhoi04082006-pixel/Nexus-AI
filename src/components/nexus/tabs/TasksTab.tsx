@@ -524,17 +524,23 @@ export function TasksTab() {
                     <button
                       key={c.id}
                       onClick={async () => {
+                        const oldStatus = selectedTask.status;
+                        // FIX: Optimistic update (rollback on failure — was leaving UI in wrong state)
                         updateTaskStatus(selectedTask.id, c.id);
                         setSelectedTask({ ...selectedTask, status: c.id });
                         try {
-                          await fetch(`/api/projects/${projectId}/tasks/${selectedTask.id}?token=${encodeURIComponent(token || "")}`, {
+                          const resp = await fetch(`/api/projects/${projectId}/tasks/${selectedTask.id}?token=${encodeURIComponent(token || "")}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ status: c.id }),
                           });
-                          notify.success(`Da chuyen: ${c.title}`);
+                          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                          notify.success(`Đã chuyển: ${c.title}`);
                         } catch {
-                          notify.error("Loi cap nhat");
+                          // Rollback on failure
+                          updateTaskStatus(selectedTask.id, oldStatus);
+                          setSelectedTask({ ...selectedTask, status: oldStatus });
+                          notify.error("Lỗi cập nhật — đã hoàn tác");
                         }
                       }}
                       className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${

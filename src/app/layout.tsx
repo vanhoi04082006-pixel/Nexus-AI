@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   keywords: ["NEXUS AI", "Multi-Agent", "Project Planning", "UML", "Sprint", "Todolist"],
   authors: [{ name: "NEXUS AI" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 
@@ -40,6 +40,8 @@ export default function RootLayout({
               window.addEventListener('DOMContentLoaded', function() {
                 var s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+                s.integrity = 'sha384-T/0lMUdJpd2S1ZHtRiofG3htU3xPCrFVeAQ1UUE2TJwlEJSV5NUwn30kP28n238E';
+                s.crossOrigin = 'anonymous';
                 s.onload = function() {
                   if (window.mermaid) {
                     window.mermaid.initialize({

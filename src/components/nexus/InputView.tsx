@@ -1,7 +1,7 @@
 "use client";
 
 import { notify } from "@/lib/notify";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,9 @@ export function InputView() {
   const [showOptional, setShowOptional] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [parallel, setParallel] = useState(true); // default: parallel (fast)
+  // FIX: Polling cleanup guard — prevent state updates after unmount
+  const activeRef = useRef(true);
+  useEffect(() => () => { activeRef.current = false; }, []);
 
   // Warm up the /api/projects route on page load so Turbopack compiles it
   // before the user submits. Without this, the first POST can crash the server
@@ -82,41 +85,65 @@ export function InputView() {
   }, []);
 
   function validate(): boolean {
+    // FIX: Topic max length (was unlimited → expensive AI prompt)
     if (!input.topic.trim()) {
-      notify.error("Vui long nhap ten chu de / du an");
+      notify.error("Vui lòng nhập tên chủ đề / dự án");
+      return false;
+    }
+    if (input.topic.trim().length > 200) {
+      notify.error("Tên chủ đề quá dài (tối đa 200 ký tự)");
+      return false;
+    }
+    if (input.description.length > 5000) {
+      notify.error("Mô tả quá dài (tối đa 5000 ký tự)");
       return false;
     }
     if (!input.leaderName.trim()) {
-      notify.error("Vui long nhap ten nhom truong");
+      notify.error("Vui lòng nhập tên nhóm trưởng");
       return false;
     }
     const validMembers = input.members.filter((m) => m.name.trim());
     if (validMembers.length < 1) {
-      notify.error("Can it nhat 1 thanh vien co ten");
+      notify.error("Cần ít nhất 1 thành viên có tên");
       return false;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // FIX: Stricter email regex (was accepting invalid emails)
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+    // FIX: Check member with email but no name (or vice versa)
+    for (const m of input.members) {
+      const hasName = !!m.name.trim();
+      const hasEmail = !!m.email.trim();
+      if (hasName !== hasEmail) {
+        notify.error(`Thành viên "${hasName ? m.name : "(chưa tên)"}" ${hasName ? "thiếu email" : "có email nhưng thiếu tên"}`);
+        return false;
+      }
+    }
     for (const m of validMembers) {
       if (!m.email.trim()) {
-        notify.error(`Thanh vien "${m.name}" thieu email de gui loi moi`);
+        notify.error(`Thành viên "${m.name}" thiếu email để gửi lời mời`);
         return false;
       }
       if (!emailRegex.test(m.email.trim())) {
-        notify.error(`Email cua "${m.name}" khong hop le: ${m.email}`);
+        notify.error(`Email của "${m.name}" không hợp lệ: ${m.email}`);
         return false;
       }
     }
     if (!input.leaderEmail.trim()) {
-      notify.error("Vui long nhap email nhom truong (de gui mail SMTP)");
+      notify.error("Vui lòng nhập email nhóm trưởng (để gửi mail SMTP)");
       return false;
     }
     if (!emailRegex.test(input.leaderEmail.trim())) {
-      notify.error("Email nhom truong khong hop le");
+      notify.error("Email nhóm trưởng không hợp lệ");
       return false;
     }
     if (!input.leaderSmtpPassword.trim()) {
-      notify.error("Vui long nhap App Password SMTP de gui email loi moi");
+      notify.error("Vui lòng nhập App Password SMTP để gửi email lời mời");
       return false;
+    }
+    // FIX: Gmail App Password format hint (16 lowercase alphanumeric)
+    const smtpPwd = input.leaderSmtpPassword.trim();
+    if (smtpPwd.length < 16) {
+      notify.warning("Gmail App Password thường có 16 ký tự — kiểm tra lại tại myaccount.google.com/apppasswords");
     }
     return true;
   }
@@ -186,8 +213,11 @@ export function InputView() {
       // ===== Poll for pipeline progress every 2.5 seconds =====
       await new Promise<void>((resolve, reject) => {
         const poll = async () => {
+          // FIX: Stop polling if component unmounted
+          if (!activeRef.current) return;
           try {
             const pr = await fetch(`/api/projects/${resultProjectId}/progress`);
+            if (!activeRef.current) return; // check again after await
             if (!pr.ok) {
               // 404 = progress expired or not found — check if project is ready
               if (pr.status === 404) {
