@@ -204,51 +204,58 @@ export async function POST(req: Request) {
     return Response.json({ error: "Leader SMTP app password is required" }, { status: 400 });
   }
 
-  // ===== Create project =====
-  let project;
-  try {
-    project = await db.project.create({
-      data: {
-        topic: input.topic.trim(),
-        description: input.description || "",
-        purpose: input.purpose || "",
-        extraInfo: JSON.stringify(input.extraInfo || {}),
-        leaderName: input.leaderName.trim(),
-        leaderEmail: input.leaderEmail.trim(),
-        leaderSmtpPassword: input.leaderSmtpPassword.trim(),
-        status: "ANALYZING",
-      },
-    });
-  } catch (err) {
+  // FIX: Validate duplicate member names (was causing silent task loss in dedup)
+  const memberNames = input.members.map(m => m.name.toLowerCase().trim());
+  if (new Set(memberNames).size !== memberNames.length) {
     return Response.json(
-      { error: "Failed to create project", details: err instanceof Error ? err.message : "unknown" },
-      { status: 500 }
+      { error: "Có thành viên trùng tên — vui lòng đặt tên khác nhau" },
+      { status: 400 }
     );
   }
 
-  // ===== Create member records =====
+  // FIX: Wrap project + members creation in DB transaction
+  // (was: project created, then members in loop — if member #3 fails, project orphaned)
+  let project;
   let memberRows: { id: string; name: string; email: string; inviteToken: string }[] = [];
   try {
-    for (const m of input.members) {
-      const created = await db.member.create({
+    const result = await db.$transaction(async (tx) => {
+      const p = await tx.project.create({
         data: {
-          projectId: project.id,
-          name: m.name,
-          email: m.email,
-          strengths: m.strengths || "",
-          weaknesses: m.weaknesses || "",
+          topic: input.topic.trim(),
+          description: input.description || "",
+          purpose: input.purpose || "",
+          extraInfo: JSON.stringify(input.extraInfo || {}),
+          leaderName: input.leaderName.trim(),
+          leaderEmail: input.leaderEmail.trim(),
+          leaderSmtpPassword: input.leaderSmtpPassword.trim(),
+          status: "ANALYZING",
         },
       });
-      memberRows.push({
-        id: created.id,
-        name: created.name,
-        email: created.email,
-        inviteToken: created.inviteToken,
-      });
-    }
+      const rows: { id: string; name: string; email: string; inviteToken: string }[] = [];
+      for (const m of input.members) {
+        const created = await tx.member.create({
+          data: {
+            projectId: p.id,
+            name: m.name,
+            email: m.email,
+            strengths: m.strengths || "",
+            weaknesses: m.weaknesses || "",
+          },
+        });
+        rows.push({
+          id: created.id,
+          name: created.name,
+          email: created.email,
+          inviteToken: created.inviteToken,
+        });
+      }
+      return { project: p, memberRows: rows };
+    });
+    project = result.project;
+    memberRows = result.memberRows;
   } catch (err) {
     return Response.json(
-      { error: "Failed to create members", details: err instanceof Error ? err.message : "unknown" },
+      { error: "Failed to create project", details: err instanceof Error ? err.message : "unknown" },
       { status: 500 }
     );
   }
@@ -282,28 +289,37 @@ export async function POST(req: Request) {
         }
       })
         .then(async (result) => {
-          // Persist all sections
-          try {
-            for (const key of SECTION_KEYS) {
-              const content = (result as unknown as Record<string, unknown>)[key];
-              if (content === undefined || content === null) continue;
+          // FIX: Move try-catch INSIDE the loop — one bad section no longer skips the rest
+          let persistedCount = 0;
+          for (const key of SECTION_KEYS) {
+            const content = (result as unknown as Record<string, unknown>)[key];
+            if (content === undefined || content === null) continue;
+            try {
+              const json = JSON.stringify(content);
               const existing = await db.analysis.findUnique({
                 where: { projectId_type: { projectId: project.id, type: key } },
               });
               if (existing) {
                 await db.analysis.update({
                   where: { id: existing.id },
-                  data: { content: JSON.stringify(content), version: { increment: 1 } },
+                  data: { content: json, version: { increment: 1 } },
                 });
               } else {
                 await db.analysis.create({
-                  data: { projectId: project.id, type: key, content: JSON.stringify(content) },
+                  data: { projectId: project.id, type: key, content: json },
                 });
               }
+              persistedCount++;
+            } catch (err) {
+              console.error(`>> [PIPELINE] Failed to persist section "${key}":`, err);
+              appendLog({ level: "error", agentId: "PIPELINE", provider: "pipeline", message: `✗ Failed to persist section "${key}": ${(err as Error).message}` });
             }
+          }
+          appendLog({ level: "success", agentId: "PIPELINE", provider: "pipeline", message: `💾 Persisted ${persistedCount}/${SECTION_KEYS.length} sections` });
 
-            // ===== Save long-term memory (ProjectContext) =====
-            // Store compressed summary so AI can "remember" this project
+          // ===== Save long-term memory (ProjectContext) =====
+          // Store compressed summary so AI can "remember" this project
+          try {
             const summary = {
               topic: input.topic,
               modules: result.analysis?.modules || [],
@@ -338,7 +354,7 @@ export async function POST(req: Request) {
             });
             console.log(`>> [PIPELINE] Long-term memory saved for project ${project.id}`);
           } catch (err) {
-            console.error(`>> [PIPELINE] Failed to save sections/context:`, err);
+            console.error(`>> [PIPELINE] Failed to save context:`, err);
           }
 
           // Update project status

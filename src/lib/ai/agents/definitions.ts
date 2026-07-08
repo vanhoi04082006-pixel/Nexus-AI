@@ -84,13 +84,10 @@ export const AGENTS: AgentDef[] = [
       "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-31b-it:free",
     ],
   },
-  {
-    id: "10", name: "Quality Reviewer", key: "security", required: false, temp: 0.10,
-    models: [
-      "openai/gpt-oss-120b:free", "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "nvidia/nemotron-3-super-120b-a12b:free",
-    ],
-  },
+  // NOTE: Agent 10 (Quality Reviewer) is NOT in this array.
+  // It runs explicitly in Phase 6 via REVIEWER_MODELS (see pipeline/index.ts).
+  // Previously it was here with key:"security" → ran in Phase 3 alongside Agent 09,
+  // overwriting Agent 09's output non-deterministically. Removed to fix that bug.
 ];
 
 export const REVIEWER_MODELS = [

@@ -81,7 +81,7 @@ export async function PUT(
         actorName: access.name,
         actorEmail: access.email,
         actorRole: "Leader",
-        actionUrl: `/?p=${id}&token=${token}&tab=${body.section}`,
+        actionUrl: `/?p=${id}&tab=${body.section}`,
         actionLabel: "Mở Section",
       });
     } catch { /* non-fatal */ }

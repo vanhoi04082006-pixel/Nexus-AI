@@ -59,10 +59,12 @@ export async function generateTasks(
       if (rawTasks && rawTasks.length > 0) {
         // DEDUP — applied to ALL code paths (was missing before, causing duplicate tasks)
         // Normalize title for fuzzy matching (lowercase, trim, remove extra spaces, remove punctuation)
+        // FIX: Use Unicode-aware regex \p{L}\p{N} to preserve Vietnamese diacritics
+        // (was [^\w\s] which is ASCII-only → strips ạ ố ế ư ơ đ → false dedup)
         const normalize = (s: string) =>
           (s || "").toLowerCase().trim()
             .replace(/\s+/g, " ")
-            .replace(/[^\w\s]/g, "");
+            .replace(/[^\p{L}\p{N}\s]/gu, "");
         const seen = new Set<string>();
         const uniqueTasks = rawTasks.filter((t) => {
           const titleNorm = normalize(t.title || "");

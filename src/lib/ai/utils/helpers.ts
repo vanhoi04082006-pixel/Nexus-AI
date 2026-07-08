@@ -16,10 +16,17 @@ export function isValidSchema(d: unknown, k: SectionType): boolean {
     test: ["testStrategy", "unitTests"],
     security: ["threats", "authFlow"],
   };
+  // FIX: Reject unknown section keys (was returning true → garbage keys polluted merge)
+  const required = MIN_KEYS[k];
+  if (!required) return false; // unknown section → reject
   const obj = d as Record<string, unknown>;
-  const keys = MIN_KEYS[k] || [];
-  return keys.every((key) => key in obj);
+  return required.every((key) => key in obj);
 }
+
+/** Set of valid section keys — used to filter reviewer output */
+export const VALID_SECTION_KEYS: Set<SectionType> = new Set([
+  "analysis", "hr", "sprint", "design", "uml", "docs", "git", "test", "security",
+]);
 
 export function isEmptyObj(o: unknown): boolean {
   if (!o || typeof o !== "object") return true;

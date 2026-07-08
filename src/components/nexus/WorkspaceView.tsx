@@ -1,7 +1,7 @@
 "use client";
 
 import { notify } from "@/lib/notify";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Loader2,
   Crown,
+  AlertTriangle,
   LogOut,
   Globe,
   Copy,
@@ -106,6 +107,10 @@ export function WorkspaceView() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // FIX: Track load error to avoid infinite spinner on failure (was showing spinner forever)
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // FIX: Race condition guard — if projectId changes fast, ignore stale fetch results
+  const loadTokenRef = useRef(0);
 
   // Fetch public URL (for share link in emails)
   useEffect(() => {
@@ -119,9 +124,12 @@ export function WorkspaceView() {
 
   const isLeader = access?.role === "leader";
 
-  async function loadProject() {
+  // FIX: Stable callback with race condition guard (loadTokenRef)
+  const loadProject = useCallback(async () => {
     if (!projectId || !token) return;
+    const myToken = ++loadTokenRef.current;
     setLoadingProject(true);
+    setLoadError(null);
     try {
       const resp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
       if (!resp.ok) {
@@ -129,6 +137,8 @@ export function WorkspaceView() {
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
       const data = await resp.json();
+      // FIX: Ignore stale fetch results (projectId changed while fetching)
+      if (myToken !== loadTokenRef.current) return;
       setAccess(data.access);
       setProject(data.project);
       setResult(data.result);
@@ -137,15 +147,18 @@ export function WorkspaceView() {
       setTasks(data.tasks || []);
       setProposals(data.proposals || []);
     } catch (err) {
-      notify.error(err instanceof Error ? err.message : "Khong tai duoc du an");
+      if (myToken !== loadTokenRef.current) return;
+      const msg = err instanceof Error ? err.message : "Khong tai duoc du an";
+      setLoadError(msg);
+      notify.error(msg);
     } finally {
-      setLoadingProject(false);
+      if (myToken === loadTokenRef.current) setLoadingProject(false);
     }
-  }
+  }, [projectId, token]);
 
   useEffect(() => {
     loadProject();
-  }, [projectId, token]);
+  }, [loadProject]);
 
   async function handleInitialize() {
     if (!projectId || !token) return;
@@ -270,6 +283,16 @@ export function WorkspaceView() {
   }
 
   function handleLogout() {
+    // FIX: Reset workspace state to prevent stale data leaking between projects
+    setProject(null);
+    setResult(null);
+    setMembers([]);
+    setMessages([]);
+    setTasks([]);
+    setEmails([]);
+    setProposals([]);
+    setAccess(null);
+    setLoadingProject(false);
     setView("home");
     setRoute(null, null);
     window.history.pushState({}, "", "/");
@@ -301,6 +324,37 @@ export function WorkspaceView() {
     } finally {
       setDeleting(false);
     }
+  }
+
+  // FIX: Show error state if load failed (was infinite spinner on failure)
+  if (loadError) {
+    return (
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-card border border-destructive/30 rounded-xl p-6 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-7 h-7 text-destructive" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold mb-1">Không tải được dự án</h2>
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => loadProject()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" /> Thử lại
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> Về trang chủ
+            </button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (loadingProject || !project || !result) {

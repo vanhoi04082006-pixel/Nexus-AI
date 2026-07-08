@@ -10,7 +10,7 @@ import {
 } from "../config/constants";
 import { AGENTS, REVIEWER_MODELS, type AgentDef } from "../agents/definitions";
 import { PROMPT_MAP } from "../prompts";
-import { buildCtx, buildReviewSummary, isValidSchema } from "../utils/helpers";
+import { buildCtx, buildReviewSummary, isValidSchema, VALID_SECTION_KEYS } from "../utils/helpers";
 import { callAndParse } from "./runner";
 import { fallback } from "./fallback";
 
@@ -143,9 +143,17 @@ export async function runPipeline(
     if (!results[ag.key]) {
       const i = AGENTS.indexOf(ag);
       appendLog({ level: "warn", agentId: ag.id, provider: "fallback", message: `▷ FALLBACK: ${ag.name} → using static fallback data` });
-      (results as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
-      onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Fallback)`, index: i, total });
-      appendLog({ level: "success", agentId: ag.id, provider: "fallback", message: `✓ [AGENT-${ag.id}] ${ag.name} → done (fallback)` });
+      // FIX: Wrap fallback in try-catch — if it throws, pipeline doesn't crash
+      // (previously one bad fallback killed all 9 sections)
+      try {
+        (results as Record<string, unknown>)[ag.key] = fallback(ag.key, input, results);
+        onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Fallback)`, index: i, total });
+        appendLog({ level: "success", agentId: ag.id, provider: "fallback", message: `✓ [AGENT-${ag.id}] ${ag.name} → done (fallback)` });
+      } catch (fbErr) {
+        appendLog({ level: "error", agentId: ag.id, provider: "fallback", message: `✗ [AGENT-${ag.id}] fallback threw: ${(fbErr as Error).message}` });
+        (results as Record<string, unknown>)[ag.key] = {}; // last-resort empty object (UI shows "no data" instead of crash)
+        onProgress?.({ type: "agent_done", id: ag.id, name: `${ag.name} (Fallback)`, index: i, total });
+      }
     }
   }
 
@@ -223,7 +231,9 @@ export async function runPipeline(
       }
 
       // Bổ sung: nếu reviewer trả thêm sections mà results không có (vd test/security)
+      // FIX: Filter to VALID_SECTION_KEYS only (was accepting garbage keys)
       for (const key of Object.keys(rev) as SectionType[]) {
+        if (!VALID_SECTION_KEYS.has(key)) continue; // skip unknown keys
         if (!merged[key] && rev[key] != null && isValidSchema(rev[key], key)) {
           merged[key] = rev[key];
           mergeCount++;

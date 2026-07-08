@@ -111,7 +111,7 @@ export async function POST(
       senderRole: access.role === "leader" ? "Leader" : (proposal.member?.role || "Member"),
       recipientEmail: project?.leaderEmail || null,
       priority: "normal",
-      actionUrl: `/?p=${id}&token=${token}&tab=history`,
+      actionUrl: `/?p=${id}&tab=history`,
       actionLabel: "Xem Proposal",
       extra: { section: body.section, proposalId: proposal.id },
     });
@@ -127,7 +127,7 @@ export async function POST(
         actorName: access.name,
         actorEmail: access.email,
         actorRole: access.role === "leader" ? "Leader" : "Member",
-        actionUrl: `/?p=${id}&token=${token}&tab=history`,
+        actionUrl: `/?p=${id}&tab=history`,
         actionLabel: "Xem Proposal",
       });
     } catch { /* non-fatal */ }

@@ -97,7 +97,7 @@ export async function PUT(
       priority: isDone ? "normal" : "low",
       relatedTaskId: taskId,
       relatedTaskTitle: updated.title,
-      actionUrl: `/?p=${id}&token=${token}&tab=tasks`,
+      actionUrl: `/?p=${id}&tab=tasks`,
       actionLabel: "Mở Task",
       extra: { oldStatus: task.status, newStatus: body.status },
     });
@@ -117,7 +117,7 @@ export async function PUT(
         actorRole: access.role === "leader" ? "Leader" : "Member",
         relatedTaskId: taskId,
         relatedTaskTitle: updated.title,
-        actionUrl: `/?p=${id}&token=${token}&tab=tasks`,
+        actionUrl: `/?p=${id}&tab=tasks`,
         actionLabel: "Mở Task",
       });
     } catch { /* non-fatal */ }

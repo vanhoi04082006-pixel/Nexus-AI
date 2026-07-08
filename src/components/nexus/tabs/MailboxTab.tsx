@@ -44,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface MailItem {
   id: string;
@@ -460,7 +461,7 @@ export function MailboxTab() {
                   {/* Body */}
                   <div
                     className="text-xs text-foreground/90 leading-relaxed prose prose-invert prose-sm max-w-none mb-3 max-h-[300px] overflow-y-auto nexus-scroll"
-                    dangerouslySetInnerHTML={{ __html: selected.bodyHtml || `<pre>${selected.bodyText}</pre>` }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(selected.bodyHtml || `<pre>${selected.bodyText}</pre>`) }}
                   />
 
                   {/* Attachments */}
@@ -618,7 +619,7 @@ function ComposeDialog({
       setShowCcBcc(false);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}</blockquote>`;
+          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}</blockquote>`;
         }
       }, 100);
     } else if (mode === "replyAll" && parent) {
@@ -629,7 +630,7 @@ function ComposeDialog({
       setShowCcBcc(parent.ccEmails.length > 0);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}</blockquote>`;
+          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}</blockquote>`;
         }
       }, 100);
     } else if (mode === "forward" && parent) {
@@ -639,7 +640,7 @@ function ComposeDialog({
       setSubject(parent.subject.startsWith("Fwd:") ? parent.subject : `Fwd: ${parent.subject}`);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br>---------- Forwarded message ----------<br>From: ${parent.fromName} &lt;${parent.fromEmail}&gt;<br>Date: ${fmtDate(parent.sentAt || parent.createdAt)}<br>Subject: ${parent.subject}<br><br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}`;
+          bodyRef.current.innerHTML = `<br><br>---------- Forwarded message ----------<br>From: ${parent.fromName} &lt;${parent.fromEmail}&gt;<br>Date: ${fmtDate(parent.sentAt || parent.createdAt)}<br>Subject: ${parent.subject}<br><br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}`;
         }
       }, 100);
     } else {
@@ -739,7 +740,7 @@ function ComposeDialog({
       });
       const data = await resp.json();
       if (resp.ok && data.rewritten) {
-        if (bodyRef.current) bodyRef.current.innerHTML = data.rewritten;
+        if (bodyRef.current) bodyRef.current.innerHTML = sanitizeHtml(data.rewritten);
         notify.success(`AI đã viết lại (chế độ: ${AI_MODES.find((m) => m.id === aiMode)?.label})`);
       } else {
         notify.error(data.error || "AI rewrite thất bại");
