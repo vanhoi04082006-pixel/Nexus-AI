@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================
 REM  NEXUS AI - Global RUN command (Windows)
-REM  Type `run` from project root to start the whole system.
-REM  Delegates to scripts/run.js (cross-platform, self-contained).
+REM  Type `run` from project root = start with TUNNEL (public URL).
+REM  Type `bun run dev` = start Next.js ONLY (no tunnel, localhost).
 REM ============================================================
 
-node "%~dp0scripts\run.js" %*
+call "%~dp0scripts\run-local.bat" %*
