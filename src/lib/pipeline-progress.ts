@@ -290,6 +290,16 @@ export function initInitialize(projectId: string): InitProgress {
     startedAt: Date.now(),
   };
   initMap.set(projectId, p);
+  // FIX: Watchdog — auto-fail stuck init after 30 min (was leaking memory if never finished)
+  setTimeout(() => {
+    const stuck = initMap.get(projectId);
+    if (stuck && stuck.status === "running") {
+      stuck.status = "error";
+      stuck.error = "Task generation timed out (30 min max)";
+      stuck.finishedAt = Date.now();
+      setTimeout(() => initMap.delete(projectId), 60000);
+    }
+  }, 30 * 60 * 1000); // 30 min
   return p;
 }
 

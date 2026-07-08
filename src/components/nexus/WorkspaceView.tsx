@@ -183,7 +183,9 @@ export function WorkspaceView() {
       // Poll for completion with progress messages
       await new Promise<void>((resolve, reject) => {
         let attempts = 0;
-        const maxAttempts = 120;
+        // FIX: Increase maxAttempts 120 → 360 (was 5 min timeout, task gen can take 15+ min with rate-limit)
+        // 360 attempts × 2.5s = 15 min max — enough for slow AI with 429 retries
+        const maxAttempts = 360;
         const messages = [
           "AI đang đọc phân tích dự án + nhân sự + sprint...",
           "AI đang phân chia công việc cho từng thành viên...",
@@ -211,8 +213,8 @@ export function WorkspaceView() {
                     return;
                   }
                 }
-                if (attempts > 5) {
-                  reject(new Error("Khong the khoi tao todolist — server bi crash. Thu lai."));
+                if (attempts > 10) {
+                  reject(new Error("Không thể khởi tạo todolist — server bị crash. Thử lại."));
                   return;
                 }
                 setTimeout(poll, 2500);
@@ -234,18 +236,21 @@ export function WorkspaceView() {
               setInitProgress(`Hoàn thành! ${prog.taskCount || ""} tasks đã tạo.`);
               resolve();
             } else if (prog.status === "error") {
-              reject(new Error(prog.error || "Task generation that bai"));
+              reject(new Error(prog.error || "Task generation thất bại"));
             } else if (attempts >= maxAttempts) {
-              reject(new Error("Timeout — task generation qua lau"));
+              reject(new Error(`Timeout — task generation quá lâu (${Math.round(maxAttempts * 2.5 / 60)} phút). Kiểm tra Live Log Console.`));
             } else {
-              setTimeout(poll, 2500);
+              // FIX: Adaptive poll — faster when AI is active (logs growing), slower when idle
+              const lastLogCount = prog.logs?.length || 0;
+              const interval = lastLogCount > 5 ? 2000 : 3000; // 2s if active, 3s if idle
+              setTimeout(poll, interval);
             }
           } catch (err) {
             // Network error (server crashed) — retry
-            if (attempts < 10) {
+            if (attempts < 15) {
               setTimeout(poll, 3000);
             } else {
-              reject(err instanceof Error ? err : new Error("Loi poll"));
+              reject(err instanceof Error ? err : new Error("Lỗi poll"));
             }
           }
         };
