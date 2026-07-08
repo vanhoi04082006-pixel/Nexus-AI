@@ -210,10 +210,15 @@ export function HomeView() {
 
   // FIX: Removed dead variable `userToken` (was declared but never used)
 
+  // FIX: Use ref for projects to avoid infinite re-render loops.
+  // Previous code had `useCallback(..., [projects])` + `useEffect(..., [projects, callbacks])`
+  // → setProjects → projects change → callbacks recreated → effect re-runs → loadProjects → loop.
+  const projectsRef = useRef<ProjectHistoryItem[]>([]);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
+
   const loadActivities = useCallback(async () => {
-    // Find the leader token from the first project (the Home view lists all user's projects)
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/activity?token=${encodeURIComponent(token)}&limit=15`);
       if (resp.ok) {
@@ -221,11 +226,11 @@ export function HomeView() {
         setActivities(data.activities || []);
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
   const loadSystemStatus = useCallback(async () => {
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/status?token=${encodeURIComponent(token)}`);
       if (resp.ok) {
@@ -233,11 +238,11 @@ export function HomeView() {
         setSystemStatus(data);
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
   const loadDashboardTasks = useCallback(async () => {
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/tasks?token=${encodeURIComponent(token)}&filter=all`);
       if (resp.ok) {
@@ -246,20 +251,26 @@ export function HomeView() {
         setTaskCounts(data.counts || { total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
+  // FIX: Load projects ONCE on mount (was [projects] → infinite loop)
   useEffect(() => {
     loadProjects();
-    // Poll notifications every 30s — FIX: use ref to avoid stale closure on `projects`
-    // (was: empty deps → loadNotifications captured projects=[] → never loaded)
+  }, []); // empty deps — run once
+
+  // FIX: Poll notifications every 30s — separate effect, stable deps
+  useEffect(() => {
     loadNotifications();
     const notifInterval = setInterval(loadNotifications, 30000);
     return () => clearInterval(notifInterval);
-  }, [projects]); // re-run when projects change (so loadNotifications sees fresh data)
+  }, []); // empty deps — loadNotifications reads projectsRef
 
-  // Load dashboard widgets once projects are available
+  // Load dashboard widgets ONCE when projects first become available
+  // FIX: Use a ref flag to run only once, not on every projects change
+  const widgetsLoadedRef = useRef(false);
   useEffect(() => {
-    if (projects.length > 0) {
+    if (projects.length > 0 && !widgetsLoadedRef.current) {
+      widgetsLoadedRef.current = true;
       loadActivities();
       loadSystemStatus();
       loadDashboardTasks();
@@ -267,8 +278,9 @@ export function HomeView() {
   }, [projects, loadActivities, loadSystemStatus, loadDashboardTasks]);
 
   // Realtime WebSocket for dashboard widgets (activity:new, task:update, status:update)
+  // FIX: Use token from projectsRef (stable callbacks) — was reconnecting on every projects change
   useEffect(() => {
-    const token = projects[0]?.leaderToken;
+    const token = projectsRef.current[0]?.leaderToken;
     if (!token) return;
     const socket = io("/?XTransformPort=3002", { transports: ["websocket", "polling"] });
     socketRef.current = socket;
@@ -295,7 +307,7 @@ export function HomeView() {
       socketRef.current = null;
       clearInterval(interval);
     };
-  }, [projects, loadActivities, loadDashboardTasks, loadSystemStatus]);
+  }, [loadActivities, loadDashboardTasks, loadSystemStatus]); // stable callbacks
 
   async function loadNotifications() {
     try {
