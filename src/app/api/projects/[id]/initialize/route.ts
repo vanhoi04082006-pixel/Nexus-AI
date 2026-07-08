@@ -7,6 +7,7 @@ import { generateTasks } from "@/lib/ai";
 import { resolveAccess, requireLeader } from "@/lib/access";
 import { sendTaskAssignedEmail } from "@/lib/email";
 import { getInitialize } from "@/lib/pipeline-progress";
+import type { LogEntry } from "@/lib/pipeline-progress";
 import {
   logActivity,
   updateAgentStatus,
@@ -236,6 +237,18 @@ export async function POST(
               provider: "pipeline",
               message: `✅ INIT COMPLETED — ${savedCount} task(s) đã lưu, email đã gửi`,
             });
+            // FIX: Capture full init logs BEFORE finishInitialize cleans up (for HistoryTab)
+            const initLogs = getInitialize(id);
+            const logCount = initLogs?.logs?.length || 0;
+            const fullInitLogs = initLogs?.logs?.length
+              ? initLogs.logs.map((l: LogEntry) => {
+                  const time = new Date(l.ts).toLocaleTimeString("vi-VN");
+                  const level = l.level.toUpperCase().padEnd(7);
+                  const model = l.model ? ` [${l.model.substring(0, 30)}]` : "";
+                  const keyIdx = l.keyIndex != null ? ` Key#${l.keyIndex}` : "";
+                  return `${time} ${level}${model}${keyIdx} ${l.message}`;
+                }).join("\n")
+              : "";
             // Refresh cached task statistics for the dashboard
             try { await refreshTaskStatistics(id); } catch { /* non-fatal */ }
             // Mark AI agent as online again + pipeline as success
@@ -265,15 +278,18 @@ export async function POST(
                 actorRole: "AI Agent",
                 agentId: "TASK",
               });
+              // FIX: Save full live logs to details (viewable in HistoryTab detail modal)
+              const summary = `✅ ${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên. Tasks phân bổ theo vai trò: ${input.members.map((m) => `${m.name}(${tasks.filter((t) => t.assigneeName === m.name).length})`).join(", ")}`;
               await logActivity({
                 projectId: id,
                 type: "AI_AGENT_DONE",
                 status: "SUCCESS",
                 title: `Sinh todolist thành công`,
-                details: `✅ ${savedCount} task đã lưu vào database. Email thông báo đã gửi ${tasksByMember.size} thành viên. Tasks phân bổ theo vai trò: ${input.members.map((m) => `${m.name}(${tasks.filter((t) => t.assigneeName === m.name).length})`).join(", ")}`,
+                details: `${summary}\n\n═══════════════════════════════════════════\nLIVE LOG (${logCount} lines):\n═══════════════════════════════════════════\n${fullInitLogs}`,
                 actorName: "Sprint Planner",
                 actorRole: "AI Agent",
                 agentId: "TASK",
+                logCount,
               });
             } catch { /* non-fatal */ }
           })
@@ -286,22 +302,35 @@ export async function POST(
               provider: "pipeline",
               message: `❌ INIT FAILED — ${msg}`,
             });
+            // FIX: Capture full init logs before cleanup (for HistoryTab)
+            const initErrLogs = getInitialize(id);
+            const errLogCount = initErrLogs?.logs?.length || 0;
+            const fullErrLogs = initErrLogs?.logs?.length
+              ? initErrLogs.logs.map((l: LogEntry) => {
+                  const time = new Date(l.ts).toLocaleTimeString("vi-VN");
+                  const level = l.level.toUpperCase().padEnd(7);
+                  const model = l.model ? ` [${l.model.substring(0, 30)}]` : "";
+                  const keyIdx = l.keyIndex != null ? ` Key#${l.keyIndex}` : "";
+                  return `${time} ${level}${model}${keyIdx} ${l.message}`;
+                }).join("\n")
+              : "";
             // Mark AI agent as error + pipeline as failed (for the live dashboard)
             try {
               await updateAgentStatus("TASK", "Sprint Planner", "Task Generator", "error", `Failed: ${msg}`, id);
               await updatePipelineStatus(id, "failed", "Sprint Planner", 0, "TASK_GEN", msg);
             } catch { /* non-fatal */ }
-            // Save activity log (AI agent error)
+            // Save activity log (AI agent error) — FIX: include full logs
             try {
               await logActivity({
                 projectId: id,
                 type: "AI_AGENT_ERROR",
                 status: "FAILED",
                 title: `Sinh todolist thất bại`,
-                details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+                details: `❌ Lỗi: ${msg}\n\n═══════════════════════════════════════════\nLIVE LOG (${errLogCount} lines):\n═══════════════════════════════════════════\n${fullErrLogs}`,
                 actorName: "Sprint Planner",
                 actorRole: "AI Agent",
                 agentId: "TASK",
+                logCount: errLogCount,
               });
             } catch { /* non-fatal */ }
             finishInitialize(id, undefined, msg);
