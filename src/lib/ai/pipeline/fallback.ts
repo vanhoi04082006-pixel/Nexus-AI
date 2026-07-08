@@ -59,32 +59,131 @@ export function fallback(
       };
     case "design":
       return { architectureDesc: "N/A", dbTables: [], apiEndpoints: [], folderStructure: "N/A" };
-    case "uml":
-      const tables = (results.design?.dbTables || []).map((t) => t.name);
+    case "uml": {
+      const dbTables = results.design?.dbTables || [];
       const actors = (results.analysis?.actors || []).map((a) => a.name);
       const features = (results.analysis?.features || []).map((f) => f.name);
       const modules = results.analysis?.modules || [];
-      const useCaseActors = actors.length > 0 ? actors : ["User"];
-      const useCaseFeatures = features.length > 0 ? features : modules.length > 0 ? modules : ["Core"];
-      const useCaseLines = useCaseActors.map((a, i) =>
-        useCaseFeatures.map((f, j) => `Actor${i}["${a}"] --> F${j}["${f}"]`).join("\n    ")
-      ).join("\n    ");
-      const classTables = tables.length > 0 ? tables : modules.length > 0 ? modules : ["Core"];
-      const classLines = classTables.map((t) =>
-        `class ${t.replace(/[^A-Za-z0-9]/g, "")} {\n    +int id\n    +string name\n    +DateTime createdAt\n}`
-      ).join("\n\n");
-      const classRelations = classTables.length > 1
-        ? `\n${classTables[0].replace(/[^A-Za-z0-9]/g, "")} "1" --> "*" ${classTables[1].replace(/[^A-Za-z0-9]/g, "")} : "has"` : "";
-      const erdFallback = tables.length > 0
-        ? `erDiagram\n${tables.map((t) => `    ${t.replace(/[^A-Za-z0-9_]/g, "_")} {\n        int id PK\n        string name\n    }`).join("\n")}\n${tables.length > 1 ? `    ${tables[0].replace(/[^A-Za-z0-9_]/g, "_")} ||--o{ ${tables[1].replace(/[^A-Za-z0-9_]/g, "_")} : "has"` : ""}`
-        : `erDiagram\n    CORE {\n        int id PK\n        string name\n    }`;
+      const apiEndpoints = results.design?.apiEndpoints || [];
+      const techFe = results.analysis?.techStack?.frontend?.name || "Frontend";
+      const techBe = results.analysis?.techStack?.backend?.name || "Backend";
+
+      // ASCII-safe names for Mermaid node IDs
+      const ascii = (s: string) => s.replace(/[^A-Za-z0-9]/g, "");
+      const ascii_ = (s: string) => s.replace(/[^A-Za-z0-9_]/g, "_");
+
+      // ===== USE CASE (graph TD) — rich with actors, features, include/extend =====
+      const useCaseActors = actors.length > 0 ? actors : ["User", "Admin"];
+      const useCaseFeatures = features.length > 0 ? features : modules.length > 0 ? modules : ["Đăng ký", "Đăng nhập", "Quản lý", "Báo cáo"];
+      let useCaseLines = "";
+      useCaseActors.forEach((actor, i) => {
+        // Each actor connects to relevant features (distribute evenly)
+        const featuresPerActor = Math.max(2, Math.ceil(useCaseFeatures.length / useCaseActors.length));
+        const startIdx = i * featuresPerActor;
+        for (let j = startIdx; j < Math.min(startIdx + featuresPerActor, useCaseFeatures.length); j++) {
+          useCaseLines += `    Actor${i}["${actor}"] --> UC${j}["${useCaseFeatures[j]}"]\n`;
+        }
+      });
+      // Add include/extend relationships
+      if (useCaseFeatures.length >= 2) {
+        useCaseLines += `    UC0["${useCaseFeatures[0]}"] -.->|extend| UC1["${useCaseFeatures[1]}"]\n`;
+      }
+      if (useCaseFeatures.length >= 3) {
+        useCaseLines += `    UC0["${useCaseFeatures[0]}"] -->|include| UC2["${useCaseFeatures[2]}"]\n`;
+      }
+      const useCaseFallback = `graph TD\n    ${useCaseLines.trim()}`;
+
+      // ===== CLASS DIAGRAM — use actual DB columns, multiple relations =====
+      const classTables = dbTables.length > 0 ? dbTables : modules.slice(0, 6).map((m: string) => ({ name: m, columns: ["id: int", "name: string", "createdAt: DateTime"], relations: [] as string[] }));
+      let classLines = "";
+      let classRels = "";
+      const classNames = classTables.map((t) => ascii(t.name));
+      classTables.forEach((t, i) => {
+        const cols = (t.columns || ["id: int", "name: string", "createdAt: DateTime"]).slice(0, 5);
+        const attrLines = cols.map((c: string) => `    +${c}`).join("\n");
+        classLines += `class ${classNames[i]} {\n${attrLines}\n    +findAll()\n    +findById(id)\n    +create(data)\n    +update(id, data)\n    +delete(id)\n}\n\n`;
+      });
+      // Generate relations between consecutive tables
+      for (let i = 0; i < classNames.length - 1; i++) {
+        classRels += `${classNames[i]} "1" --> "*" ${classNames[i + 1]} : "has"\n`;
+      }
+      // Add inheritance if 3+ tables
+      if (classNames.length >= 3) {
+        classRels += `${classNames[0]} <|-- ${classNames[2]} : "extends"\n`;
+      }
+      const classFallback = `classDiagram\n${classLines}${classRels.trim()}`;
+
+      // ===== ERD — use actual DB columns + relations =====
+      let erdTables = "";
+      let erdRels = "";
+      if (dbTables.length > 0) {
+        dbTables.forEach((t) => {
+          const cols = (t.columns || ["id: int", "name: string"]).slice(0, 5);
+          const colLines = cols.map((c: string) => {
+            const parts = c.split(":").map((s: string) => s.trim());
+            const colName = parts[0] || "field";
+            const colType = (parts[1] || "string").toLowerCase();
+            const isPk = colName.toLowerCase() === "id";
+            const isFk = colName.toLowerCase().includes("id") && !isPk;
+            const modifier = isPk ? " PK" : isFk ? " FK" : "";
+            return `        ${colType} ${ascii_(colName)}${modifier}`;
+          }).join("\n");
+          erdTables += `    ${ascii_(t.name)} {\n${colLines}\n    }\n`;
+        });
+        // Generate FK relations
+        for (let i = 0; i < dbTables.length - 1; i++) {
+          erdRels += `    ${ascii_(dbTables[i].name)} ||--o{ ${ascii_(dbTables[i + 1].name)} : "has"\n`;
+        }
+      } else {
+        // Fallback for no DB tables — use modules
+        const erdTableNames = modules.length > 0 ? modules.slice(0, 5) : ["User", "Product", "Order", "OrderItem"];
+        erdTableNames.forEach((m) => {
+          erdTables += `    ${ascii_(m)} {\n        int id PK\n        string name\n        datetime created_at\n    }\n`;
+        });
+        for (let i = 0; i < erdTableNames.length - 1; i++) {
+          erdRels += `    ${ascii_(erdTableNames[i])} ||--o{ ${ascii_(erdTableNames[i + 1])} : "has"\n`;
+        }
+      }
+      const erdFallback = `erDiagram\n${erdTables}${erdRels.trim()}`;
+
+      // ===== SEQUENCE — 2 flows, 5+ participants =====
       const seqActor = actors.length > 0 ? actors[0] : "User";
+      const firstApi = apiEndpoints[0]?.path || "/api/resource";
+      const secondApi = apiEndpoints[1]?.path || "/api/resource/:id";
+      const sequenceFallback = `sequenceDiagram
+    participant U as ${seqActor}
+    participant FE as ${techFe}
+    participant API as ${techBe} API
+    participant SVC as Service
+    participant DB as Database
+
+    %% Flow 1: Create ${firstApi}
+    U->>FE: Submit form
+    FE->>API: POST ${firstApi}
+    API->>SVC: validate + process
+    SVC->>DB: INSERT
+    DB-->>SVC: Record created
+    SVC-->>API: Success response
+    API-->>FE: 201 Created
+    FE-->>U: Show success
+
+    %% Flow 2: Get ${secondApi}
+    U->>FE: View detail
+    FE->>API: GET ${secondApi}
+    API->>SVC: findById
+    SVC->>DB: SELECT
+    DB-->>SVC: Record found
+    SVC-->>API: Data
+    API-->>FE: 200 OK
+    FE-->>U: Display detail`;
+
       return {
-        useCase: results.uml?.useCase || `graph TD\n    ${useCaseLines}`,
-        classDiagram: results.uml?.classDiagram || `classDiagram\n${classLines}${classRelations}`,
+        useCase: results.uml?.useCase || useCaseFallback,
+        classDiagram: results.uml?.classDiagram || classFallback,
         erd: results.uml?.erd || erdFallback,
-        sequence: results.uml?.sequence || `sequenceDiagram\n    participant U as ${seqActor}\n    participant S as System\n    U->>S: Request\n    S-->>U: Response`,
+        sequence: results.uml?.sequence || sequenceFallback,
       };
+    }
     case "docs": {
       const techFe = results.analysis?.techStack?.frontend?.name || "React";
       const techBe = results.analysis?.techStack?.backend?.name || "Node.js";

@@ -15,6 +15,37 @@ import { JFix } from "../utils/jfix";
 
 const limiter = pLimit(MAX_CONCURRENCY);
 
+/**
+ * Detect AI degeneration — repeated text patterns.
+ * Free models sometimes get stuck repeating a word/phrase thousands of times.
+ * Returns true if repetition detected (output is garbage).
+ */
+function detectRepetition(dataStr: string): boolean {
+  if (!dataStr || dataStr.length < 100) return false;
+  // Check 1: any single word (4+ chars) appears more than 30 times
+  const words = dataStr.match(/\b\w{4,}\b/g) || [];
+  const wordCounts: Record<string, number> = {};
+  for (const w of words) {
+    wordCounts[w] = (wordCounts[w] || 0) + 1;
+    if (wordCounts[w] > 30) {
+      return true; // degeneration detected
+    }
+  }
+  // Check 2: any 20-char substring repeats more than 10 times
+  if (dataStr.length > 500) {
+    const seen: Record<string, number> = {};
+    for (let i = 0; i < dataStr.length - 20; i += 10) {
+      const sub = dataStr.substring(i, i + 20);
+      seen[sub] = (seen[sub] || 0) + 1;
+      if (seen[sub] > 10) return true;
+    }
+  }
+  // Check 3: ratio of unique chars too low (repetitive content)
+  const uniqueChars = new Set(dataStr.split("")).size;
+  if (dataStr.length > 500 && uniqueChars < 15) return true;
+  return false;
+}
+
 export interface ParseResult {
   data: unknown;
   model: string;
@@ -101,9 +132,15 @@ export async function callAndParse(
           if (zodResult.success) {
             // ===== Self-Critic =====
             const dataStr = JSON.stringify(zodResult.data);
+            // FIX: Detect AI degeneration (repeated text like "hang hang hang...")
+            // This happens when free models get stuck in a loop — output passes Zod but is garbage
+            const hasRepetition = detectRepetition(dataStr);
             if (dataStr.length < 20 || dataStr === "{}" || dataStr === "[]") {
               console.log(`      [${a}] Self-critic: data too empty, retrying`);
               appendLog({ level: "warn", model, message: `  ⚠ ${model} parsed OK but data nearly empty — retrying (attempt ${a})` });
+            } else if (hasRepetition) {
+              console.log(`      [${a}] Self-critic: detected repetition (degeneration), retrying`);
+              appendLog({ level: "warn", model, message: `  ⚠ ${model} parsed OK but degenerated (repeated text) — retrying (attempt ${a})` });
             } else {
               console.log(`      ✓ ${model} (lan ${a}) [Zod validated + self-critic OK]`);
               appendLog({ level: "success", model, message: `  ✓ ${model} parsed + Zod validated + self-critic OK (attempt ${a})` });
