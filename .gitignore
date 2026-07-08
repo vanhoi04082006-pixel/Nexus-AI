@@ -1,15 +1,64 @@
+# ===== NEXUS AI — .gitignore =====
+
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Next.js
 .next/
-dist/
+out/
 build/
+dist/
+next-env.d.ts
+
+# Production
+*.tsbuildinfo
+
+# Environment
 .env
 .env.local
+.env.*.local
+
+# Database (SQLite — local data, KHÔNG commit)
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+prisma/db/
+
+# Logs
+*.log
 dev.log
 chat-service.log
+notify-service.log
+server.log
+tunnel.log
+
+# Tunnel artifacts
+.public-url
+tunnel-url.txt
+cloudflared.exe
+ngrok.exe
+ngrok
+cloudflared
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Agent worklog + temp
+worklog.md
 agent-ctx/
 tool-results/
-*.log
-.DS_Store
-worklog.md
 upload/
-.public-url
+download/
+
+# Debug
+coverage/
+.nyc_output/
