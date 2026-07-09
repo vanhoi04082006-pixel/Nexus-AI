@@ -45,6 +45,12 @@ const TYPE_ICONS: Record<string, typeof History> = {
   INIT: RefreshCw,
   REFINE: RefreshCw,
   TASK_GEN: FileCode,
+  PROJECT_CREATED: Cpu,
+  SPRINT_CREATED: RefreshCw,
+  TASK_CREATED: FileCode,
+  AI_AGENT_DONE: CheckCircle2,
+  AI_AGENT_ERROR: XCircle,
+  AI_AGENT_START: Cpu,
   SECTION_EDIT: FileCode,
   GITHUB_PUSH: GitBranch,
   EMAIL_SENT: Mail,
@@ -183,7 +189,7 @@ export function HistoryTab() {
             >
               Tất cả ({stats.total})
             </button>
-            {["PIPELINE", "INIT", "REFINE", "SECTION_EDIT", "GITHUB_PUSH", "EMAIL_SENT"].map((type) => {
+            {["PROJECT_CREATED", "SPRINT_CREATED", "TASK_CREATED", "AI_AGENT_DONE", "AI_AGENT_ERROR", "SECTION_EDIT", "GITHUB_PUSH", "EMAIL_SENT"].map((type) => {
               const count = logs.filter((l) => l.type === type).length;
               if (count === 0) return null;
               return (

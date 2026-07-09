@@ -229,8 +229,7 @@ export async function POST(
               /* non-fatal */
             }
 
-            finishInitialize(id, savedCount);
-            console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
+            // FIX: Log COMPLETED BEFORE finishInitialize + capture (so it's included in saved logs)
             appendLog({
               level: "success",
               agentId: "TASK",
@@ -249,6 +248,8 @@ export async function POST(
                   return `${time} ${level}${model}${keyIdx} ${l.message}`;
                 }).join("\n")
               : "";
+            finishInitialize(id, savedCount);
+            console.log(`>> [INIT] Background task generation COMPLETED: ${savedCount} tasks`);
             // Refresh cached task statistics for the dashboard
             try { await refreshTaskStatistics(id); } catch { /* non-fatal */ }
             // Mark AI agent as online again + pipeline as success
