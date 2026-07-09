@@ -246,11 +246,39 @@ export function WorkspaceView() {
               setTimeout(poll, interval);
             }
           } catch (err) {
-            // Network error (server crashed) — retry
-            if (attempts < 15) {
-              setTimeout(poll, 3000);
+            // Network error (server crashed/restarted) — retry with longer delays
+            // FIX: "Failed to fetch" happens when dev server restarts during long task gen.
+            // Instead of failing after 15 retries, check if tasks were saved to DB (server recovered).
+            if (attempts < 30) {
+              // After 10 network errors, check DB directly (server may have recovered + saved tasks)
+              if (attempts > 10 && attempts % 5 === 0) {
+                try {
+                  const projResp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
+                  if (projResp.ok) {
+                    const projData = await projResp.json();
+                    if (projData.tasks && projData.tasks.length > 0) {
+                      setInitProgress(`Hoàn thành! ${projData.tasks.length} tasks đã tạo.`);
+                      resolve();
+                      return;
+                    }
+                  }
+                } catch { /* still down */ }
+              }
+              setTimeout(poll, 4000);
             } else {
-              reject(err instanceof Error ? err : new Error("Lỗi poll"));
+              // FIX: Better error message — check DB one last time before giving up
+              try {
+                const projResp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
+                if (projResp.ok) {
+                  const projData = await projResp.json();
+                  if (projData.tasks && projData.tasks.length > 0) {
+                    setInitProgress(`Hoàn thành! ${projData.tasks.length} tasks đã tạo.`);
+                    resolve();
+                    return;
+                  }
+                }
+              } catch { /* ignore */ }
+              reject(new Error("Mất kết nối server — kiểm tra Live Log Console. Tasks có thể đã được tạo, thử tải lại trang."));
             }
           }
         };
