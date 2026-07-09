@@ -10,6 +10,13 @@ function fixMermaid(code: string): string {
   // CRITICAL: AI often returns literal \n (backslash-n) instead of real newlines.
   s = s.replace(/\\\\n/g, "\n");
   s = s.replace(/\\n/g, "\n");
+  // CRITICAL FIX: AI returns all statements on ONE line separated by spaces.
+  // Mermaid requires NEWLINE between statements. Insert \n before known keywords.
+  // Pattern: after closing "]" or ")" followed by space + keyword → insert newline
+  s = s.replace(/(\])\s+(Actor\d+|UC\d+|F\d+|class\s|erDiagram|sequenceDiagram|graph\s|flowchart\s|participant\s|User\s|Admin\s|Customer\s|classDiagram)/g, "$1\n    $2");
+  s = s.replace(/(---|-->|-.->|<--|\|\|-\||\|\|--)\s+/g, "$1\n    "); // edge endings
+  // Clean up multiple newlines
+  s = s.replace(/\n\s*\n\s*\n+/g, "\n\n");
   // Fix [("text")] → ["text"] (common AI mistake in node labels)
   s = s.replace(/\[\("([^"]*?)"\)\]/g, '["$1"]');
   s = s.replace(/\[\(("[^"]*?")\)\]/g, "[$1]");

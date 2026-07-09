@@ -72,17 +72,34 @@ export function fallback(
       const ascii = (s: string) => s.replace(/[^A-Za-z0-9]/g, "");
       const ascii_ = (s: string) => s.replace(/[^A-Za-z0-9_]/g, "_");
 
-      // ===== USE CASE (graph TD) — rich with actors, features, include/extend =====
-      const useCaseActors = actors.length > 0 ? actors : ["User", "Admin"];
-      const useCaseFeatures = features.length > 0 ? features : modules.length > 0 ? modules : ["Đăng ký", "Đăng nhập", "Quản lý", "Báo cáo"];
+      // ===== USE CASE (graph TD) — detailed, actors connect to RELEVANT features =====
+      const useCaseActors = actors.length > 0 ? actors : ["User", "Admin", "Manager"];
+      const useCaseFeatures = features.length > 0 ? features
+        : modules.length > 0 ? modules
+        : ["Đăng ký tài khoản", "Đăng nhập hệ thống", "Xem danh sách", "Tạo mới bản ghi", "Cập nhật thông tin", "Xóa bản ghi", "Tìm kiếm", "Báo cáo thống kê"];
       let useCaseLines = "";
+      // FIX: Smart assignment — admin/manager gets admin features, user gets user features
       useCaseActors.forEach((actor, i) => {
-        // Each actor connects to relevant features (distribute evenly)
-        const featuresPerActor = Math.max(2, Math.ceil(useCaseFeatures.length / useCaseActors.length));
-        const startIdx = i * featuresPerActor;
-        for (let j = startIdx; j < Math.min(startIdx + featuresPerActor, useCaseFeatures.length); j++) {
-          useCaseLines += `    Actor${i}["${actor}"] --> UC${j}["${useCaseFeatures[j]}"]\n`;
+        const actorLower = actor.toLowerCase();
+        const isAdmin = actorLower.includes("admin") || actorLower.includes("quản trị") || actorLower.includes("quản lý");
+        const isManager = actorLower.includes("manager") || actorLower.includes("quản lý");
+        // Admin/Manager: connect to admin-type features (last half)
+        // User/Member: connect to user-type features (first half)
+        const featuresPerActor = Math.max(2, Math.ceil(useCaseFeatures.length / Math.max(useCaseActors.length, 2)));
+        let startIdx, endIdx;
+        if (isAdmin || isManager) {
+          startIdx = Math.floor(useCaseFeatures.length / 2);
+          endIdx = useCaseFeatures.length;
+        } else {
+          startIdx = 0;
+          endIdx = Math.ceil(useCaseFeatures.length / 2);
         }
+        // Limit to featuresPerActor
+        const assigned = useCaseFeatures.slice(startIdx, endIdx).slice(0, featuresPerActor);
+        assigned.forEach((f, j) => {
+          const realIdx = startIdx + j;
+          useCaseLines += `    Actor${i}["${actor}"] --> UC${realIdx}["${f}"]\n`;
+        });
       });
       // Add include/extend relationships
       if (useCaseFeatures.length >= 2) {
@@ -91,9 +108,12 @@ export function fallback(
       if (useCaseFeatures.length >= 3) {
         useCaseLines += `    UC0["${useCaseFeatures[0]}"] -->|include| UC2["${useCaseFeatures[2]}"]\n`;
       }
+      if (useCaseFeatures.length >= 4) {
+        useCaseLines += `    UC1["${useCaseFeatures[1]}"] -->|include| UC3["${useCaseFeatures[3]}"]\n`;
+      }
       const useCaseFallback = `graph TD\n    ${useCaseLines.trim()}`;
 
-      // ===== CLASS DIAGRAM — use actual DB columns, multiple relations =====
+      // ===== CLASS DIAGRAM — detailed, multiple relationship types =====
       const classTables = dbTables.length > 0 ? dbTables : modules.slice(0, 6).map((m: string) => ({ name: m, columns: ["id: int", "name: string", "createdAt: DateTime"], relations: [] as string[] }));
       let classLines = "";
       let classRels = "";
@@ -103,17 +123,35 @@ export function fallback(
         const attrLines = cols.map((c: string) => `    +${c}`).join("\n");
         classLines += `class ${classNames[i]} {\n${attrLines}\n    +findAll()\n    +findById(id)\n    +create(data)\n    +update(id, data)\n    +delete(id)\n}\n\n`;
       });
-      // Generate relations between consecutive tables
+      // FIX: Generate diverse relationships (not just 1:*)
       for (let i = 0; i < classNames.length - 1; i++) {
-        classRels += `${classNames[i]} "1" --> "*" ${classNames[i + 1]} : "has"\n`;
+        const relType = i % 4;
+        switch (relType) {
+          case 0: // Association with cardinality
+            classRels += `${classNames[i]} "1" --> "*" ${classNames[i + 1]} : "has"\n`;
+            break;
+          case 1: // Composition
+            classRels += `${classNames[i]} *-- ${classNames[i + 1]} : "owns"\n`;
+            break;
+          case 2: // Aggregation
+            classRels += `${classNames[i]} o-- ${classNames[i + 1]} : "contains"\n`;
+            break;
+          case 3: // Dependency
+            classRels += `${classNames[i]} ..> ${classNames[i + 1]} : "uses"\n`;
+            break;
+        }
       }
       // Add inheritance if 3+ tables
       if (classNames.length >= 3) {
         classRels += `${classNames[0]} <|-- ${classNames[2]} : "extends"\n`;
       }
+      // Add 1:1 relationship if 4+ tables
+      if (classNames.length >= 4) {
+        classRels += `${classNames[0]} "1" --> "1" ${classNames[3]} : "belongs to"\n`;
+      }
       const classFallback = `classDiagram\n${classLines}${classRels.trim()}`;
 
-      // ===== ERD — use actual DB columns + relations =====
+      // ===== ERD — detailed, diverse cardinality =====
       let erdTables = "";
       let erdRels = "";
       if (dbTables.length > 0) {
@@ -130,18 +168,38 @@ export function fallback(
           }).join("\n");
           erdTables += `    ${ascii_(t.name)} {\n${colLines}\n    }\n`;
         });
-        // Generate FK relations
+        // FIX: Generate diverse cardinality (1:N, 1:1, N:M, N:1)
         for (let i = 0; i < dbTables.length - 1; i++) {
-          erdRels += `    ${ascii_(dbTables[i].name)} ||--o{ ${ascii_(dbTables[i + 1].name)} : "has"\n`;
+          const relType = i % 3;
+          const t1 = ascii_(dbTables[i].name);
+          const t2 = ascii_(dbTables[i + 1].name);
+          switch (relType) {
+            case 0: erdRels += `    ${t1} ||--o{ ${t2} : "has"\n`; break; // 1:N
+            case 1: erdRels += `    ${t1} ||--|| ${t2} : "belongs to"\n`; break; // 1:1
+            case 2: erdRels += `    ${t1} }o--o{ ${t2} : "associates"\n`; break; // N:M
+          }
         }
       } else {
-        // Fallback for no DB tables — use modules
-        const erdTableNames = modules.length > 0 ? modules.slice(0, 5) : ["User", "Product", "Order", "OrderItem"];
-        erdTableNames.forEach((m) => {
-          erdTables += `    ${ascii_(m)} {\n        int id PK\n        string name\n        datetime created_at\n    }\n`;
+        // Fallback for no DB tables — use modules with realistic schema
+        const erdTableNames = modules.length > 0 ? modules.slice(0, 5) : ["users", "products", "orders", "order_items", "categories"];
+        erdTableNames.forEach((m, i) => {
+          if (i === 0) {
+            erdTables += `    ${ascii_(m)} {\n        int id PK\n        string email\n        string password\n        string role\n        datetime created_at\n    }\n`;
+          } else if (i === 1) {
+            erdTables += `    ${ascii_(m)} {\n        int id PK\n        string name\n        text description\n        decimal price\n        int category_id FK\n    }\n`;
+          } else {
+            erdTables += `    ${ascii_(m)} {\n        int id PK\n        string name\n        datetime created_at\n    }\n`;
+          }
         });
         for (let i = 0; i < erdTableNames.length - 1; i++) {
-          erdRels += `    ${ascii_(erdTableNames[i])} ||--o{ ${ascii_(erdTableNames[i + 1])} : "has"\n`;
+          const relType = i % 3;
+          const t1 = ascii_(erdTableNames[i]);
+          const t2 = ascii_(erdTableNames[i + 1]);
+          switch (relType) {
+            case 0: erdRels += `    ${t1} ||--o{ ${t2} : "has"\n`; break; // 1:N
+            case 1: erdRels += `    ${t1} ||--|| ${t2} : "belongs to"\n`; break; // 1:1
+            case 2: erdRels += `    ${t1} }o--o{ ${t2} : "associates"\n`; break; // N:M
+          }
         }
       }
       const erdFallback = `erDiagram\n${erdTables}${erdRels.trim()}`;
