@@ -72,12 +72,90 @@ const deadModels: Map<string, number> = gc.deadModels ?? new Map<string, number>
 gc.deadModels = deadModels;
 const DEAD_MODEL_COOLDOWN_MS = 120000; // 2 minutes — enough for rate-limit to ease
 
+// ===== Circuit Breaker =====
+// Track consecutive failures per model. After 3 consecutive failures,
+// "open" the circuit (skip model) for a cooldown. After a success,
+// "close" the circuit (reset counter).
+type CircuitState = { failures: number; openUntil: number; totalCalls: number; successes: number };
+const circuitBreakers: Map<string, CircuitState> = (gc as typeof globalThis & { circuitBreakers?: Map<string, CircuitState> }).circuitBreakers ?? new Map<string, CircuitState>();
+(gc as typeof globalThis & { circuitBreakers?: Map<string, CircuitState> }).circuitBreakers = circuitBreakers;
+const CIRCUIT_FAILURE_THRESHOLD = 3;
+const CIRCUIT_COOLDOWN_MS = 180000; // 3 minutes
+
+// ===== Health Score =====
+// Track success rate per model for potential smart routing.
+// health = successes / totalCalls (0.0 - 1.0)
+export function getModelHealth(model: string): { successRate: number; totalCalls: number; avgLatency: number } {
+  const state = circuitBreakers.get(model);
+  if (!state || state.totalCalls === 0) return { successRate: 1.0, totalCalls: 0, avgLatency: 0 };
+  return {
+    successRate: state.successes / state.totalCalls,
+    totalCalls: state.totalCalls,
+    avgLatency: 0, // TODO: track latency if needed
+  };
+}
+
+function recordModelSuccess(model: string): void {
+  let state = circuitBreakers.get(model);
+  if (!state) {
+    state = { failures: 0, openUntil: 0, totalCalls: 0, successes: 0 };
+    circuitBreakers.set(model, state);
+  }
+  state.totalCalls++;
+  state.successes++;
+  state.failures = 0; // reset on success
+  state.openUntil = 0; // close circuit
+}
+
+function recordModelFailure(model: string): void {
+  let state = circuitBreakers.get(model);
+  if (!state) {
+    state = { failures: 0, openUntil: 0, totalCalls: 0, successes: 0 };
+    circuitBreakers.set(model, state);
+  }
+  state.totalCalls++;
+  state.failures++;
+  if (state.failures >= CIRCUIT_FAILURE_THRESHOLD) {
+    state.openUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+    console.log(`  [CIRCUIT BREAKER] ${model} OPENED — ${state.failures} consecutive failures, cooldown ${CIRCUIT_COOLDOWN_MS / 1000}s`);
+    appendLog({
+      level: "warn",
+      provider: "openrouter",
+      model,
+      message: `[CIRCUIT BREAKER] ${model} OPENED — ${state.failures} consecutive failures, skipping for ${CIRCUIT_COOLDOWN_MS / 1000}s`,
+    });
+  }
+}
+
+function isCircuitOpen(model: string): boolean {
+  const state = circuitBreakers.get(model);
+  if (!state || state.openUntil === 0) return false;
+  if (Date.now() > state.openUntil) {
+    // Half-open: allow one attempt
+    state.openUntil = 0;
+    state.failures = 0; // reset to give it another chance
+    console.log(`  [CIRCUIT BREAKER] ${model} HALF-OPEN — allowing retry`);
+    return false;
+  }
+  return true;
+}
+
 /** Check if a model is currently dead (all keys exhausted recently). */
 export function isModelDead(model: string): boolean {
+  // Check circuit breaker first (faster)
+  if (isCircuitOpen(model)) return true;
+  // Then check dead model cache
   const expiry = deadModels.get(model);
   if (!expiry) return false;
   if (Date.now() > expiry) {
-    deadModels.delete(model);
+    deadModels.delete(model); // Auto-recovery: remove from dead list after cooldown
+    console.log(`  [DEAD MODEL] ${model} auto-recovered (cooldown expired)`);
+    appendLog({
+      level: "success",
+      provider: "openrouter",
+      model,
+      message: `[DEAD MODEL] ${model} auto-recovered — back in rotation`,
+    });
     return false;
   }
   return true;
@@ -96,9 +174,18 @@ function markModelDead(model: string, reason: string): void {
 }
 
 function getCacheKey(model: string, messages: { role: string; content: string }[], temperature: number): string {
-  const content = messages.map((m) => `${m.role}:${m.content}`).join("|");
-  return `${model}:${temperature}:${content.substring(0, 500)}`;
+  // Hash both system + user content for cache key
+  // Truncate to 1000 chars for efficiency (longer = more unique but slower hash)
+  const content = messages.map((m) => `${m.role}:${m.content.substring(0, 1000)}`).join("|");
+  return `${model}:${temperature}:${content}`;
 }
+
+// ===== Prompt Cache =====
+// Cache the FULL system prompt per agent+model so we don't re-send
+// 400+ line prompts every time. OpenRouter doesn't charge for cached
+// system prompts, saving tokens.
+const promptCache: Map<string, string> = (gc as typeof globalThis & { promptCache?: Map<string, string> }).promptCache ?? new Map<string, string>();
+(gc as typeof globalThis & { promptCache?: Map<string, string> }).promptCache = promptCache;
 
 export function getCachedResult(key: string): string | null {
   const cached = aiCache.get(key);
@@ -383,6 +470,7 @@ async function callOpenRouterDirect(
         keyIndex: keyIndex + 1,
         message: `✓ [Key #${keyIndex + 1}] ${params.model} → Success`,
       });
+      recordModelSuccess(params.model); // Circuit breaker: record success
       return content as string;
     } catch (e: unknown) {
       if (e && typeof e === "object" && "status" in e) {
@@ -431,6 +519,7 @@ async function callOpenRouterDirect(
   // Only mark model dead on 429 (rate-limited) or 404 (unavailable).
   // Do NOT mark dead on ETIMEDOUT/ENET — model may just be slow, not broken.
   // Also mark dead if saw429 is true (some keys got 429) even if last error was 401.
+  recordModelFailure(params.model); // Circuit breaker: record overall failure
   if (lastError?.status === 404) {
     markModelDead(params.model, "model unavailable (404)");
   } else if (lastError?.status === 429 || saw429) {

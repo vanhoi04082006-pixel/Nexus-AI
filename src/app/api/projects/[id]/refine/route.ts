@@ -19,9 +19,11 @@ import {
   initRefine,
   updateRefineSection,
   finishRefine,
+  getRefine,
   appendLog,
   runWithRefineLog,
 } from "@/lib/pipeline-progress";
+import type { LogEntry } from "@/lib/pipeline-progress";
 import type { SectionType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -129,22 +131,36 @@ export async function POST(
             provider: "pipeline",
             message: `✅ REFINE COMPLETED — tất cả section đã lưu (version bumped)`,
           });
+          // FIX: Capture full refine logs (for HistoryTab detail modal)
+          const refineLogs = getRefine(id);
+          const refineLogCount = refineLogs?.logs?.length || 0;
+          const fullRefineLogs = refineLogs?.logs?.length
+            ? refineLogs.logs.map((l: LogEntry) => {
+                const time = new Date(l.ts).toLocaleTimeString("vi-VN");
+                const level = l.level.toUpperCase().padEnd(7);
+                const model = l.model ? ` [${l.model.substring(0, 30)}]` : "";
+                const keyIdx = l.keyIndex != null ? ` Key#${l.keyIndex}` : "";
+                return `${time} ${level}${model}${keyIdx} ${l.message}`;
+              }).join("\n")
+            : "";
           // Mark AI agent as online again + pipeline as success
           try {
             await updateAgentStatus("REFINE", "AI Refine", "Section Refiner", "online", "Idle", id);
             await updatePipelineStatus(id, "success", "AI Refine", 100, "REFINE");
           } catch { /* non-fatal */ }
-          // Save activity log
+          // Save activity log — FIX: include full logs
           try {
+            const summary = `✅ Đã sinh lại tất cả 9 sections (Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security). Version bumped trong database. ${body.editRequests.length} edit request(s) + chat discussion đã được áp dụng.`;
             await logActivity({
               projectId: id,
               type: "AI_AGENT_DONE",
               status: "SUCCESS",
               title: `AI Refine thành công`,
-              details: `✅ Đã sinh lại tất cả 9 sections (Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security). Version bumped trong database. ${body.editRequests.length} edit request(s) + chat discussion đã được áp dụng.`,
+              details: `${summary}\n\n═══════════════════════════════════════════\nLIVE LOG (${refineLogCount} lines):\n═══════════════════════════════════════════\n${fullRefineLogs}`,
               actorName: "AI Refine",
               actorRole: "AI Agent",
               agentId: "REFINE",
+              logCount: refineLogCount,
             });
           } catch { /* non-fatal */ }
         } catch (err) {
@@ -156,22 +172,35 @@ export async function POST(
             provider: "pipeline",
             message: `❌ REFINE FAILED — ${msg}`,
           });
+          // FIX: Capture full refine logs (for HistoryTab)
+          const refineErrLogs = getRefine(id);
+          const refineErrLogCount = refineErrLogs?.logs?.length || 0;
+          const fullRefineErrLogs = refineErrLogs?.logs?.length
+            ? refineErrLogs.logs.map((l: LogEntry) => {
+                const time = new Date(l.ts).toLocaleTimeString("vi-VN");
+                const level = l.level.toUpperCase().padEnd(7);
+                const model = l.model ? ` [${l.model.substring(0, 30)}]` : "";
+                const keyIdx = l.keyIndex != null ? ` Key#${l.keyIndex}` : "";
+                return `${time} ${level}${model}${keyIdx} ${l.message}`;
+              }).join("\n")
+            : "";
           // Mark AI agent as error + pipeline as failed
           try {
             await updateAgentStatus("REFINE", "AI Refine", "Section Refiner", "error", `Failed: ${msg}`, id);
             await updatePipelineStatus(id, "failed", "AI Refine", 0, "REFINE", msg);
           } catch { /* non-fatal */ }
-          // Save activity log
+          // Save activity log — FIX: include full logs
           try {
             await logActivity({
               projectId: id,
               type: "AI_AGENT_ERROR",
               status: "FAILED",
               title: `AI Refine thất bại`,
-              details: `❌ Lỗi: ${msg}. Kiểm tra Live Log Console để xem chi tiết model nào fail.`,
+              details: `❌ Lỗi: ${msg}\n\n═══════════════════════════════════════════\nLIVE LOG (${refineErrLogCount} lines):\n═══════════════════════════════════════════\n${fullRefineErrLogs}`,
               actorName: "AI Refine",
               actorRole: "AI Agent",
               agentId: "REFINE",
+              logCount: refineErrLogCount,
             });
           } catch { /* non-fatal */ }
           finishRefine(id, msg);

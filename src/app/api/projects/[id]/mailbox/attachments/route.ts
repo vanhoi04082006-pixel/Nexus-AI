@@ -85,7 +85,7 @@ export async function POST(
         actorName: access.name,
         actorEmail: access.email,
         actorRole: "Leader",
-        actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+        actionUrl: `/?p=${id}&tab=mailbox`,
         actionLabel: "Mở Mailbox",
       });
     } catch { /* non-fatal */ }

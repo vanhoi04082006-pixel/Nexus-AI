@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { SectionEditor } from "../SectionEditor";
 import { MermaidRenderer } from "../MermaidRenderer";
 import { useReloadProject } from "../useReload";
-import { toast } from "sonner";
 import {
   Link2,
   Terminal,
@@ -45,7 +45,7 @@ export function GitTab() {
   const githubPushedAt = project?.githubPushedAt;
 
   function copy(text: string) {
-    navigator.clipboard.writeText(text).then(() => {});
+    notify.copy(text);
   }
 
   function connectGitHub() {
@@ -74,14 +74,14 @@ export function GitTab() {
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
       setPushResult({ repoUrl: data.repoUrl, prUrl: data.prUrl, fileCount: data.fileCount, branch: data.branch });
-      toast.success(
+      notify.success(
         data.prUrl
           ? `Da push ${data.fileCount} files + tao PR!`
           : `Da push ${data.fileCount} files len GitHub!`
       );
       await reload();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loi push GitHub");
+      notify.error(err instanceof Error ? err.message : "Loi push GitHub");
     } finally {
       setPushing(false);
     }
@@ -244,13 +244,28 @@ export function GitTab() {
         </div>
       )}
 
-      {/* Branch strategy */}
+      {/* Branch strategy — FIX: render as text, NOT Mermaid (AI returns Vietnamese text description, not Mermaid syntax) */}
       {r.branchStrategy && (
         <div>
           <h3 className="flex items-center gap-2 text-base font-bold mb-3">
             <GitBranch className="w-4 h-4 text-primary" /> Branch Strategy
           </h3>
-          <MermaidRenderer code={r.branchStrategy} id="branch" />
+          {/* Check if branchStrategy is Mermaid syntax (starts with graph/classDiagram/etc) or plain text */}
+          {(() => {
+            const content = (r.branchStrategy || "").trim();
+            const isMermaid = /^(graph|classDiagram|erDiagram|sequenceDiagram|flowchart|stateDiagram|gantt|pie|gitGraph)\b/.test(content);
+            if (isMermaid) {
+              return <MermaidRenderer code={content} id="branch" />;
+            }
+            // Plain text — render as paragraph
+            return (
+              <div className="bg-nexus-bg border border-border rounded-xl p-4">
+                <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                  {esc(content.replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
+                </p>
+              </div>
+            );
+          })()}
         </div>
       )}
 

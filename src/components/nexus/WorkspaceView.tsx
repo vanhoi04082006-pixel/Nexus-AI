@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, memo, lazy, Suspense, useMemo } from "react";
+import { notify } from "@/lib/notify";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
-import { LoadingState } from "@/components/states";
 import {
   Cpu,
   Search,
@@ -23,6 +22,7 @@ import {
   RefreshCw,
   Loader2,
   Crown,
+  AlertTriangle,
   LogOut,
   Globe,
   Copy,
@@ -30,24 +30,23 @@ import {
   History,
   Brain,
 } from "lucide-react";
-// Code splitting: lazy-load each tab so initial bundle is smaller.
-// Each tab loads on-demand when user clicks it (suspense fallback = skeleton).
-const AnalysisTab = lazy(() => import("./tabs/AnalysisTab").then(m => ({ default: m.AnalysisTab })));
-const HRTab = lazy(() => import("./tabs/HRTab").then(m => ({ default: m.HRTab })));
-const SprintTab = lazy(() => import("./tabs/SprintTab").then(m => ({ default: m.SprintTab })));
-const DesignTab = lazy(() => import("./tabs/DesignTab").then(m => ({ default: m.DesignTab })));
-const UMLTab = lazy(() => import("./tabs/UMLTab").then(m => ({ default: m.UMLTab })));
-const DocsTab = lazy(() => import("./tabs/DocsTab").then(m => ({ default: m.DocsTab })));
-const GitTab = lazy(() => import("./tabs/GitTab").then(m => ({ default: m.GitTab })));
-const ChatTab = lazy(() => import("./tabs/ChatTab").then(m => ({ default: m.ChatTab })));
-const MembersTab = lazy(() => import("./tabs/MembersTab").then(m => ({ default: m.MembersTab })));
-const TasksTab = lazy(() => import("./tabs/TasksTab").then(m => ({ default: m.TasksTab })));
-const MailboxTab = lazy(() => import("./tabs/MailboxTab").then(m => ({ default: m.MailboxTab })));
-const HistoryTab = lazy(() => import("./tabs/HistoryTab").then(m => ({ default: m.HistoryTab })));
-const AgentHubTab = lazy(() => import("./tabs/AgentHubTab").then(m => ({ default: m.AgentHubTab })));
+import { AnalysisTab } from "./tabs/AnalysisTab";
+import { HRTab } from "./tabs/HRTab";
+import { SprintTab } from "./tabs/SprintTab";
+import { DesignTab } from "./tabs/DesignTab";
+import { UMLTab } from "./tabs/UMLTab";
+import { DocsTab } from "./tabs/DocsTab";
+import { GitTab } from "./tabs/GitTab";
+import { ChatTab } from "./tabs/ChatTab";
+import { MembersTab } from "./tabs/MembersTab";
+import { TasksTab } from "./tabs/TasksTab";
+import { MailboxTab } from "./tabs/MailboxTab";
+import { HistoryTab } from "./tabs/HistoryTab";
+import { AgentHubTab } from "./tabs/AgentHubTab";
 import { TaskProcessingOverlay } from "./TaskProcessingOverlay";
 import { AI3DBrain } from "./AI3DBrain";
 import { NotificationBell } from "./NotificationBell";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface NavItem {
   id: string;
@@ -109,6 +108,10 @@ export function WorkspaceView() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // FIX: Track load error to avoid infinite spinner on failure (was showing spinner forever)
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // FIX: Race condition guard — if projectId changes fast, ignore stale fetch results
+  const loadTokenRef = useRef(0);
 
   // Fetch public URL (for share link in emails)
   useEffect(() => {
@@ -122,9 +125,12 @@ export function WorkspaceView() {
 
   const isLeader = access?.role === "leader";
 
-  async function loadProject() {
+  // FIX: Stable callback with race condition guard (loadTokenRef)
+  const loadProject = useCallback(async () => {
     if (!projectId || !token) return;
+    const myToken = ++loadTokenRef.current;
     setLoadingProject(true);
+    setLoadError(null);
     try {
       const resp = await fetch(`/api/projects/${projectId}?token=${encodeURIComponent(token)}`);
       if (!resp.ok) {
@@ -132,6 +138,8 @@ export function WorkspaceView() {
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
       const data = await resp.json();
+      // FIX: Ignore stale fetch results (projectId changed while fetching)
+      if (myToken !== loadTokenRef.current) return;
       setAccess(data.access);
       setProject(data.project);
       setResult(data.result);
@@ -140,18 +148,18 @@ export function WorkspaceView() {
       setTasks(data.tasks || []);
       setProposals(data.proposals || []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Khong tai duoc du an");
+      if (myToken !== loadTokenRef.current) return;
+      const msg = err instanceof Error ? err.message : "Khong tai duoc du an";
+      setLoadError(msg);
+      notify.error(msg);
     } finally {
-      setLoadingProject(false);
+      if (myToken === loadTokenRef.current) setLoadingProject(false);
     }
-  }
-
-  // Stable callback — avoids re-creating on every render
-  const loadProjectCb = useCallback(loadProject, [projectId, token]);
+  }, [projectId, token]);
 
   useEffect(() => {
-    loadProjectCb();
-  }, [loadProjectCb]);
+    loadProject();
+  }, [loadProject]);
 
   async function handleInitialize() {
     if (!projectId || !token) return;
@@ -175,7 +183,9 @@ export function WorkspaceView() {
       // Poll for completion with progress messages
       await new Promise<void>((resolve, reject) => {
         let attempts = 0;
-        const maxAttempts = 120;
+        // FIX: Increase maxAttempts 120 → 360 (was 5 min timeout, task gen can take 15+ min with rate-limit)
+        // 360 attempts × 2.5s = 15 min max — enough for slow AI with 429 retries
+        const maxAttempts = 360;
         const messages = [
           "AI đang đọc phân tích dự án + nhân sự + sprint...",
           "AI đang phân chia công việc cho từng thành viên...",
@@ -203,8 +213,8 @@ export function WorkspaceView() {
                     return;
                   }
                 }
-                if (attempts > 5) {
-                  reject(new Error("Khong the khoi tao todolist — server bi crash. Thu lai."));
+                if (attempts > 10) {
+                  reject(new Error("Không thể khởi tạo todolist — server bị crash. Thử lại."));
                   return;
                 }
                 setTimeout(poll, 2500);
@@ -226,18 +236,21 @@ export function WorkspaceView() {
               setInitProgress(`Hoàn thành! ${prog.taskCount || ""} tasks đã tạo.`);
               resolve();
             } else if (prog.status === "error") {
-              reject(new Error(prog.error || "Task generation that bai"));
+              reject(new Error(prog.error || "Task generation thất bại"));
             } else if (attempts >= maxAttempts) {
-              reject(new Error("Timeout — task generation qua lau"));
+              reject(new Error(`Timeout — task generation quá lâu (${Math.round(maxAttempts * 2.5 / 60)} phút). Kiểm tra Live Log Console.`));
             } else {
-              setTimeout(poll, 2500);
+              // FIX: Adaptive poll — faster when AI is active (logs growing), slower when idle
+              const lastLogCount = prog.logs?.length || 0;
+              const interval = lastLogCount > 5 ? 2000 : 3000; // 2s if active, 3s if idle
+              setTimeout(poll, interval);
             }
           } catch (err) {
             // Network error (server crashed) — retry
-            if (attempts < 10) {
+            if (attempts < 15) {
               setTimeout(poll, 3000);
             } else {
-              reject(err instanceof Error ? err : new Error("Loi poll"));
+              reject(err instanceof Error ? err : new Error("Lỗi poll"));
             }
           }
         };
@@ -255,17 +268,17 @@ export function WorkspaceView() {
         const taskCount = taskData.tasks?.length || 0;
         const memberCount = new Set(taskData.tasks?.map((t: { assigneeName: string }) => t.assigneeName).filter(Boolean)).size;
         const p0Count = taskData.tasks?.filter((t: { priority: string }) => t.priority === "P0").length || 0;
-        toast.success(
+        notify.success(
           `✅ Sinh todolist thành công!\n📊 ${taskCount} task cho ${memberCount} thành viên\n🔴 ${p0Count} task P0 (bat buoc)\n📧 Email thông báo đã gửi`,
           { duration: 8000 }
         );
       } else {
-        toast.success("✅ Sinh todolist thành công! Email thông báo đã gửi thành viên.");
+        notify.success("✅ Sinh todolist thành công! Email thông báo đã gửi thành viên.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Lỗi khởi tạo";
       setInitError(msg);
-      toast.error(
+      notify.error(
         `❌ Sinh todolist thất bại!\n📋 Lý do: ${msg}\n🔧 Kiểm tra Live Log Console để xem chi tiết model nào fail`,
         { duration: 10000 }
       );
@@ -276,6 +289,16 @@ export function WorkspaceView() {
   }
 
   function handleLogout() {
+    // FIX: Reset workspace state to prevent stale data leaking between projects
+    setProject(null);
+    setResult(null);
+    setMembers([]);
+    setMessages([]);
+    setTasks([]);
+    setEmails([]);
+    setProposals([]);
+    setAccess(null);
+    setLoadingProject(false);
     setView("home");
     setRoute(null, null);
     window.history.pushState({}, "", "/");
@@ -284,7 +307,7 @@ export function WorkspaceView() {
   async function handleDeleteProject() {
     if (!projectId || !token) return;
     if (deleteConfirm !== "Delete") {
-      toast.error('Phai nhap chinh xac "Delete" de xac nhan');
+      notify.error('Phai nhap chinh xac "Delete" de xac nhan');
       return;
     }
     setDeleting(true);
@@ -296,66 +319,49 @@ export function WorkspaceView() {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || `HTTP ${resp.status}`);
       }
-      toast.success("Da xoa du an");
+      notify.success("Da xoa du an");
       setDeleteDialogOpen(false);
       setDeleteConfirm("");
       setView("home");
       setRoute(null, null);
       window.history.pushState({}, "", "/");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loi xoa du an");
+      notify.error(err instanceof Error ? err.message : "Loi xoa du an");
     } finally {
       setDeleting(false);
     }
   }
 
-  // ===== Hooks (MUST be before any early return — rules of hooks) =====
-  // Memoize nav groups so they don't recompute on every render
-  const navGroups = useMemo<{ label: string; items: NavItem[] }[]>(
-    () => [
-      { label: "Phan Tich & Thiet Ke", items: NAV.filter((n) => n.group === "analysis") },
-      { label: "Lam Viec Nhom", items: NAV.filter((n) => n.group === "collab") },
-      { label: "Trien Khai", items: NAV.filter((n) => n.group === "delivery") },
-    ],
-    []
-  );
-
-  // Lazy-loaded tab renderer with Suspense fallback
-  const renderTab = useCallback(() => {
-    const tab = (() => {
-      switch (activeTab) {
-        case "analysis":
-          return <AnalysisTab />;
-        case "hr":
-          return <HRTab />;
-        case "sprint":
-          return <SprintTab />;
-        case "design":
-          return <DesignTab />;
-        case "uml":
-          return <UMLTab />;
-        case "docs":
-          return <DocsTab />;
-        case "git":
-          return <GitTab />;
-        case "chat":
-          return <ChatTab />;
-        case "members":
-          return <MembersTab />;
-        case "tasks":
-          return <TasksTab />;
-        case "mailbox":
-          return <MailboxTab />;
-        case "history":
-          return <HistoryTab />;
-        case "agenthub":
-          return <AgentHubTab />;
-        default:
-          return <AnalysisTab />;
-      }
-    })();
-    return <Suspense fallback={<LoadingState variant="text" className="py-16" />}>{tab}</Suspense>;
-  }, [activeTab]);
+  // FIX: Show error state if load failed (was infinite spinner on failure)
+  if (loadError) {
+    return (
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-card border border-destructive/30 rounded-xl p-6 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-7 h-7 text-destructive" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold mb-1">Không tải được dự án</h2>
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => loadProject()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" /> Thử lại
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> Về trang chủ
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (loadingProject || !project || !result) {
     return (
@@ -378,15 +384,65 @@ export function WorkspaceView() {
     DRAFT: { text: "Bản nháp" },
   };
 
+  function renderTab() {
+    switch (activeTab) {
+      case "analysis":
+        return <AnalysisTab />;
+      case "hr":
+        return <HRTab />;
+      case "sprint":
+        return <SprintTab />;
+      case "design":
+        return <DesignTab />;
+      case "uml":
+        return <UMLTab />;
+      case "docs":
+        return <DocsTab />;
+      case "git":
+        return <GitTab />;
+      case "chat":
+        return <ChatTab />;
+      case "members":
+        return <MembersTab />;
+      case "tasks":
+        return <TasksTab />;
+      case "mailbox":
+        return <MailboxTab />;
+      case "history":
+        return <HistoryTab />;
+      case "agenthub":
+        return <AgentHubTab />;
+      default:
+        return <AnalysisTab />;
+    }
+  }
+
+  const navGroups: { label: string; items: NavItem[] }[] = [
+    { label: "Phan Tich & Thiet Ke", items: NAV.filter((n) => n.group === "analysis") },
+    { label: "Lam Viec Nhom", items: NAV.filter((n) => n.group === "collab") },
+    { label: "Trien Khai", items: NAV.filter((n) => n.group === "delivery") },
+  ];
+
   return (
     <main className="flex-1 flex flex-col md:flex-row min-h-screen bg-nexus-bg/95 nexus-grid-bg nexus-boot">
       {/* Mobile toggle */}
       <button
         onClick={() => setSidebarOpen((v) => !v)}
         className="md:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-lg bg-card border border-border flex items-center justify-center backdrop-blur-xl"
+        aria-label={sidebarOpen ? "Đóng menu" : "Mở menu"}
+        aria-expanded={sidebarOpen}
       >
         <Cpu className="w-5 h-5 text-primary" />
       </button>
+
+      {/* FIX: Mobile sidebar backdrop — click to close */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Sidebar */}
       <aside
@@ -467,8 +523,7 @@ export function WorkspaceView() {
                 </code>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(publicUrl);
-                    toast.success("Đã copy URL!");
+                    notify.copy(publicUrl, "Đã copy URL!");
                   }}
                   className="text-muted-foreground hover:text-primary p-1 rounded transition-colors flex-shrink-0"
                   title="Copy URL"
@@ -531,15 +586,19 @@ export function WorkspaceView() {
         </div>
       </aside>
 
-      {/* Delete confirmation dialog */}
-      {deleteDialogOpen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-xl z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-destructive/30 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-base font-bold text-destructive mb-2">Xóa dự án?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+      {/* Delete confirmation dialog — FIX: uses Radix Dialog for accessibility (focus trap, ESC, aria) */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) setDeleteConfirm(""); }}>
+        <DialogContent className="max-w-md bg-card border-destructive/30">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" /> Xóa dự án?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
               Hành động này không thể hoàn tác. Tất cả dữ liệu (phân tích, todolist, chat, email) sẽ bị xóa vĩnh viễn.
             </p>
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-xs text-muted-foreground">
               Nhập <code className="text-destructive font-mono">Delete</code> để xác nhận:
             </p>
             <input
@@ -547,10 +606,10 @@ export function WorkspaceView() {
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               placeholder="Delete"
-              className="w-full px-3 py-2 mb-4 bg-nexus-surface-2 border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
+              className="w-full px-3 py-2 bg-nexus-surface-2 border border-border rounded-lg text-sm font-mono outline-none focus:border-destructive"
               autoFocus
             />
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end pt-2">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -571,8 +630,8 @@ export function WorkspaceView() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">

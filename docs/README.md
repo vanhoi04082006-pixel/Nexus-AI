@@ -1,118 +1,47 @@
-# 📚 NEXUS AI Documentation
+# 📚 NEXUS AI — Documentation
 
-Tài liệu đầy đủ cho NEXUS AI — Multi-Agent Project Architect.
+> Tài liệu chính thức của NEXUS AI v0.2.0 — Multi-Agent Project Architect.
+
+---
 
 ## 📑 Mục lục
 
-| Document | Mô tả | Audience |
+| File | Mô tả | Đối tượng |
 |---|---|---|
-| [**README.md**](../README.md) | Overview, features, cài đặt nhanh | Tất cả users |
-| [**LOCAL_RUN.md**](../LOCAL_RUN.md) | Hướng dẫn chạy local + Cloudflare Tunnel | Users chạy local |
-| [**DEPLOY.md**](../DEPLOY.md) | Deploy Fly.io + Docker | DevOps |
-| [**ARCHITECTURE.md**](ARCHITECTURE.md) | System design, data flow, components, design decisions | Developers |
-| [**API.md**](API.md) | Full REST API reference (50+ endpoints) | Developers |
-| [**CONTRIBUTING.md**](CONTRIBUTING.md) | Dev setup, code style, how to extend | Contributors |
-| [**../CODE_OF_CONDUCT.md**](../CODE_OF_CONDUCT.md) | Code of conduct | Tất cả |
-| [**chat-service/README.md**](../mini-services/chat-service/README.md) | Socket.io chat service protocol (port 3001) | Developers |
-| [**notification-service**](../mini-services/notification-service/index.ts) | Socket.io notification service (port 3002) — xem code comment | Developers |
+| [**README.md**](../README.md) | Tổng quan dự án, Quick Start, scripts | Tất cả người dùng |
+| [**ARCHITECTURE.md**](./ARCHITECTURE.md) | Kiến trúc modular AI (24 module), pipeline 8 phase, OpenRouter client | Developer, Architect |
+| [**API.md**](./API.md) | Tham chiếu đầy đủ 58 endpoint + Socket.io events | Backend Developer |
+| [**CONTRIBUTING.md**](./CONTRIBUTING.md) | Hướng dẫn đóng góp, code style, cách thêm Agent/Route/Model | Contributor |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Bắt đầu nhanh
 
-### New user?
+### Yêu cầu
+- **Bun** 1.x ([cài tại bun.sh](https://bun.sh))
+- **Node.js** 20+ (cho Prisma)
+- **OpenRouter API key** ([lấy miễn phí tại openrouter.ai/keys](https://openrouter.ai/keys))
 
-Đọc [README.md](../README.md) để biết NEXUS AI là gì + cài đặt:
-
+### Cài đặt
 ```bash
+git clone https://github.com/vanhoi04082006-pixel/Nexus-AI.git
+cd Nexus-AI
 bun install
-cp .env.example .env   # Điền OPENROUTER_API_KEY
+cp .env.example .env  # điền OPENROUTER_API_KEY
 bun run db:push
-bun run dev            # → http://localhost:3000
+bun run dev           # http://localhost:3000
 ```
 
-### Muốn chạy local + share tạm thời?
+### Tunnel (public URL)
+```cmd
+:: Windows
+run
 
-Đọc [LOCAL_RUN.md](../LOCAL_RUN.md) để setup Cloudflare Tunnel.
-
-### Muốn deploy?
-
-Đọc [DEPLOY.md](../DEPLOY.md) để deploy lên Fly.io (main app + 2 mini-services) hoặc Docker.
-
-### Developer?
-
-Đọc theo thứ tự:
-
-1. [README.md](../README.md) — overview, features, tech stack
-2. [ARCHITECTURE.md](ARCHITECTURE.md) — system design, data flow, design decisions
-3. [API.md](API.md) — REST API reference (50+ endpoints)
-4. [CONTRIBUTING.md](CONTRIBUTING.md) — code style + cách extend
-
-### Muốn extend?
-
-[CONTRIBUTING.md](CONTRIBUTING.md) có hướng dẫn:
-- Thêm AI Agent mới (đã có ví dụ cho Agent-09 Security Reviewer)
-- Thêm Model mới vào priority list
-- Thêm Workspace Tab mới
-- Thêm API Route mới
-- Log từ code mới (Live Log Console qua AsyncLocalStorage)
-- Thêm Activity event type mới
-
----
-
-## 📐 Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         BROWSER (Client)                         │
-│  React 19 + Next.js 16 (App Router, Turbopack) + Zustand 5     │
-│  Tailwind 4 + shadcn/ui (New York) + TanStack Query 5          │
-└─────────────────────────────────────────────────────────────────┘
-        ↕ HTTP (REST)              ↕ WebSocket (Socket.io)
-┌──────────────────────────┐   ┌──────────────────────────────────┐
-│  Next.js API Routes      │   │  Mini-services                   │
-│  (port 3000, Node.js)    │   │  ├─ chat-service (port 3001)     │
-│  50+ REST endpoints      │   │  └─ notification-service (3002)  │
-│  + background pipeline   │   │     (HTTP broadcast endpoints)   │
-└──────────────────────────┘   └──────────────────────────────────┘
-        │                          │
-        ▼                          ▼
-┌──────────────────────────┐   ┌──────────────────────────────────┐
-│  SQLite (Prisma 6)       │   │  External APIs                   │
-│  21 models               │   │  OpenRouter (multi-key, 9 models) │
-│                          │   │  GitHub (OAuth + push)            │
-│                          │   │  SMTP (nodemailer)                │
-└──────────────────────────┘   └──────────────────────────────────┘
+:: Linux/Mac
+bash scripts/run-local.sh
 ```
 
-👉 Chi tiết: [ARCHITECTURE.md](ARCHITECTURE.md)
-
----
-
-## 🔌 API Overview
-
-50+ REST endpoints, nhóm theo 16 category:
-
-| Group | Endpoints | Mô tả |
-|---|---|---|
-| **Projects** | 4 | CRUD + duplicate |
-| **Pipeline** | 3 | Initialize, refine, progress polling |
-| **Tasks** | 2 | List + update (Kanban drag-drop) |
-| **Notifications** | 4 | List, create, mark read, delete |
-| **Mail** | 6 | Compose, list, get, patch, attachments, AI rewrite |
-| **Dashboard** | 4 | Activity, status, tasks, statistics |
-| **Activity** | 2 | Project history + global logs |
-| **Agents** | 1 | 10 AI agents info |
-| **GitHub** | 4 | OAuth, callback, push, status |
-| **Chat** | 3 | List, post, AI reply |
-| **Edit Proposals** | 3 | List, create, approve/reject |
-| **Sections** | 1 | Edit section content |
-| **Members** | 2 | List, add |
-| **Context/Tokens** | 2 | Long-term memory + token usage |
-| **Fix Mermaid** | 1 | AI fix Mermaid syntax |
-| **Config/Templates** | 2 | Public URL + project templates |
-
-👉 Chi tiết: [API.md](API.md)
+Xem [tunnel.conf](../tunnel.conf) để cấu hình URL cố định (Cloudflare/ngrok).
 
 ---
 
@@ -120,129 +49,133 @@ bun run dev            # → http://localhost:3000
 
 | # | Agent | Section | Mô tả |
 |---|---|---|---|
-| 01 | Requirement Analyst | `analysis` | Tech stack, features, actors, modules |
-| 02 | HR Planner | `hr` | Vai trò, workload, rủi ro |
-| 03 | Sprint Planner | `sprint` | Sprints, milestones |
-| 04 | System Architect | `design` | DB schema, API, folder structure |
-| 05 | UML Generator | `uml` | 4 diagrams (Use Case, Class, ERD, Sequence) |
-| 06 | Technical Writer | `docs` | README, Convention, API Standard |
+| 01 | Requirement Analyst | `analysis` | Phân tích chủ đề → tech stack, features, actors, modules |
+| 02 | HR Planner | `hr` | Phân vai trò cho từng thành viên |
+| 03 | Sprint Planner | `sprint` | Chia sprint 2 tuần, gán task, deadline |
+| 04 | System Architect | `design` | DB schema, API endpoints, folder structure |
+| 05 | UML Generator | `uml` | 4 diagram: Use Case, Class, ERD, Sequence |
+| 06 | Technical Writer | `docs` | README, Coding Convention, API Standard |
 | 07 | Git/DevOps | `git` | Git commands, branch strategy, CI/CD |
-| 08 | Software Tester | `test` | Unit/integration/E2E/API/performance tests |
-| 09 | Security Reviewer | `security` | Threats, auth flow, OWASP Top 10 |
-| 10 | Quality Reviewer | (all) | Tổng hợp + đồng bộ 9 sections |
-| — | Task Generator | (Kanban) | SMART tasks + code snippets + dedup |
-| — | Chat Assistant | (chat) | AI hội thoại |
-| — | AI Refine | (all) | Re-generate sections |
+| 08 | Software Tester | `test` | Unit/Integration/E2E/API/Performance tests |
+| 09 | Security Reviewer | `security` | Threats, OWASP Top 10, auth flow |
+| 10 | Quality Reviewer | (merge) | Tổng hợp + Zod validation + feedback loop |
 
-### Pipeline (6 phases)
-
-| Phase | Mô tả |
-|---|---|
-| **Phase 1** | Analysis sequential (01 → 02 → 03) |
-| **Phase 2** | Design parallel/sequential (04 + 05 + 06 + 07) |
-| **Phase 3** | Quality gates (08 + 09) |
-| **Phase 4** | Retry failed agents (1 lần, sau 5s) |
-| **Phase 5** | Fallback cho agent vẫn fail (dữ liệu tĩnh) |
-| **Phase 6** | Quality Reviewer (Agent 10) tổng hợp + đồng bộ |
-
-👉 Chi tiết: [ARCHITECTURE.md → Multi-Agent Pipeline](ARCHITECTURE.md#-multi-agent-pipeline)
+Chi tiết pipeline → [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
-## 📊 Dashboard Widgets
-
-Trang tổng quan (Home view) có 3 widget realtime:
-
-| Widget | Data source | Refresh |
-|---|---|---|
-| **Recent Activity** | `ActivityLog` (20+ event types) | WebSocket `activity:new` |
-| **NEXUS AI Status** | `AgentStatus`, `PipelineStatus`, `SystemStatus` + env keys | WebSocket `status:update` |
-| **Tasks đang làm** | `Task` (in_progress/overdue/due_soon của user) | WebSocket `task:update` |
-
-👉 Chi tiết: [ARCHITECTURE.md → Dashboard Widgets](ARCHITECTURE.md#-dashboard-widgets)
-
----
-
-## 🔔 Notification & Mail System
-
-| System | Port | Cơ chế |
-|---|---|---|
-| **Notification Center** | 3002 (notification-service) | 13 types, per-user read, realtime broadcast |
-| **Mail System** | SMTP + REST | Compose + AI rewrite + 7 folders + attachments + reply/forward |
-| **Realtime Chat** | 3001 (chat-service) | Socket.io, fallback HTTP polling |
-
-👉 Chi tiết: [ARCHITECTURE.md → Notification & Mail](ARCHITECTURE.md#-notification--mail-system)
-
----
-
-## 📐 Mermaid Rendering (3-tier fix)
-
-Khi render Mermaid diagram gặp lỗi syntax:
-
-1. **`fixMermaid()`** — regex fix nhanh (lỗi phổ biến)
-2. **`aggressiveFix()`** — fix mạnh (node ID normalization, dấu tiếng Việt → ASCII)
-3. **AI Auto-Fix** — POST `/api/projects/[id]/fix-mermaid` → AI sửa syntax qua OpenRouter
-
-👉 Chi tiết: [ARCHITECTURE.md → Mermaid Rendering](ARCHITECTURE.md#-mermaid-rendering-3-tier-fix)
-
----
-
-## 🗄️ Database Schema
-
-21 models (SQLite via Prisma):
+## ⚙️ Pipeline (8 phase)
 
 ```
-Project ─┬─ Member
-         ├─ Analysis (versioned, 9 section types)
-         ├─ Task (Kanban + developer-first fields)
-         ├─ ChatMessage
-         ├─ EditProposal
-         ├─ EmailLog (legacy)
-         ├─ Email → EmailAttachment
-         │        → Mailbox (per-user state)
-         │        → MailRead (audit)
-         ├─ Notification → NotificationRead (per-user)
-         ├─ ActivityLog (enriched with actor + relations)
-         ├─ TaskLog (audit trail)
-         ├─ AgentConfig
-         ├─ ProjectContext (long-term memory)
-         ├─ TokenLog (cost tracking)
-         ├─ AgentStatus (live agent state)
-         ├─ PipelineStatus (per project)
-         └─ TaskStatistic (cached aggregate)
-
-SystemStatus (singleton per subsystem)
-Template (project blueprints)
+Phase 0: Planner Agent (pre-plan modules)
+    ↓
+Phase 1: analysis → hr → sprint (sequential)
+    ↓
+Phase 2: design + uml + docs + git (parallel)
+    ↓
+Phase 3: test + security (parallel)
+    ↓
+Phase 4: Retry failed agents (5s wait)
+    ↓
+Phase 5: Static fallback data (no crash)
+    ↓
+Phase 5.5: Output Normalizer + Consistency Checker
+    ↓
+Phase 6: Quality Reviewer (merge + Zod + feedback loop)
 ```
 
-👉 Chi tiết: [prisma/schema.prisma](../prisma/schema.prisma) | [ARCHITECTURE.md → Database](ARCHITECTURE.md#-database-schema)
-
 ---
 
-## 🛠️ Tech Stack
+## 🛡️ Anti-rate-limit Features
 
-| Layer | Technology |
+| Feature | Mô tả |
 |---|---|
-| **Frontend** | Next.js 16 (App Router, Turbopack), React 19, TypeScript 5 |
-| **Styling** | Tailwind CSS 4, shadcn/ui (New York), tw-animate-css |
-| **State** | Zustand 5 (persisted), TanStack Query 5, TanStack Table 8 |
-| **Backend** | Next.js API Routes (Node.js runtime) |
-| **Database** | Prisma 6 ORM + SQLite |
-| **AI** | OpenRouter (multi-key rotation, 9 free models/agent) |
-| **Realtime** | Socket.io (chat 3001 + notifications 3002) |
-| **Diagrams** | Mermaid.js 11 + React Flow 11 |
-| **Kanban** | @hello-pangea/dnd 18 |
-| **Email** | Nodemailer 9 (SMTP), @mdxeditor/editor (rich text) |
-| **Forms** | react-hook-form 7 + zod 4 |
-| **Runtime** | Bun 1 |
+| Multi-key rotation | Tự switch key khi 429 (hỗ trợ 100+ keys) |
+| 60s wait cho 429 | Đợi đúng 60s (không spam) trước retry |
+| Circuit Breaker | 3 fail liên tiếp → skip model 3 phút |
+| Dead Model Recovery | All keys 429 → mark dead 2 phút, auto-recover |
+| Health Score | Priority sort model theo success rate |
+| Adaptive Timeout | Timeout riêng cho từng model |
+| In-memory cache | Prompt cache 1h TTL (temp < 0.5) |
+| Structured Outputs | `response_format: { type: "json_object" }` |
 
 ---
 
-## 📞 Support
+## 📁 Cấu trúc dự án
 
-- **Issues:** https://github.com/vanhoi04082006-pixel/Nexus-AI/issues
-- **Docs:** Bạn đang ở đây 👋
+```
+Nexus-AI/
+├── src/
+│   ├── app/              # Next.js App Router (42 API routes)
+│   ├── components/       # UI (48 shadcn) + Nexus (14 + 13 tabs)
+│   ├── lib/              # AI (24 module) + openrouter + schemas + ...
+│   ├── store/            # Zustand
+│   └── hooks/
+├── prisma/schema.prisma  # 23 models (SQLite)
+├── mini-services/        # chat (3001) + notification (3002)
+├── scripts/              # run-local.bat/.sh + deploy-fly.sh
+├── docs/                 # ← bạn đang ở đây
+├── Dockerfile, fly.toml, Caddyfile, tunnel.conf
+└── package.json
+```
 
 ---
 
-[← Về README](../README.md)
+## 🔌 Mini-services
+
+| Service | Port | Tech | Vai trò |
+|---|---|---|---|
+| **chat-service** | 3001 | Socket.io | Realtime chat giữa thành viên |
+| **notification-service** | 3002 | Socket.io | Realtime notifications broadcast |
+
+Xem [mini-services/chat-service/README.md](../mini-services/chat-service/README.md) và [mini-services/notification-service/README.md](../mini-services/notification-service/README.md).
+
+---
+
+## 🐳 Deployment
+
+### Docker
+```bash
+docker build -t nexus-ai .
+docker run -p 3000:3000 --env-file .env nexus-ai
+```
+
+### Fly.io
+```bash
+fly deploy
+fly deploy -c fly.chat.toml  # chat-service
+```
+
+### Caddy + Tunnel
+- Caddyfile cấu hình reverse proxy
+- tunnel.conf chọn 1 trong 3 mode: `quick` / `cloudflare-named` / `ngrok`
+
+Chi tiết → [README.md#deployment](../README.md#-deployment)
+
+---
+
+## 🤝 Đóng góp
+
+Xem [CONTRIBUTING.md](./CONTRIBUTING.md) để biết:
+- Code style + conventional commits
+- Cách thêm AI Agent mới (9 bước)
+- Cách thêm Model / API Route / shadcn component
+- Zod lenient schemas (toString, toStringArray, toNumber)
+- Live Log Console (AsyncLocalStorage)
+- Testing checklist + PR checklist
+
+---
+
+## 📄 License
+
+MIT — xem [LICENSE](../LICENSE)
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/vanhoi04082006-pixel/Nexus-AI)
+- [OpenRouter](https://openrouter.ai) — AI provider
+- [Next.js 16](https://nextjs.org) — Framework
+- [Prisma 6](https://prisma.io) — ORM
+- [shadcn/ui](https://ui.shadcn.com) — UI components
+- [Mermaid 11](https://mermaid.js.org) — Diagrams
+- [Bun](https://bun.sh) — Runtime

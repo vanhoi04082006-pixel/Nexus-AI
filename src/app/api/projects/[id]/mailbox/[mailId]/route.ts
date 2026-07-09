@@ -43,12 +43,26 @@ export async function GET(
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  // FIX IDOR: Verify caller is an actual recipient (to/cc/bcc) or the sender.
+  // Previously any project member could read any mail in the project.
+  const isLeader = access.role === "leader";
+  const recipients = [
+    email.fromEmail,
+    ...parseEmailArray(email.toEmails),
+    ...parseEmailArray(email.ccEmails),
+    ...parseEmailArray(email.bccEmails),
+  ].map((e) => e.toLowerCase());
+  if (!isLeader && !recipients.includes(userEmail.toLowerCase())) {
+    return Response.json({ error: "Bạn không phải người nhận của email này" }, { status: 403 });
+  }
+
   // Find the user's mailbox row (sender has SENT, recipients have INBOX)
   let mailbox = await db.mailbox.findUnique({
     where: { emailId_userEmail: { emailId: mailId, userEmail } },
   });
 
   // If no mailbox row exists (e.g. leader viewing a mail they sent), create a SENT row
+  // FIX: Only auto-create if user is sender or recipient (already verified above)
   if (!mailbox) {
     mailbox = await db.mailbox.create({
       data: {

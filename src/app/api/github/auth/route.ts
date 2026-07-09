@@ -3,6 +3,7 @@
 // Query params: ?projectId=X&token=X (leader token, to verify access)
 
 import { resolveAccess } from "@/lib/access";
+import { createOauthState } from "@/lib/github-oauth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,13 +29,9 @@ export async function GET(req: Request) {
     return Response.json({ error: "GITHUB_CLIENT_ID not configured" }, { status: 500 });
   }
 
-  // Build the GitHub authorize URL
-  // state = projectId|token so the callback knows which project to save the token to
-  const state = `${projectId}|${token}`;
+  // FIX: Use random nonce as state (was projectId|leaderToken → CSRF + token reuse risk)
+  const state = createOauthState(projectId, token);
 
-  // GitHub OAuth redirect_uri MUST match what's configured in the OAuth App.
-  // Leader runs server on their machine → always use localhost:3000.
-  // (Only leader does OAuth; members access via tunnel but don't need OAuth)
   const redirectUri = `http://localhost:3000/api/github/callback`;
   const scope = "repo";
   const githubAuthUrl =

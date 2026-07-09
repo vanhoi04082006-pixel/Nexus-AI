@@ -182,6 +182,29 @@ const TABS = [
   { id: "sequence", name: "Sequence", icon: GitGraph },
 ];
 
+// FIX: Empty/invalid diagram fallback component
+function EmptyDiagram({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-card border border-border rounded-xl">
+      <GitGraph className="w-12 h-12 text-muted-foreground/30 mb-3" />
+      <p className="text-sm font-medium text-muted-foreground">{label} chưa có dữ liệu</p>
+      {hint && <p className="text-xs text-muted-foreground/60 mt-1">{hint}</p>}
+      <p className="text-xs text-muted-foreground/60 mt-2">Thử AI Refine để sinh lại sơ đồ</p>
+    </div>
+  );
+}
+
+// FIX: Check if string is valid Mermaid syntax
+function isMermaidSyntax(content: string, type: "graph" | "classDiagram" | "erDiagram" | "sequenceDiagram"): boolean {
+  const trimmed = (content || "").trim();
+  if (!trimmed) return false;
+  if (type === "graph") return /^(graph|flowchart)\s+/i.test(trimmed);
+  if (type === "classDiagram") return /^classDiagram\b/i.test(trimmed);
+  if (type === "erDiagram") return /^erDiagram\b/i.test(trimmed);
+  if (type === "sequenceDiagram") return /^sequenceDiagram\b/i.test(trimmed);
+  return false;
+}
+
 import { Users } from "lucide-react";
 
 export function UMLTab() {
@@ -265,10 +288,17 @@ export function UMLTab() {
       </div>
 
       {/* Diagram content */}
-      {active === "useCase" && <MermaidRenderer code={r.useCase || ""} id="uml-useCase" />}
+      {/* FIX: Check if content is valid Mermaid before rendering (handles existing bad data in DB) */}
+      {active === "useCase" && (() => {
+        const content = (r.useCase || "").trim();
+        if (!isMermaidSyntax(content, "graph")) return <EmptyDiagram label="Use Case" hint="Dữ liệu không phải Mermaid" />;
+        return <MermaidRenderer code={content} id="uml-useCase" />;
+      })()}
 
       {active === "classDiagram" && (
-        viewMode === "interactive" && hasInteractiveNodes ? (
+        !isMermaidSyntax(r.classDiagram || "", "classDiagram") ? (
+          <EmptyDiagram label="Class Diagram" hint="Dữ liệu không phải Mermaid" />
+        ) : viewMode === "interactive" && hasInteractiveNodes ? (
           <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
             <ReactFlow
               nodes={classNodes}
@@ -298,7 +328,9 @@ export function UMLTab() {
       )}
 
       {active === "erd" && (
-        viewMode === "interactive" && hasInteractiveNodes ? (
+        !isMermaidSyntax(r.erd || "", "erDiagram") ? (
+          <EmptyDiagram label="ERD" hint="Dữ liệu không phải Mermaid" />
+        ) : viewMode === "interactive" && hasInteractiveNodes ? (
           <div className="bg-nexus-bg border border-border rounded-xl overflow-hidden" style={{ height: 500 }}>
             <ReactFlow
               nodes={erdNodes}
@@ -327,7 +359,11 @@ export function UMLTab() {
         )
       )}
 
-      {active === "sequence" && <MermaidRenderer code={r.sequence || ""} id="uml-sequence" />}
+      {active === "sequence" && (() => {
+        const content = (r.sequence || "").trim();
+        if (!isMermaidSyntax(content, "sequenceDiagram")) return <EmptyDiagram label="Sequence" hint="Dữ liệu không phải Mermaid" />;
+        return <MermaidRenderer code={content} id="uml-sequence" />;
+      })()}
     </div>
   );
 }

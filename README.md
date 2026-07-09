@@ -2,431 +2,390 @@
 
 # 🤖 NEXUS AI
 
-### Multi-Agent Project Architect
+### Multi-Agent Project Architect — v0.2.0
 
-> Hệ thống AI đa tác tử — Nhập chủ đề dự án → **10 AI Agent** tự động phân tích, thiết kế, lập sprint, sinh todolist Kanban, push GitHub, gửi email mời thành viên. Có Live Log Console realtime, Notification Center, Mail System, và Dashboard widgets.
+> Hệ thống AI **đa tác tử (multi-agent)**: Nhập chủ đề dự án + danh sách thành viên → **10 AI Agent** tự động phân tích, thiết kế, lập sprint, sinh todolist, push GitHub và gửi email mời thành viên. Kiến trúc modular: 1 hub 70 dòng + 24 module độc lập trong `src/lib/ai/`.
 
-![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![Next.js](https://img.shields.io/badge/Next.js-16.1.3-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss)
 ![Prisma](https://img.shields.io/badge/Prisma-6-2d3748?logo=prisma)
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-Multi--Key-orange)
-![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
 ![Bun](https://img.shields.io/badge/Bun-1-f472b6?logo=bun)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[📖 Documentation](docs/) · [🚀 Cài đặt](#-cài-đặt) · [🔧 Cấu hình](#️-cấu-hình-env) · [📐 Architecture](docs/ARCHITECTURE.md) · [🔌 API](docs/API.md) · [🤝 Contributing](docs/CONTRIBUTING.md)
+[📖 Documentation](docs/) · [🚀 Cài đặt](#-cài-đặt-quick-start) · [🔧 Cấu hình](#️-cấu-hình-env) · [📐 Architecture](docs/ARCHITECTURE.md) · [🔌 API](docs/API.md) · [🤝 Contributing](docs/CONTRIBUTING.md)
 
 </div>
 
 ---
 
+## 📑 Mục lục
+
+- [📖 NEXUS AI là gì?](#-nexus-ai-là-gì)
+- [🤖 10 AI Agents](#-10-ai-agents)
+- [⚙️ Pipeline xử lý (8 phase)](#️-pipeline-xử-lý-8-phase)
+- [✨ Tính năng nổi bật](#-tính-năng-nổi-bật)
+- [🧱 Tech Stack](#-tech-stack)
+- [🚀 Cài đặt (Quick Start)](#-cài-đặt-quick-start)
+- [📜 Scripts](#-scripts)
+- [📁 Cấu trúc dự án](#-cấu-trúc-dự-án)
+- [⚙️ Cấu hình env](#️-cấu-hình-env)
+- [🐳 Deployment](#-deployment)
+- [🔌 Mini-services](#-mini-services)
+- [🛡️ Anti-rate-limit](#-anti-rate-limit)
+- [🗺️ Roadmap](#-roadmap)
+- [📄 License](#-license)
+- [🔗 Links](#-links)
+
+---
+
 ## 📖 NEXUS AI là gì?
 
-NEXUS AI là một **trợ lý kiến trúc sư dự án** chạy hoàn toàn local (hoặc Docker/Fly.io) — bạn chỉ cần nhập chủ đề + danh sách thành viên, **10 AI Agent** sẽ tự động phân tích, thiết kế, lập kế hoạch, sinh todolist, push GitHub, và gửi email mời thành viên.
+**NEXUS AI** là một **trợ lý kiến trúc sư dự án** (Project Architect) chạy hoàn toàn local hoặc triển khai trên Docker / Fly.io. Workflow rất đơn giản:
 
-### 🤖 10 AI Agents
+```
+📋 Nhập chủ đề dự án + danh sách thành viên
+        ↓
+🤖 10 AI Agent chạy pipeline (8 phase)
+        ↓
+📊 Kết quả: analysis + hr + sprint + design + uml + docs + git + test + security
+        ↓
+🚀 Push GitHub repo + 📧 Gửi email mời thành viên
+```
 
-| # | Agent | Nhiệm vụ |
-|---|---|---|
-| 01 | **Requirement Analyst** | Phân tích chủ đề → tech stack, features, actors, modules |
-| 02 | **HR Planner** | Phân vai trò cho từng thành viên dựa trên ưu/nhược điểm |
-| 03 | **Sprint Planner** | Chia sprint 2 tuần, gán task, deadline, milestones |
-| 04 | **System Architect** | Thiết kế database schema, API endpoints, folder structure |
-| 05 | **UML Generator** | Sinh 4 diagram: Use Case, Class, ERD, Sequence (Mermaid + React Flow) |
-| 06 | **Technical Writer** | Viết README, Coding Convention, API Standard |
-| 07 | **Git/DevOps** | Git commands, branch strategy, issue template, CI/CD |
-| 08 | **Software Tester** | Unit/integration/E2E/API/performance tests + bug report |
-| 09 | **Security Reviewer** | Threats, auth flow, OWASP Top 10, rate limit, secrets |
-| 10 | **Quality Reviewer** | Tổng hợp + đồng bộ 9 sections, Zod validation, feedback loop |
+### 🏗️ Kiến trúc v0.2.0 — Modular AI
 
-### 🔄 Pipeline (6 giai đoạn)
+- **Hub mỏng** (`src/lib/ai.ts`, 70 dòng) — chỉ re-export
+- **24 module độc lập** trong `src/lib/ai/` — dễ test, dễ mở rộng
+- **23 Prisma model** (SQLite tại `db/custom.db`)
+- **42 route file** (~58 HTTP endpoint) qua Next.js App Router
+- **5 view** + **13 workspace tab** cho trải nghiệm dashboard đầy đủ
 
-| Phase | Agents | Chế độ |
-|---|---|---|
-| **Phase 1 — Analysis** | 01 → 02 → 03 | Sequential (mỗi agent phụ thuộc cái trước) |
-| **Phase 2 — Design** | 04 + 05 + 06 + 07 | Parallel (mặc định) hoặc Sequential |
-| **Phase 3 — Quality Gates** | 08 + 09 | Parallel hoặc Sequential |
-| **Phase 4 — Retry** | Các agent thất bại | Retry 1 lần sau 5s |
-| **Phase 5 — Fallback** | Agent vẫn fail | Sinh dữ liệu tĩnh (không crash) |
-| **Phase 6 — Quality Review** | Agent 10 | Tổng hợp + đồng bộ tất cả sections |
+---
 
-> Mỗi agent có 9 free models OpenRouter với retry 5 lần/model, full-jitter backoff, và fallback tĩnh nếu tất cả model fail. Multi-key rotation tự động khi bị 429.
+## 🤖 10 AI Agents
+
+Mỗi agent phụ trách một "section" riêng trong output JSON của dự án:
+
+| # | Agent | Section | Vai trò |
+|---|-------|---------|---------|
+| 1 | 📋 **Requirement Analyst** | `analysis` | Phân tích yêu cầu, user stories, functional/non-functional |
+| 2 | 👥 **HR Planner** | `hr` | Vai trò thành viên, phân chia công việc theo skill |
+| 3 | 📅 **Sprint Planner** | `sprint` | Chia sprint, backlog, milestone, timeline |
+| 4 | 🏛️ **System Architect** | `design` | Kiến trúc tổng thể, tech stack, module diagram |
+| 5 | 📊 **UML Generator** | `uml` | Mermaid diagrams (class, sequence, ERD, use-case) |
+| 6 | 📝 **Technical Writer** | `docs` | README, API docs, README chuẩn dự án |
+| 7 | 🔧 **Git/DevOps** | `git` | Cấu trúc repo, CI/CD, branch strategy, .gitignore |
+| 8 | 🧪 **Software Tester** | `test` | Test plan, test cases, chiến lược test |
+| 9 | 🔒 **Security Reviewer** | `security` | OWASP, threat model, security checklist |
+| 10 | ✅ **Quality Reviewer** | *(merge all)* | Gộp toàn bộ section + Zod validation + feedback loop |
+
+> 🎯 **Quality Reviewer** là agent "cửa cuối" — gộp 9 section phía trước, chạy Zod schema, nếu phát hiện lỗi sẽ **feedback loop** về các agent trước để sửa.
+
+---
+
+## ⚙️ Pipeline xử lý (8 phase)
+
+| Phase | Tên | Mô tả | Agents |
+|-------|-----|-------|--------|
+| **0** | 🧭 Planner | Pre-plan modules, xác định thứ tự | Planner Agent |
+| **1** | 🔁 Sequential | Chạy tuần tự (output của agent trước làm context cho agent sau) | analysis → hr → sprint |
+| **2** | ⚡ Parallel 1 | Chạy song song (độc lập) | design + uml + docs + git |
+| **3** | ⚡ Parallel 2 | Chạy song song (độc lập) | test + security |
+| **4** | 🔁 Retry | Thử lại các agent thất bại (đợi 5s giữa mỗi lần) | Failed agents |
+| **5** | 🛟 Fallback | Sinh dữ liệu tĩnh (no crash) cho agent vẫn fail | Static fallback |
+| **5.5** | 🧹 Normalizer | Output Normalizer + Consistency Checker | All sections |
+| **6** | ✅ Quality | Merge toàn bộ + Zod validation + feedback loop | Quality Reviewer |
+
+> 💡 **Pipeline an toàn**: Ngay cả khi toàn bộ AI fail, phase 5 vẫn đảm bảo output hợp lệ (static data) → UI **không bao giờ crash**.
 
 ---
 
 ## ✨ Tính năng nổi bật
 
-### 📊 Dashboard & Views
-- **Trang tổng quan (Home)** — Dashboard với 3 widget realtime:
-  - **Recent Activity** — Feed hoạt động từ `ActivityLog` (20+ event types)
-  - **NEXUS AI Status** — Agent/API key/Pipeline/DB/Redis/Storage status realtime
-  - **Tasks đang làm** — Task in_progress/overdue/due_soon của user
-- **All Projects** — Premium SaaS dashboard: stats cards, search, filter (priority/status/tag), sort, grid/list toggle, context menu (favorite/archive/duplicate/delete)
-- **Input** — Tạo project form (topic, description, purpose, tech prefs, members, deadline, priority, tags, cover color)
-- **Workspace** — Project workspace với 13 sidebar tabs
-- **Agent Hub** — Dashboard cho 10 AI agents (status, model, skills, stats)
-
-### 🔔 Notification Center
-- **Per-user read tracking** (qua `NotificationRead` — 1 row mỗi reader)
-- **13 notification types**: `TASK_COMPLETED`, `TASK_STATUS_CHANGED`, `PROPOSAL_CREATED`, `REQUIREMENT_EDITED`, `DOC_UPLOADED`, `COMMENT`, `AI_DONE`, `AI_ERROR`, `DEADLINE_SOON`, `TASK_ASSIGNED`, `MAIL_RECEIVED`, `PROJECT_INVITE`, `APPROVAL_REQUEST`
-- **Realtime qua WebSocket** (notification-service, port 3002)
-- **Detail modal** với action button click-through
-- **Broadcast** (recipientEmail=null) hoặc **targeted** (email cụ thể)
-- Bell icon với unread badge, mark-all-read, mark-unread
-
-### 📬 Mail System
-- **Compose** với rich text editor (`@mdxeditor/editor`)
-- **AI Rewrite** qua OpenRouter — 5 mode: `improve`, `professional`, `friendly`, `concise`, `expand`
-- **SMTP send** qua `nodemailer` (dùng leader credentials)
-- **7 folders**: `INBOX` / `SENT` / `DRAFT` / `STARRED` / `ARCHIVE` / `SPAM` / `TRASH`
-- **Attachments** — upload (max 5MB/file), download, delete
-- **Reply / Reply-all / Forward** — threading qua `parentEmailId`
-- **Realtime notifications** khi nhận mail mới
-- **Per-user state** (Mailbox model: folder, isRead, isStarred, isArchived, isTrashed)
-
-### 📝 Activity Logging
-- **20+ event types**: `PROJECT_CREATED/UPDATED/DELETED`, `MEMBER_JOINED/LEFT`, `TASK_CREATED/UPDATED/STATUS_CHANGED/COMPLETED`, `DOC_UPLOADED`, `AI_AGENT_START/DONE/ERROR`, `SPRINT_CREATED`, `DEPLOY`, `GIT_MERGE`, `PROPOSAL_CREATED/APPROVED/REJECTED`, `MAIL_SENT/RECEIVED`, `PIPELINE`, `INIT`, `REFINE`, `TASK_GEN`, `SECTION_EDIT`, `GITHUB_PUSH`, `EMAIL_SENT`
-- **Enriched with actor info** (name, email, role, avatar)
-- **Relations** (relatedTaskId, relatedMailId, actionUrl) cho click-through
-
-### ✅ Task Generation & Kanban
-- **Dedup + comprehensiveness check** — không sinh task trùng lặp
-- **Developer-First model** — mỗi task có: `layer` (DATABASE/BACKEND/UI/CONFIG/TESTING), `targetFile`, `implementationSteps[]`, `technicalHints` (snippet + note)
-- **Kanban board** — drag & drop 4 cột: `todo` / `in_progress` / `review` / `done` (qua `@hello-pangea/dnd`)
-- **Task statistics** cache (`TaskStatistic` model) — completion rate, overdue, due soon
-
-### 📐 Mermaid Rendering (3-tier fix)
-1. **`fixMermaid`** — regex fix nhanh (lỗi syntax phổ biến)
-2. **`aggressiveFix`** — fix mạnh hơn (node ID normalization, dấu tiếng Việt)
-3. **AI Auto-Fix** — gọi `/api/projects/[id]/fix-mermaid` → AI sửa syntax (qua OpenRouter)
-
-### 🐙 GitHub Integration
-- **OAuth** flow (`/api/github/auth` → `/api/github/callback`)
-- **Push to repo** — sinh 17+ files (README, docs, UML, .github templates) → tạo PR
-- **Status check** qua `/api/github/status`
-
-### 💬 Realtime Chat
-- **WebSocket** (chat-service, port 3001, Socket.io)
-- **AI Assistant** — `/api/projects/[id]/chat/ai` để trigger AI reply
-- Fallback HTTP polling nếu chat-service không chạy
-
-### 🎨 Theme & UX
-- **Dark theme only** — teal accent, no light mode
-- **Neural background** animation
-- **3D AI brain** hero animation
-- **Sonner toasts** cho notifications
-- **shadcn/ui (New York)** — 50+ components
+| Tính năng | Mô tả |
+|-----------|-------|
+| 📊 **Dashboard Workspace** | 13 tab: Overview, Analysis, HR, Sprint, Design, UML, Docs, Git, Test, Security, Tasks, Chat, Settings |
+| 🔔 **Notifications** | Toast realtime + NotificationProvider + db persistent (Notification / NotificationRead) |
+| 📧 **Mail System** | Nodemailer SMTP, lưu lịch sử EmailLog, template + attachment |
+| 💬 **Chat Service** | Socket.io mini-service (port 3001), ChatMessage lưu DB |
+| 🐙 **GitHub Integration** | OAuth push repo tự động (next-auth + GitHub API) |
+| 📜 **Live Log Console** | AsyncLocalStorage track log pipeline realtime, AgentStatus + PipelineStatus |
+| 🌍 **i18n** | next-intl multi-language |
+| 🔐 **Auth** | next-auth, leader/member access control (`src/lib/access.ts`) |
+| 🎨 **UI/UX** | 48 shadcn/ui + Radix + framer-motion 12 + mermaid 11 + reactflow |
+| 💾 **State** | Zustand persisted store (`src/store/useNexus.ts`) |
 
 ---
 
-## 🛠️ Tech Stack
+## 🧱 Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | Next.js 16 (App Router, Turbopack), React 19, TypeScript 5 |
-| **Styling** | Tailwind CSS 4, shadcn/ui (New York), tw-animate-css |
-| **State** | Zustand 5 (persisted), TanStack Query 5, TanStack Table 8 |
-| **Backend** | Next.js API Routes (Node.js runtime) |
-| **Database** | Prisma 6 ORM + SQLite |
-| **AI** | OpenRouter (multi-key rotation, 9 free models/agent, multi-model fallback) |
-| **Realtime** | Socket.io (chat port 3001 + notifications port 3002) |
-| **Diagrams** | Mermaid.js 11 + React Flow 11 |
-| **Kanban** | @hello-pangea/dnd 18 |
-| **Email** | Nodemailer 9 (SMTP), @mdxeditor/editor (rich text) |
-| **Forms** | react-hook-form 7 + zod 4 |
-| **Runtime** | Bun 1 |
+| Layer | Tech |
+|-------|------|
+| **Framework** | Next.js 16.1.3 (App Router, Turbopack) |
+| **UI Library** | React 19 |
+| **Language** | TypeScript 5 |
+| **Styling** | Tailwind CSS 4 + 48 shadcn/ui + Radix UI |
+| **State** | Zustand (persisted) + TanStack Query 5 |
+| **Table** | TanStack Table |
+| **Database** | Prisma 6 + SQLite (`db/custom.db`) — 23 models |
+| **AI** | z-ai-web-dev-sdk + OpenRouter (multi-key, free models) |
+| **Validation** | Zod 4 |
+| **Charts/Diagrams** | mermaid 11, reactflow |
+| **Animation** | framer-motion 12 |
+| **Auth** | next-auth |
+| **i18n** | next-intl |
+| **Email** | nodemailer |
+| **Realtime** | socket.io-client |
+| **Runtime** | Bun |
 
 ---
 
-## 🚀 Cài đặt
+## 🚀 Cài đặt (Quick Start)
 
-### Yêu cầu
+### 📋 Prerequisites
 
-- [Bun](https://bun.sh) v1+ (runtime + package manager)
-- [Node.js](https://nodejs.org) v20+ (cho Prisma CLI)
-- [OpenRouter API key](https://openrouter.ai/keys) (free)
+- **Node.js** ≥ 20 hoặc **Bun** ≥ 1.1
+- **Git** (để push repo)
+- **OpenRouter API key** (free) — lấy tại https://openrouter.ai
+- (Tuỳ chọn) GitHub OAuth app — để push repo
+- (Tuỳ chọn) SMTP server — để gửi email mời
 
-### Quick start
+### 1️⃣ Clone repo
 
 ```bash
-# 1. Clone
-git clone https://github.com/vanhoi04082006-pixel/Nexus-AI.git
-cd Nexus-AI
+git clone <repo-url> nexus-ai
+cd nexus-ai
+bun install   # hoặc npm install
+```
 
-# 2. Cài dependencies
-bun install
+### 2️⃣ Cấu hình `.env`
 
-# 3. Cấu hình env
+```bash
 cp .env.example .env
-# → Điền OPENROUTER_API_KEY vào .env
-
-# 4. Init database (SQLite)
-bun run db:push
-
-# 5. Chạy dev server
-bun run dev
-# → http://localhost:3000
+# sửa .env — xem bảng dưới
 ```
 
-### Chạy mini-services (optional, cho realtime)
+### 3️⃣ Khởi tạo database
 
 ```bash
-# Terminal 1 — Chat service (port 3001)
-cd mini-services/chat-service
-bun install
-bun run dev
-
-# Terminal 2 — Notification service (port 3002)
-cd mini-services/notification-service
-bun install
-bun run dev
+bun run db:generate    # sinh Prisma client
+bun run db:push        # tạo schema SQLite
 ```
 
-> Nếu không chạy mini-services, frontend tự fallback sang HTTP polling. Notification Center + Mail vẫn hoạt động qua REST API.
-
-### Scripts có sẵn
-
-| Script | Mô tả |
-|---|---|
-| `bun run dev` | Chạy dev server (port 3000, Turbopack, log ra `dev.log`) |
-| `bun run build` | Build production (standalone output) |
-| `bun run start` | Chạy production server |
-| `bun run lint` | ESLint + Next.js rules |
-| `bun run db:push` | Push schema → SQLite (dev) |
-| `bun run db:generate` | Regenerate Prisma Client |
-| `bun run db:migrate` | Tạo migration (production) |
-| `bun run db:reset` | Reset DB (xóa hết data!) |
-
----
-
-## ⚙️ Cấu hình (.env)
-
-Copy `.env.example` thành `.env` và điền:
+### 4️⃣ Chạy dev
 
 ```bash
-# Database (SQLite)
-DATABASE_URL=file:./db/custom.db
-
-# OpenRouter API Keys (multi-key rotation)
-# Hỗ trợ không giới hạn số key — tự động luân chuyển khi 1 key bị rate-limit
-OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxx
-# OPENROUTER_API_KEY_2=sk-or-v1-xxxxxxxxxxxxx
-# OPENROUTER_API_KEY_3=sk-or-v1-xxxxxxxxxxxxx
-# ... thêm bao nhiêu cũng được
-
-# GitHub OAuth App (tùy chọn — cho push GitHub)
-GITHUB_CLIENT_ID=xxxxxxxx
-GITHUB_CLIENT_SECRET=xxxxxxxx
-
-# App URL
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-APP_URL=http://localhost:3000
+bun run dev            # Next.js only (localhost:3000, không tunnel)
 ```
 
-| Variable | Bắt buộc | Mô tả |
-|---|---|---|
-| `DATABASE_URL` | ✅ | SQLite path. Dev: `file:./db/custom.db` |
-| `OPENROUTER_API_KEY` | ✅ | OpenRouter API key (free tại https://openrouter.ai/keys) |
-| `OPENROUTER_API_KEY_2..N` | ⛔ | Keys dự phòng cho multi-key rotation |
-| `GITHUB_CLIENT_ID` | ⛔ | GitHub OAuth App Client ID (cho push GitHub) |
-| `GITHUB_CLIENT_SECRET` | ⛔ | GitHub OAuth App Client Secret |
-| `NEXT_PUBLIC_APP_URL` | ⛔ | Public URL (cho email links) — mặc định `http://localhost:3000` |
-| `APP_URL` | ⛔ | Server-side public URL |
-
-> **SMTP credentials** (Gmail App Password) không lưu trong `.env` — leader nhập khi tạo project, lưu vào `Project.leaderSmtpPassword`.
-
----
-
-## 📁 Project Structure
-
-```
-Nexus-AI/
-├── prisma/
-│   └── schema.prisma              # DB schema (21 models)
-├── src/
-│   ├── app/
-│   │   ├── api/                   # REST API routes (50+ endpoints)
-│   │   │   ├── projects/          # Project CRUD + pipeline + tasks + mailbox + ...
-│   │   │   ├── dashboard/         # activity, status, tasks, statistics
-│   │   │   ├── activity/logs      # Activity log query
-│   │   │   ├── agents/            # 10 AI agents info
-│   │   │   ├── notifications/     # Global notifications
-│   │   │   ├── templates/         # Project templates
-│   │   │   ├── github/            # OAuth + push + status
-│   │   │   └── config/            # Public URL config
-│   │   ├── layout.tsx             # Root layout (Mermaid CDN, dark theme)
-│   │   └── page.tsx               # Main page (router: home/projects/input/workspace)
-│   ├── components/
-│   │   ├── ui/                    # shadcn/ui (50+ components — KHÔNG sửa)
-│   │   └── nexus/
-│   │       ├── tabs/              # 13 workspace tabs
-│   │       ├── HomeView.tsx       # Dashboard widgets
-│   │       ├── AllProjectsView.tsx# Premium SaaS dashboard
-│   │       ├── InputView.tsx      # Create project form
-│   │       ├── WorkspaceView.tsx  # Project workspace
-│   │       ├── AgentHubView.tsx   # 10 AI agents dashboard
-│   │       ├── NotificationBell.tsx
-│   │       ├── MermaidRenderer.tsx# 3-tier fix
-│   │       ├── ProcessingOverlay.tsx       # Pipeline Live Log
-│   │       ├── TaskProcessingOverlay.tsx   # Init/Refine Live Log
-│   │       ├── NeuralBackground.tsx
-│   │       └── AI3DBrain.tsx
-│   ├── lib/
-│   │   ├── ai.ts                  # 10-agent pipeline + retry + fallback
-│   │   ├── openrouter.ts          # Multi-key rotation client
-│   │   ├── github.ts              # Push + PR
-│   │   ├── email.ts               # SMTP (nodemailer)
-│   │   ├── notifications.ts       # Notification service broadcaster
-│   │   ├── activity.ts            # Activity log + system/pipeline status
-│   │   ├── pipeline-progress.ts   # AsyncLocalStorage log + progress maps
-│   │   ├── access.ts              # Token auth (leader/member)
-│   │   ├── schemas.ts             # Zod validators
-│   │   ├── db.ts                  # Prisma client
-│   │   └── types.ts
-│   └── store/
-│       └── useNexus.ts            # Zustand store (persisted)
-├── mini-services/
-│   ├── chat-service/              # Socket.io chat (port 3001)
-│   └── notification-service/      # Socket.io notifications (port 3002)
-├── scripts/                       # run-local (Win/Mac/Linux), deploy-fly, push-to-github
-├── docs/                          # Documentation
-├── db/
-│   └── custom.db                  # SQLite (auto-created)
-└── package.json
-```
-
----
-
-## 🔌 API Overview
-
-50+ REST endpoints, nhóm theo category:
-
-| Group | Endpoints | Mô tả |
-|---|---|---|
-| **Projects** | 4 | CRUD + duplicate |
-| **Pipeline** | 3 | Initialize, refine, progress polling |
-| **Tasks** | 2 | List + update (Kanban drag-drop) |
-| **Notifications** | 4 | List, create, mark read, delete |
-| **Mail** | 6 | Compose, list, get, patch, attachments, AI rewrite |
-| **Dashboard** | 4 | Activity, status, tasks, statistics |
-| **Activity** | 2 | Project history + global logs |
-| **Agents** | 1 | 10 AI agents info |
-| **GitHub** | 4 | OAuth, callback, push, status |
-| **Chat** | 3 | List, post, AI reply |
-| **Edit Proposals** | 3 | List, create, approve/reject |
-| **Sections** | 1 | Edit section content |
-| **Members** | 2 | List, add |
-| **Context/Tokens** | 2 | Long-term memory + token usage |
-| **Fix Mermaid** | 1 | AI fix Mermaid syntax |
-| **Config/Templates** | 2 | Public URL + project templates |
-
-👉 **Full reference:** [docs/API.md](docs/API.md)
-
----
-
-## 🗄️ Database
-
-21 models (SQLite via Prisma) — xem đầy đủ tại [`prisma/schema.prisma`](prisma/schema.prisma):
-
-| Model | Mô tả |
-|---|---|
-| `Project` | Project + dashboard enrichment (isFavorite, isArchived, priority, deadline, techStack, tags, coverColor) |
-| `Member` | Thành viên + inviteToken |
-| `Analysis` | Section versioned (analysis/hr/sprint/design/uml/docs/git/test/security) |
-| `Task` | SMART task + Kanban fields (layer, targetFile, implementationSteps, technicalHints) |
-| `EditProposal` | Member đề xuất edit → leader approve |
-| `ChatMessage` | Chat realtime |
-| `ProjectContext` | Long-term memory cache (save tokens) |
-| `TokenLog` | Token usage per agent per project |
-| `ActivityLog` | 20+ event types, enriched with actor + relations |
-| `TaskLog` | Audit trail task mutations |
-| `Notification` + `NotificationRead` | Notification + per-user read tracking |
-| `Email` + `EmailAttachment` + `Mailbox` + `MailRead` | Full mail system |
-| `AgentConfig` | AI agent customization |
-| `AgentStatus` | Live agent status (online/busy/error/idle) |
-| `SystemStatus` | DB/Redis/VectorDB/Storage status |
-| `PipelineStatus` | Pipeline run status per project |
-| `TaskStatistic` | Cached aggregate per project |
-| `Template` | Project template blueprint |
-| `EmailLog` | Legacy email log (invitation/task assigned) |
-
----
-
-## 🚢 Deployment
-
-### Fly.io (recommended)
+Hoặc chạy kèm tunnel (public URL):
 
 ```bash
-# Cài flyctl
-curl -L https://fly.io/install.sh | sh
+# Windows
+run
 
-# Deploy
-fly deploy          # Main app (port 3000)
-fly deploy -c fly.chat.toml        # Chat service (port 3001)
-fly deploy -c fly.notification.toml # Notification service (port 3002)
+# Linux / Mac
+bash scripts/run-local.sh
 ```
 
-Xem chi tiết: [`DEPLOY.md`](DEPLOY.md)
-
-### Local với Cloudflare Tunnel (share tạm thời)
-
-```bash
-./scripts/run-local.sh    # Linux/Mac
-./scripts/run-local.bat   # Windows
-# → Tự động parse tunnel URL → ghi vào .public-url
-```
-
-Xem chi tiết: [`LOCAL_RUN.md`](LOCAL_RUN.md)
-
-### Docker
-
-```bash
-docker build -t nexus-ai .
-docker run -p 3000:3000 -v $(pwd)/db:/app/db nexus-ai
-```
+> ⚠️ **Lưu ý**: Không còn `bun run run` nữa. Dùng `run` (Windows) hoặc `bash scripts/run-local.sh` (Linux/Mac) cho chế độ tunnel.
 
 ---
 
-## 📚 Documentation
+## 📜 Scripts
 
-| Document | Mô tả | Audience |
-|---|---|---|
-| [README.md](README.md) | Overview + cài đặt nhanh | Tất cả users |
-| [docs/README.md](docs/README.md) | Documentation index | Tất cả |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, design decisions | Developers |
-| [docs/API.md](docs/API.md) | Full REST API reference (50+ endpoints) | Developers |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Dev setup, code style, how to extend | Contributors |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Code of conduct | Tất cả |
-| [LOCAL_RUN.md](LOCAL_RUN.md) | Chạy local + Cloudflare Tunnel | Users local |
-| [DEPLOY.md](DEPLOY.md) | Deploy Fly.io + Docker | DevOps |
+| Script | Lệnh | Mô tả |
+|--------|------|-------|
+| `dev` | `next dev -p 3000 \| tee dev.log` | Next.js dev only, port 3000, log ra `dev.log` |
+| `build` | `next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/` | Build production + standalone |
+| `start` | `NODE_ENV=production bun .next/standalone/server.js \| tee server.log` | Chạy production standalone |
+| `lint` | `eslint .` | Kiểm tra lint |
+| `db:push` | `prisma db push` | Push schema → SQLite |
+| `db:generate` | `prisma generate` | Sinh Prisma client |
+| `db:migrate` | `prisma migrate dev` | Tạo migration |
+| `db:reset` | `prisma migrate reset` | Reset DB |
+
+### 🚇 Tunnel commands (ngoài package.json)
+
+| Command | OS | Mô tả |
+|---------|----|----- |
+| `run` | Windows | Gọi `run.cmd` → `scripts/run-local.bat` (Next.js + tunnel) |
+| `bash scripts/run-local.sh` | Linux/Mac | Next.js + tunnel (cloudflared / ngrok) |
 
 ---
 
-## 🤝 Contributing
+## 📁 Cấu trúc dự án
 
-Xem [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) để biết:
-- Setup dev environment
-- Code style (TypeScript strict, shadcn/ui, Tailwind)
-- Cách thêm AI Agent mới (đã có hướng dẫn từng bước)
-- Cách thêm API Route + log qua AsyncLocalStorage
-- Pull Request process
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/                # 42 route file (~58 endpoint)
+│   ├── layout.tsx          # Root layout (Mermaid CDN, ErrorBoundary, Toaster)
+│   ├── page.tsx            # Main router (home/input/workspace/all-projects/agent-hub)
+│   ├── error.tsx           # Route error boundary
+│   ├── global-error.tsx    # Root error boundary
+│   ├── loading.tsx         # Route loading
+│   ├── not-found.tsx       # 404
+│   └── globals.css         # Tailwind + custom CSS (scrollbar, animations)
+├── components/
+│   ├── ui/                 # 48 shadcn/ui component
+│   ├── nexus/              # 14 feature component + tabs/ (13 tab)
+│   ├── ErrorBoundary.tsx   # React error boundary
+│   ├── providers/          # NotificationProvider
+│   └── states/             # EmptyState, RetryState, LoadingState
+├── lib/
+│   ├── ai.ts               # 70-line hub (re-exports)
+│   ├── ai/                 # 24 AI module (modular architecture)
+│   ├── openrouter.ts       # AI client (548 dòng, anti-rate-limit)
+│   ├── schemas.ts          # Zod lenient validation
+│   ├── types.ts            # Shared types
+│   ├── db.ts               # Prisma client
+│   ├── access.ts           # Leader/member access control
+│   ├── activity.ts         # ActivityLog + AgentStatus + PipelineStatus
+│   ├── email.ts            # Nodemailer SMTP
+│   ├── github.ts           # GitHub OAuth + push
+│   ├── notify.ts           # Notification provider (toast API)
+│   ├── notifications.ts    # Notification helpers
+│   └── pipeline-progress.ts # AsyncLocalStorage log tracker
+├── store/useNexus.ts       # Zustand store (persisted)
+└── hooks/                  # use-mobile, use-toast
+```
+
+### 🗃️ Database models (23)
+
+`Project`, `ProjectContext`, `TokenLog`, `Member`, `Analysis`, `EditProposal`, `ChatMessage`, `Task`, `EmailLog`, `ActivityLog`, `TaskLog`, `AgentStatus`, `SystemStatus`, `PipelineStatus`, `TaskStatistic`, `Notification`, `NotificationRead`, `AgentConfig`, `Template`, `Email`, `EmailAttachment`, `Mailbox`, `MailRead`
+
+---
+
+## ⚙️ Cấu hình env
+
+Sample `.env` (xem `.env.example`):
+
+| Biến | Bắt buộc | Mô tả |
+|------|----------|-------|
+| `DATABASE_URL` | ✅ | `file:./db/custom.db` (SQLite) |
+| `OPENROUTER_API_KEY` | ✅ | `sk-or-v1-xxx` — key chính cho AI |
+| `OPENROUTER_API_KEY_2` | ⛔ | Multi-key rotation (tuỳ chọn) |
+| `GITHUB_CLIENT_ID` | ⛔ | GitHub OAuth app (để push repo) |
+| `GITHUB_CLIENT_SECRET` | ⛔ | GitHub OAuth secret |
+| `NEXT_PUBLIC_APP_URL` | ✅ | `http://localhost:3000` (client) |
+| `APP_URL` | ✅ | `http://localhost:3000` (server) |
+
+> 💡 **Multi-key**: OpenRouter client tự switch key khi gặp lỗi 429 (rate-limit). Thêm `OPENROUTER_API_KEY_2`, `_3`, ... để scale.
+
+---
+
+## 🐳 Deployment
+
+### Docker (local)
+
+```bash
+# App chính
+docker build -f Dockerfile -t nexus-ai .
+
+# Chat service
+docker build -f Dockerfile.chat -t nexus-ai-chat .
+```
+
+### Fly.io
+
+```bash
+# App chính (fly.toml)
+fly deploy
+
+# Chat service (fly.chat.toml)
+fly deploy -c fly.chat.toml
+```
+
+### Caddy reverse proxy
+
+File `Caddyfile` cấu hình reverse proxy cho app + mini-services. Tuỳ chỉnh domain + upstream port cho phù hợp.
+
+### Tunnel (`tunnel.conf`)
+
+3 chế độ (chọn 1 trong `tunnel.conf`):
+
+| Mode | Công cụ | Mô tả |
+|------|---------|-------|
+| `quick` | cloudflared (quick tunnel) | Nhanh nhất, URL ngẫu nhiên |
+| `cloudflare-named` | cloudflared (named tunnel) | URL cố định, cần CF account |
+| `ngrok` | ngrok | Phổ biến, dễ dùng |
+
+---
+
+## 🔌 Mini-services
+
+NEXUS AI tách 2 mini-service ra riêng để scale độc lập:
+
+| Service | Port | Vai trò | Dockerfile |
+|---------|------|---------|-----------|
+| 💬 **chat-service** | `3001` | Socket.io realtime chat | `Dockerfile.chat` |
+| 🔔 **notification-service** | `3002` | Notification queue + dispatch | *(dùng chung app)* |
+
+> 🎯 App chính (port 3000) giao tiếp với 2 service qua HTTP + Socket.io-client.
+
+---
+
+## 🛡️ Anti-rate-limit
+
+Module `src/lib/openrouter.ts` (548 dòng) triển khai **7 cơ chế chống rate-limit** để chạy ổn định với OpenRouter free models:
+
+| # | Cơ chế | Mô tả |
+|---|--------|-------|
+| 1 | 🔌 **Multi-key rotation** | Tự switch key khi gặp 429 |
+| 2 | ⏱️ **60s wait on 429** | Đợi 60s rồi retry khi rate-limit |
+| 3 | 🔥 **Circuit Breaker** | 3 fail liên tiếp → skip model 3 phút |
+| 4 | 💀 **Dead Model Recovery** | Cooldown 2 phút cho model "chết" |
+| 5 | 📊 **Health Score** | Priority sort theo success rate |
+| 6 | ⚡ **Adaptive timeout** | Timeout thay đổi theo từng model |
+| 7 | 💾 **In-memory cache** | Cache prompt 1h TTL, giảm call API |
+
+> 🎯 Kết quả: Pipeline 10 agent có thể chạy ổn định hàng trăm lần liên tiếp mà không bị block.
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] 🌐 Webhook GitHub realtime (push status, commit log)
+- [ ] 🤖 Plugin Agent marketplace (load agent động)
+- [ ] 📊 Analytics dashboard (TokenLog + TaskStatistic)
+- [ ] 🔄 Multi-project concurrent pipeline
+- [ ] 🌍 Web UI i18n đầy đủ (vi / en / ja / zh)
+- [ ] 🧠 Vector DB cho long-term memory của agent
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE) © Bùi Văn Hội
+Dự án phát hành theo giấy phép **MIT** — xem [LICENSE](LICENSE).
+
+```
+MIT License — Copyright (c) 2025 NEXUS AI
+```
 
 ---
 
-## 📞 Support
+## 🔗 Links
 
-- **GitHub Issues:** https://github.com/vanhoi04082006-pixel/Nexus-AI/issues
-- **GitHub:** [@vanhoi04082006-pixel](https://github.com/vanhoi04082006-pixel)
+| Link | Mô tả |
+|------|-------|
+| 📁 [docs/](docs/) | Thư mục documentation đầy đủ |
+| 📐 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc modular AI (hub + 24 module) |
+| 🔌 [docs/API.md](docs/API.md) | Tài liệu API (~58 endpoint) |
+| 🤝 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Hướng dẫn đóng góp |
+| 🗄️ [docs/DATABASE.md](docs/DATABASE.md) | Schema 23 Prisma model |
+| 🚀 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Hướng dẫn deploy Fly.io + Caddy |
+| 🤖 [docs/AGENTS.md](docs/AGENTS.md) | Chi tiết 10 AI Agent + pipeline |
 
 ---
 
-<p align="center">
-  <strong>NEXUS AI</strong> — Multi-Agent Project Architect 🤖
-</p>
+<div align="center">
+
+**Made with 🤖 by NEXUS AI team**
+
+If this project helps you, please ⭐ the repo!
+
+</div>

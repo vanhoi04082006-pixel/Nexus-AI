@@ -3,6 +3,7 @@
 // via the REST API (no git CLI needed).
 
 import { db } from "./db";
+import { decryptToken } from "./github-oauth";
 import type { ProjectResult, ProjectInput } from "./types";
 
 /* ===========================================================
@@ -516,7 +517,9 @@ export async function pushProjectToGitHub(
   if (!project.githubToken) throw new Error("Chua ket noi GitHub. Hay nhan 'Connect GitHub' truoc.");
   if (!project.githubUsername) throw new Error("Khong tim thay GitHub username.");
 
-  const token = project.githubToken;
+  // FIX: Decrypt token (was plaintext — now encrypted at rest)
+  const token = decryptToken(project.githubToken) || project.githubToken; // fallback for legacy plaintext
+  if (!token) throw new Error("GitHub token giải mã thất bại — kết nối lại GitHub");
   const owner = project.githubUsername;
 
   // ===== Reconstruct ProjectResult =====

@@ -298,7 +298,7 @@ export async function POST(
         actorEmail: fromEmail,
         actorRole: "Leader",
         relatedMailId: email.id,
-        actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+        actionUrl: `/?p=${id}&tab=mailbox`,
         actionLabel: "Mở Mailbox",
       });
     } catch { /* non-fatal */ }
@@ -320,7 +320,7 @@ export async function POST(
           recipientEmail: recipient,
           priority: "normal",
           relatedMailId: email.id,
-          actionUrl: `/?p=${id}&token=${token}&tab=mailbox&mail=${email.id}`,
+          actionUrl: `/?p=${id}&tab=mailbox&mail=${email.id}`,
           actionLabel: "Đọc Email",
           extra: { fromEmail, subject: body.subject },
         });
@@ -336,7 +336,7 @@ export async function POST(
             actorEmail: fromEmail,
             actorRole: "Leader",
             relatedMailId: email.id,
-            actionUrl: `/?p=${id}&token=${token}&tab=mailbox`,
+            actionUrl: `/?p=${id}&tab=mailbox`,
             actionLabel: "Đọc Email",
           });
         } catch { /* non-fatal */ }
@@ -417,11 +417,14 @@ async function sendViaSmtp(
       auth: { user: project.leaderEmail, pass: project.leaderSmtpPassword },
     });
     const info = await transport.sendMail({
-      from: `"${project.leaderName}" <${project.leaderEmail}>`,
+      // FIX: Use structured form to prevent SMTP header injection via leaderName
+      // (was `"${leaderName}" <email>` — CRLF in leaderName escapes quoted-string)
+      from: { name: project.leaderName, address: project.leaderEmail },
       to: toArr.join(", "),
       cc: ccArr.join(", "),
       bcc: bccArr.join(", "),
-      subject: email.subject,
+      // FIX: Strip CRLF from subject to prevent header injection
+      subject: (email.subject || "").replace(/[\r\n]/g, " "),
       html: email.bodyHtml || `<pre>${escapeHtml(email.bodyText)}</pre>`,
       text: email.bodyText || stripHtml(email.bodyHtml),
     });

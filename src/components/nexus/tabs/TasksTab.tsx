@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { useNexus } from "@/store/useNexus";
@@ -12,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import {
   CheckSquare,
   Clock,
@@ -167,7 +167,7 @@ export function TasksTab() {
 
     const task = tasks.find((t) => t.id === draggableId);
     if (!task || !canUpdate(task)) {
-      toast.error("Ban khong the cap nhat task nay");
+      notify.error("Ban khong the cap nhat task nay");
       return;
     }
 
@@ -181,7 +181,7 @@ export function TasksTab() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!resp.ok) throw new Error("Loi cap nhat");
-      toast.success(`Đã chuyển sang: ${COLUMNS.find(c => c.id === newStatus)?.title}`);
+      notify.success(`Đã chuyển sang: ${COLUMNS.find(c => c.id === newStatus)?.title}`);
 
       // Create notification for leader when task status changes
       try {
@@ -197,15 +197,14 @@ export function TasksTab() {
       } catch { /* non-fatal */ }
     } catch {
       updateTaskStatus(draggableId, source.droppableId);
-      toast.error("Khong cap nhat duoc");
+      notify.error("Khong cap nhat duoc");
     } finally {
       setUpdating(null);
     }
   }
 
   function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    toast.success("Da sao chep code vao clipboard!");
+    notify.copy(text, "Đã sao chép code vào clipboard!");
   }
 
   return (
@@ -525,17 +524,23 @@ export function TasksTab() {
                     <button
                       key={c.id}
                       onClick={async () => {
+                        const oldStatus = selectedTask.status;
+                        // FIX: Optimistic update (rollback on failure — was leaving UI in wrong state)
                         updateTaskStatus(selectedTask.id, c.id);
                         setSelectedTask({ ...selectedTask, status: c.id });
                         try {
-                          await fetch(`/api/projects/${projectId}/tasks/${selectedTask.id}?token=${encodeURIComponent(token || "")}`, {
+                          const resp = await fetch(`/api/projects/${projectId}/tasks/${selectedTask.id}?token=${encodeURIComponent(token || "")}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ status: c.id }),
                           });
-                          toast.success(`Da chuyen: ${c.title}`);
+                          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                          notify.success(`Đã chuyển: ${c.title}`);
                         } catch {
-                          toast.error("Loi cap nhat");
+                          // Rollback on failure
+                          updateTaskStatus(selectedTask.id, oldStatus);
+                          setSelectedTask({ ...selectedTask, status: oldStatus });
+                          notify.error("Lỗi cập nhật — đã hoàn tác");
                         }
                       }}
                       className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${

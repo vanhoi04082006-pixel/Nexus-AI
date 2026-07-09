@@ -1,14 +1,17 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useState } from "react";
 import { useNexus } from "@/store/useNexus";
 import { SectionEditor } from "../SectionEditor";
 import { useReloadProject } from "../useReload";
 import { Book, Code, Plug, Copy, Check } from "lucide-react";
 import type { DocsData } from "@/lib/types";
+import { sanitizeHtml, escapeHtml } from "@/lib/sanitize";
 
 function esc(s: unknown): string {
-  return String(s ?? "");
+  // FIX: Properly escape HTML special chars (was no-op → stored XSS)
+  return escapeHtml(s);
 }
 
 /** Convert literal \n to real newlines (AI often returns escaped newlines) */
@@ -78,10 +81,9 @@ export function DocsTab() {
   const rawContent = fixNewlines((r as Record<string, string | undefined>)[active] || "");
 
   function copy() {
-    navigator.clipboard.writeText(rawContent).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    notify.copy(rawContent, "Đã copy nội dung!");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -129,7 +131,7 @@ export function DocsTab() {
         {rawContent ? (
           <div
             className="px-5 py-4 overflow-x-auto nexus-scroll min-h-[200px] docs-rendered"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(rawContent) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(rawContent)) }}
           />
         ) : (
           <div className="px-5 py-8 text-center text-sm text-muted-foreground">

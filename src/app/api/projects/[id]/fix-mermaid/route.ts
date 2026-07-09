@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import { resolveAccess } from "@/lib/access";
 import { callOpenRouter } from "@/lib/openrouter";
+import { rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +18,10 @@ const FIX_MODELS = [
   "google/gemma-4-31b-it:free",
   "qwen/qwen3-coder:free",
 ];
+
+// Rate limit: 5 requests per minute per user (fix-mermaid is expensive — calls AI)
+const RL_MAX = 5;
+const RL_WINDOW = 60_000;
 
 export async function POST(
   req: Request,
@@ -30,6 +35,15 @@ export async function POST(
     const access = await resolveAccess(id, token);
     if (!access) {
       return Response.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Rate limit per user (prevent AI cost abuse)
+    const rlKey = `fix-mermaid:${access.email || access.name}`;
+    if (!rateLimit(rlKey, RL_MAX, RL_WINDOW)) {
+      return Response.json(
+        { error: "Quá nhiều yêu cầu — thử lại sau 1 phút" },
+        { status: 429, headers: rateLimitHeaders(rlKey, RL_MAX, RL_WINDOW) }
+      );
     }
 
     const body = (await req.json()) as {
@@ -97,10 +111,14 @@ Dự án: ${project?.topic || "N/A"}`;
     }
 
     if (!fixedCode) {
-      return Response.json(
-        { error: "AI không thể sửa lúc này", details: lastError },
-        { status: 502 }
-      );
+      // AI fail (likely 429 rate-limit) — return simple fallback that ALWAYS renders.
+      // This prevents user from being stuck with "quá phức tạp" error.
+      const fallbackDiagram = generateSimpleFallback(body.diagramType, project?.topic || "Project");
+      return Response.json({
+        fixedCode: fallbackDiagram,
+        model: "fallback",
+        note: "AI hiện không khả dụng (rate-limit). Đã dùng diagram đơn giản thay thế.",
+      });
     }
 
     return Response.json({
@@ -112,5 +130,100 @@ Dự án: ${project?.topic || "N/A"}`;
       { error: "Failed to fix Mermaid", details: err instanceof Error ? err.message : "unknown" },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Generate a simple Mermaid diagram that ALWAYS renders successfully.
+ * Used as last-resort fallback when AI fix fails (rate-limit, etc.).
+ * Diagram type determines structure.
+ */
+function generateSimpleFallback(diagramType: string, topic: string): string {
+  const safeTopic = topic.substring(0, 30).replace(/"/g, "'");
+
+  switch (diagramType) {
+    case "useCase":
+      // Use case diagram (graph TD format — most compatible)
+      return `graph TD
+    User["User"]
+    Admin["Admin"]
+    System["${safeTopic}"]
+
+    User -->|"xem danh sách"| System
+    User -->|"tìm kiếm"| System
+    User -->|"đặt hàng"| System
+    Admin -->|"quản lý"| System
+    Admin -->|"báo cáo"| System`;
+
+    case "classDiagram":
+      // Class diagram — minimal, always valid Mermaid
+      return `classDiagram
+    class User {
+        +int id
+        +string name
+        +string email
+        +login()
+        +logout()
+    }
+    class Product {
+        +int id
+        +string name
+        +float price
+        +getInfo()
+    }
+    class Order {
+        +int id
+        +date createdAt
+        +float total
+        +calculate()
+    }
+    User "1" --> "*" Order : places
+    Order "*" --> "*" Product : contains`;
+
+    case "erd":
+      // ERD — minimal
+      return `erDiagram
+    USER {
+        int id PK
+        string name
+        string email
+    }
+    PRODUCT {
+        int id PK
+        string name
+        float price
+    }
+    ORDERS {
+        int id PK
+        int user_id FK
+        date created_at
+    }
+    USER ||--o{ ORDERS : places
+    ORDERS ||--o{ PRODUCT : contains`;
+
+    case "sequence":
+      // Sequence diagram — minimal
+      return `sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant B as Backend
+    participant D as Database
+
+    U->>F: Click button
+    F->>B: API request
+    B->>D: Query
+    D-->>B: Data
+    B-->>F: Response
+    F-->>U: Display`;
+
+    default:
+      // Generic flowchart — always works
+      return `graph TD
+    A["Bắt đầu"] --> B["${safeTopic}"]
+    B --> C{"Điều kiện"}
+    C -->|"Có"| D["Xử lý"]
+    C -->|"Không"| E["Bỏ qua"]
+    D --> F["Kết thúc"]
+    E --> F`;
   }
 }

@@ -4,6 +4,7 @@
 // store both in the DB, then redirect back to the workspace.
 
 import { db } from "@/lib/db";
+import { consumeOauthState, encryptToken } from "@/lib/github-oauth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,11 +29,12 @@ export async function GET(req: Request) {
       return Response.redirect(`${BASE}/?github_error=missing_params`);
     }
 
-    // state = projectId|leaderToken
-    const [projectId, leaderToken] = state.split("|");
-    if (!projectId || !leaderToken) {
+    // FIX: Consume nonce (one-time use) — prevents CSRF + replay attacks
+    const ctx = consumeOauthState(state);
+    if (!ctx) {
       return Response.redirect(`${BASE}/?github_error=invalid_state`);
     }
+    const { projectId, leaderToken } = ctx;
 
     const wsBase = `${BASE}/?p=${projectId}&token=${leaderToken}`;
 
@@ -92,10 +94,12 @@ export async function GET(req: Request) {
     }
 
     // ===== Store token + username in DB =====
+    // FIX: Encrypt token at rest (was plaintext → DB leak exposes full GitHub access)
+    const encryptedToken = encryptToken(accessToken);
     await db.project.update({
       where: { id: projectId },
       data: {
-        githubToken: accessToken,
+        githubToken: encryptedToken,
         githubUsername,
       },
     });

@@ -1,1315 +1,85 @@
-# 🔌 NEXUS AI — REST API Reference
+# 🔌 NEXUS AI — REST API Reference (v0.2.0)
 
-> Toàn bộ 50+ API endpoints. Base URL: `http://localhost:3000` (local) hoặc public URL (Cloudflare Tunnel / Fly.io).
+> Tài liệu tham khảo **42 file route** (≈ 60 endpoint REST + 2 mini-service Socket.io) của NEXUS AI v0.2.0.
+> Tất cả endpoint đã được verify trực tiếp từ `src/app/api/**/route.ts`.
+
+**Base URL (local):** `http://localhost:3000`
+**Base URL (production):** public URL qua Cloudflare Tunnel / Fly.io / Docker.
+**Gateway:** Caddy (xem [Gateway Note](#-gateway-note) ở cuối tài liệu).
+
+---
 
 ## 📑 Mục lục
 
-- [Authentication](#-authentication)
-- [Projects](#-projects)
-- [Pipeline (Initialize / Refine / Progress)](#-pipeline-initialize--refine--progress)
-- [Tasks](#-tasks)
-- [Notifications](#-notifications)
-- [Mail (Mailbox + Attachments + AI Rewrite)](#-mail-mailbox--attachments--ai-rewrite)
-- [Dashboard](#-dashboard)
-- [Activity Logs](#-activity-logs)
-- [Agents](#-agents)
-- [GitHub](#-github)
-- [Chat](#-chat)
-- [Edit Proposals](#-edit-proposals)
-- [Sections](#-sections)
-- [Members](#-members)
-- [Context (Long-term Memory)](#-context-long-term-memory)
-- [Tokens (Usage Logs)](#-tokens-usage-logs)
-- [Fix Mermaid](#-fix-mermaid)
+- [Quy ước chung](#-quy-ước-chung)
+- [Health Check](#-health-check)
 - [Config & Templates](#-config--templates)
+- [Agents](#-agents)
+- [Activity Logs](#-activity-logs)
+- [Notifications (Global)](#-notifications-global)
+- [GitHub OAuth](#-github-oauth)
+- [Dashboard](#-dashboard)
+- [Projects Collection](#-projects-collection)
+- [Project `[id]` — Workspace](#-project-id--workspace)
+  - [Metadata (GET / PATCH / DELETE)](#metadata-get--patch--delete)
+  - [Pipeline Progress](#pipeline-progress)
+  - [Initialize (todolist)](#initialize-todolist)
+  - [Refine (AI)](#refine-ai)
+  - [Section (single edit)](#section-single-edit)
+  - [Context (Long-term Memory)](#context-long-term-memory)
+  - [History & Tokens](#history--tokens)
+  - [Tasks](#tasks)
+  - [Members](#members)
+  - [Chat](#chat)
+  - [Mailbox](#mailbox)
+  - [Notifications (Project-scoped)](#notifications-project-scoped)
+  - [Fix Mermaid](#fix-mermaid)
+  - [Edit Proposals](#edit-proposals)
+  - [Duplicate](#duplicate)
+- [Mini-services (Socket.io)](#-mini-services-socketio)
+- [Gateway Note](#-gateway-note)
 - [Error Responses](#-error-responses)
 
 ---
 
-## 🔐 Authentication
+## 🔐 Quy ước chung
 
-Tất cả endpoints (trừ `/api/config`, `/api/agents`, `/api/github/callback`) yêu cầu `token` query parameter:
+| Quy ước | Mô tả |
+|---|---|
+| **Auth** | Hầu hết endpoint yêu cầu `?token=<leaderToken>`. Token được trả về khi `POST /api/projects` và gắn cho leader. Một số route public (health, agents, config, templates, github/auth) không cần. |
+| **Content-Type** | `application/json` (trừ upload attachment là `multipart/form-data`). |
+| **Path params** | `[id]` = `projectId`, `[taskId]`, `[mailId]`, `[attId]`, `[notifId]`, `[proposalId]`. |
+| **Side effects** | Nhiều endpoint gọi `logActivity()` để ghi `ActivityLog` và/hoặc broadcast realtime tới mini-service `notification-service` / `chat-service`. |
+| **Background jobs** | Các pipeline dài (create project, initialize, refine) chạy bất đồng bộ — frontend poll endpoint `/progress` tương ứng. |
 
-```
-GET /api/projects/abc123?token=cmr3xyz456
-```
+### Response envelope chuẩn
 
-| Token type | Source | Permissions |
-|---|---|---|
-| `leaderToken` | `Project.leaderToken` (cuid) | Full access (edit, refine, push GitHub, delete, send mail) |
-| `inviteToken` | `Member.inviteToken` (cuid) | View + chat + update own tasks + read mail |
+```jsonc
+// Thành công (200 / 201)
+{ "ok": true, "data": { /* ... */ } }
 
-**Token truyền qua:**
-- Query param: `?token=xxx`
-- Chat service: `{ token }` trong `join` event (verify via HTTP call to API)
-- Notification service: `{ token }` trong `join` event
+// Hoặc trả object trực tiếp tuỳ route (xem từng endpoint)
 
-**Response 403:**
-```json
-{ "error": "Access denied" }
-```
-hoặc
-```json
-{ "error": "Leader access required" }
+// Lỗi (400 / 401 / 403 / 404 / 500)
+{ "error": "MESSAGE_CODE", "message": "Mô tả tiếng Anh / tiếng Việt" }
 ```
 
 ---
 
-## 📦 Projects
+## 🩺 Health Check
 
-### `GET /api/projects`
+### `GET /api`
 
-List tất cả projects (cho Home + All Projects views).
+Health check đơn giản, không cần auth.
 
-**Response 200:**
+- **Auth:** ❌ không
+- **Query:** —
+- **Body:** —
+- **Response:**
 ```json
-{
-  "projects": [
-    {
-      "id": "cmr3abc123",
-      "topic": "Hệ thống quản lý nhân sự",
-      "description": "Quản lý nhân sự công ty",
-      "status": "WORKSPACE",
-      "leaderName": "Bùi Văn Hội",
-      "leaderEmail": "leader@gmail.com",
-      "leaderToken": "cmr3xyz456",
-      "purpose": "Đồ án tốt nghiệp",
-      "isFavorite": false,
-      "isArchived": false,
-      "priority": "normal",
-      "deadline": "2024-08-01T00:00:00.000Z",
-      "techStack": ["Next.js", "React", "PostgreSQL"],
-      "tags": ["web", "hrm"],
-      "coverColor": "cyan",
-      "createdAt": "2024-07-01T10:00:00.000Z",
-      "updatedAt": "2024-07-01T10:05:00.000Z",
-      "_count": { "members": 3, "tasks": 12, "analyses": 9 },
-      "members": [{ "id": "...", "name": "...", "email": "...", "role": "..." }]
-    }
-  ]
-}
+{ "status": "ok", "service": "nexus-ai", "version": "0.2.0" }
 ```
-
----
-
-### `POST /api/projects`
-
-Tạo project mới + chạy 10-agent pipeline trong background.
-
-**Request body:**
-```json
-{
-  "topic": "Hệ thống quản lý nhân sự",
-  "description": "Quản lý nhân sự cho công ty 100+ người",
-  "purpose": "Đồ án tốt nghiệp",
-  "extraInfo": {
-    "requirements": ["Authentication", "Role-based access"],
-    "specialReqs": "Multi-language support",
-    "techPrefs": ["React", "Node.js"],
-    "langPrefs": ["TypeScript"]
-  },
-  "leaderName": "Bùi Văn Hội",
-  "leaderEmail": "leader@gmail.com",
-  "leaderSmtpPassword": "xxxx xxxx xxxx xxxx",
-  "priority": "high",
-  "deadline": "2024-08-01",
-  "tags": ["web", "hrm"],
-  "coverColor": "cyan",
-  "members": [
-    {
-      "name": "Nguyen Van A",
-      "email": "a@example.com",
-      "strengths": "Backend, Database",
-      "weaknesses": "Weak CSS"
-    }
-  ]
-}
-```
-
-**Response 200** (trả về ngay, pipeline chạy background):
-```json
-{
-  "projectId": "cmr3abc123",
-  "leaderToken": "cmr3xyz456"
-}
-```
-
-> Sau khi nhận `projectId`, client polls `GET /api/projects/:id/progress` mỗi 2.5s.
-
----
-
-### `GET /api/projects/:id?token=xxx`
-
-Get chi tiết project (workspace data).
-
-**Response 200:**
-```json
-{
-  "access": {
-    "role": "leader",
-    "name": "Bùi Văn Hội",
-    "email": "leader@gmail.com",
-    "memberId": null
-  },
-  "project": {
-    "id": "cmr3abc123",
-    "topic": "Hệ thống quản lý nhân sự",
-    "description": "...",
-    "status": "WORKSPACE",
-    "leaderName": "Bùi Văn Hội",
-    "leaderEmail": "leader@gmail.com",
-    "purpose": "...",
-    "priority": "high",
-    "deadline": "...",
-    "techStack": ["Next.js", "React"],
-    "tags": ["web", "hrm"],
-    "coverColor": "cyan",
-    "isFavorite": false,
-    "isArchived": false,
-    "githubConnected": true,
-    "githubUsername": "vanhoi04082006",
-    "githubRepoName": "nexus-hrm",
-    "githubPushedAt": "2024-07-01T10:10:00.000Z"
-  },
-  "result": {
-    "analysis": { "desc": "...", "techStack": {...}, "features": [...], ... },
-    "hr": { "assignments": [...], "coverage": "95%", "risks": [...] },
-    "sprint": { "totalSprints": 3, "sprints": [...], "milestones": [...] },
-    "design": { "dbTables": [...], "apiEndpoints": [...], "folderStructure": "..." },
-    "uml": { "useCase": "...", "classDiagram": "...", "erd": "...", "sequence": "..." },
-    "docs": { "readme": "...", "convention": "...", "apiStandard": "..." },
-    "git": { "gitCommands": "...", "branchStrategy": "...", "issueTemplate": "..." },
-    "test": { "testStrategy": "...", "unitTests": [...], ... },
-    "security": { "threats": [...], "authFlow": "...", "owaspTop10": [...] }
-  },
-  "members": [...],
-  "tasks": [...],
-  "chatMessages": [...],
-  "editProposals": [...]
-}
-```
-
-**Response 403:** Access denied
-**Response 404:** Project not found
-
----
-
-### `PATCH /api/projects/:id?token=xxx`
-
-Leader update project metadata (topic, description, priority, deadline, tags, coverColor, isFavorite, isArchived).
-
-**Request body (partial):**
-```json
-{
-  "priority": "urgent",
-  "deadline": "2024-07-15",
-  "tags": ["web", "hrm", "urgent"],
-  "isFavorite": true
-}
-```
-
-**Response 200:** `{ "project": { ...updated } }`
-
----
-
-### `DELETE /api/projects/:id?token=xxx`
-
-Xóa project (leader only). Cascade: members, analyses, tasks, chat, proposals, emails, context, token logs, notifications.
-
-**Response 200:** `{ "success": true }`
-
----
-
-### `POST /api/projects/:id/duplicate?token=xxx`
-
-Tạo bản sao project (topic, description, purpose, techStack, tags, members) — không copy analyses/tasks/emails. Project mới có `leaderToken` mới + status `DRAFT`.
-
-**Response 200:**
-```json
-{
-  "projectId": "cmr3new456",
-  "leaderToken": "cmr3token789"
-}
-```
-
----
-
-## 🚀 Pipeline (Initialize / Refine / Progress)
-
-### `GET /api/projects/:id/progress?token=xxx`
-
-Poll pipeline progress (tạo project mới).
-
-**Response 200:**
-```json
-{
-  "projectId": "cmr3abc123",
-  "status": "running",
-  "agents": [
-    { "id": "01", "name": "Requirement Analyst", "status": "done" },
-    { "id": "02", "name": "HR Planner", "status": "running" },
-    { "id": "03", "name": "Sprint Planner", "status": "pending" },
-    ...
-    { "id": "10", "name": "Quality Reviewer", "status": "pending" }
-  ],
-  "logs": [
-    {
-      "id": "log-123",
-      "ts": 1719800000000,
-      "level": "info",
-      "agentId": "01",
-      "provider": "pipeline",
-      "message": "[AGENT-01] Requirement Analyst → start (parallel)"
-    },
-    {
-      "id": "log-124",
-      "ts": 1719800001000,
-      "level": "info",
-      "provider": "openrouter",
-      "model": "openai/gpt-oss-120b:free",
-      "keyIndex": 1,
-      "message": "[OpenRouter] Key #1, model: openai/gpt-oss-120b:free"
-    }
-  ],
-  "startedAt": 1719800000000
-}
-```
-
-**Status values:** `running` | `done` | `error`
-**Response 404:** Progress expire sau 5 phút → client check project status.
-
----
-
-### `POST /api/projects/:id/initialize?token=xxx`
-
-Sinh todolist (Kanban) qua AI với dedup + comprehensiveness check. Leader only. Xóa task cũ (clean slate).
-
-**Request body:** `{}` (empty)
-
-**Response 200:** `{ "started": true }`
-
-> Client polls `GET /api/projects/:id/initialize/progress` mỗi 2.5s.
-
----
-
-### `GET /api/projects/:id/initialize/progress?token=xxx`
-
-Poll init progress + logs.
-
-**Response 200:**
-```json
-{
-  "projectId": "cmr3abc123",
-  "status": "running",
-  "message": "Đang sinh todolist...",
-  "logs": [
-    {
-      "id": "log-1",
-      "ts": 1719800000000,
-      "level": "info",
-      "agentId": "TASK",
-      "provider": "pipeline",
-      "message": "▶ INIT STARTED — project: \"...\" — 3 member(s)"
-    }
-  ],
-  "startedAt": 1719800000000
-}
-```
-
-**Status values:** `running` | `done` (có `taskCount`) | `error`
-
----
-
-### `POST /api/projects/:id/refine?token=xxx`
-
-AI Refine — sinh lại tất cả 9 sections dựa trên chat + edit requests. Leader only.
-
-**Request body:**
-```json
-{
-  "editRequests": [
-    { "section": "analysis", "change": "Thêm feature export Excel" },
-    { "section": "hr", "change": "Đổi vai trò Nguyen Van A sang Backend" }
-  ],
-  "chatDiscussion": "Leader: Mình muốn thêm tính năng export...\nMember A: OK, tôi sẽ làm..."
-}
-```
-
-**Response 200:** `{ "started": true }`
-
----
-
-### `GET /api/projects/:id/refine/progress?token=xxx`
-
-Poll refine progress + logs.
-
-**Response 200:**
-```json
-{
-  "projectId": "cmr3abc123",
-  "status": "running",
-  "sections": {
-    "analysis": false,
-    "hr": true,
-    "sprint": false,
-    "design": false,
-    "uml": false,
-    "docs": false,
-    "git": false,
-    "test": false,
-    "security": false
-  },
-  "logs": [...],
-  "startedAt": 1719800000000
-}
-```
-
-**`sections` field:** `true` = section đã refine xong, `false` = đang xử lý.
-
----
-
-## ✅ Tasks
-
-### `GET /api/projects/:id/tasks?token=xxx`
-
-List tất cả tasks (cho Kanban board).
-
-**Response 200:**
-```json
-{
-  "tasks": [
-    {
-      "id": "cmr3task1",
-      "assigneeName": "Nguyen Van A",
-      "memberId": "cmr3member1",
-      "memberName": "Nguyen Van A",
-      "title": "Thiết kế layout chính",
-      "description": "...",
-      "role": "Frontend Developer",
-      "responsibilities": "...",
-      "codeConventions": "...",
-      "dependencies": "Cần setup project xong trước",
-      "acceptanceCriteria": "...",
-      "deadline": "2024-07-08T00:00:00.000Z",
-      "sprintName": "Sprint 1",
-      "status": "todo",
-      "hours": 8,
-      "priority": "P0",
-      "layer": "UI",
-      "targetFile": "src/components/Layout.tsx",
-      "implementationSteps": ["Step 1...", "Step 2..."],
-      "technicalHints": { "snippet": "...", "note": "..." },
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ]
-}
-```
-
----
-
-### `PUT /api/projects/:id/tasks/:taskId?token=xxx`
-
-Update task status (drag-drop Kanban).
-
-**Request body:**
-```json
-{ "status": "in_progress" }
-```
-
-**Valid statuses:** `todo` | `in_progress` | `review` | `done`
-
-**Permissions:**
-- Leader: update bất kỳ task nào
-- Member: chỉ update task của mình
-
-**Response 200:** `{ "task": { ...updated } }`
-
-> Side-effects: tạo `TaskLog`, refresh `TaskStatistic`, broadcast `task:update` qua notification-service, tạo `Notification` cho leader.
-
----
-
-## 🔔 Notifications
-
-### `GET /api/projects/:id/notifications?token=xxx`
-
-List notifications visible cho user hiện tại (broadcast `recipientEmail=null` HOẶC `recipientEmail=userEmail`). Bao gồm per-user read state.
-
-**Response 200:**
-```json
-{
-  "notifications": [
-    {
-      "id": "cmr3notif1",
-      "type": "TASK_COMPLETED",
-      "title": "Task hoàn thành",
-      "message": "Nguyen Van A đã hoàn thành...",
-      "senderName": "Nguyen Van A",
-      "senderRole": "Frontend Developer",
-      "recipientEmail": null,
-      "priority": "normal",
-      "relatedTaskId": "cmr3task1",
-      "relatedTaskTitle": "Thiết kế layout chính",
-      "relatedMailId": null,
-      "actionUrl": "/?p=cmr3abc123&token=...&tab=tasks",
-      "actionLabel": "Mở Task",
-      "extra": {},
-      "read": false,
-      "readAt": null,
-      "createdAt": "..."
-    }
-  ],
-  "unreadCount": 5
-}
-```
-
-**13 notification types:** `TASK_COMPLETED`, `TASK_STATUS_CHANGED`, `PROPOSAL_CREATED`, `REQUIREMENT_EDITED`, `DOC_UPLOADED`, `COMMENT`, `AI_DONE`, `AI_ERROR`, `DEADLINE_SOON`, `TASK_ASSIGNED`, `MAIL_RECEIVED`, `PROJECT_INVITE`, `APPROVAL_REQUEST`.
-
----
-
-### `POST /api/projects/:id/notifications?token=xxx`
-
-Tạo notification (internal — dùng bởi task/proposal/mail flows) HOẶC mark all as read.
-
-**Mark all as read:**
-```json
-{ "action": "mark_all_read" }
-```
-
-**Create (internal):**
-```json
-{
-  "type": "TASK_COMPLETED",
-  "title": "...",
-  "message": "...",
-  "senderName": "...",
-  "senderRole": "...",
-  "recipientEmail": null,
-  "priority": "normal",
-  "relatedTaskId": "..."
-}
-```
-
----
-
-### `PATCH /api/projects/:id/notifications/:notifId?token=xxx`
-
-Mark single notification as read/unread cho user hiện tại.
-
-**Request body:** `{ "read": true }` (default `true`)
-
-**Response 200:** `{ "notification": { ...updated, "read": true, "readAt": "..." } }`
-
----
-
-### `DELETE /api/projects/:id/notifications/:notifId?token=xxx`
-
-Delete notification (leader only).
-
-**Response 200:** `{ "success": true }`
-
----
-
-## 📬 Mail (Mailbox + Attachments + AI Rewrite)
-
-### `GET /api/projects/:id/mailbox?token=xxx`
-
-List mails cho user hiện tại trong folder cụ thể.
-
-**Query params:**
-| Param | Default | Mô tả |
-|---|---|---|
-| `folder` | `INBOX` | `INBOX` / `SENT` / `DRAFT` / `STARRED` / `ARCHIVE` / `SPAM` / `TRASH` |
-| `q` | (empty) | Search trong subject + body |
-| `page` | `1` | Page number |
-| `limit` | `20` | Max 100 |
-
-**Response 200:**
-```json
-{
-  "mails": [
-    {
-      "id": "cmr3email1",
-      "fromEmail": "leader@gmail.com",
-      "fromName": "Bùi Văn Hội",
-      "toEmails": ["a@example.com"],
-      "ccEmails": [],
-      "bccEmails": [],
-      "subject": "Lời mời tham gia dự án",
-      "bodyHtml": "...",
-      "bodyText": "...",
-      "type": "COMPOSE",
-      "smtpStatus": "sent",
-      "parentEmailId": null,
-      "sentAt": "...",
-      "createdAt": "...",
-      "mailbox": {
-        "folder": "INBOX",
-        "isRead": false,
-        "isStarred": false,
-        "isArchived": false,
-        "isTrashed": false,
-        "readAt": null
-      },
-      "attachments": [{ "id": "...", "filename": "...", "size": 1024, "mimeType": "..." }]
-    }
-  ],
-  "total": 42,
-  "page": 1,
-  "limit": 20,
-  "unreadCount": 5
-}
-```
-
----
-
-### `POST /api/projects/:id/mailbox?token=xxx`
-
-Compose + send mail (leader only). Real SMTP send qua leader credentials + DB persistence.
-
-**Request body:**
-```json
-{
-  "toEmails": ["a@example.com", "b@example.com"],
-  "ccEmails": ["c@example.com"],
-  "bccEmails": [],
-  "subject": "Lời mời tham gia dự án",
-  "bodyHtml": "<p>Chào bạn,</p><p>...</p>",
-  "bodyText": "Chào bạn, ...",
-  "asDraft": false,
-  "parentEmailId": null
-}
-```
-
-**Response 200:**
-```json
-{
-  "email": { "id": "cmr3email1", "smtpStatus": "sent", "smtpMessageId": "...", ... },
-  "recipients": ["a@example.com", "b@example.com"]
-}
-```
-
-> Side-effects: tạo `Notification` (type `MAIL_RECEIVED`) cho mỗi recipient + broadcast `mail:new` qua notification-service.
-
----
-
-### `GET /api/projects/:id/mailbox/:mailId?token=xxx`
-
-Get single mail với full body + attachments.
-
-**Query param:** `?autoRead=1` (optional — tự mark as read)
-
-**Response 200:**
-```json
-{
-  "email": {
-    "id": "cmr3email1",
-    "fromEmail": "...",
-    "fromName": "...",
-    "toEmails": [...],
-    "ccEmails": [...],
-    "bccEmails": [...],
-    "subject": "...",
-    "bodyHtml": "...",
-    "bodyText": "...",
-    "type": "COMPOSE",
-    "smtpStatus": "sent",
-    "parentEmailId": null,
-    "sentAt": "...",
-    "createdAt": "...",
-    "attachments": [
-      { "id": "...", "filename": "doc.pdf", "size": 102400, "mimeType": "application/pdf" }
-    ]
-  },
-  "mailbox": {
-    "folder": "INBOX",
-    "isRead": true,
-    "isStarred": false,
-    "isArchived": false,
-    "isTrashed": false,
-    "readAt": "..."
-  }
-}
-```
-
----
-
-### `PATCH /api/projects/:id/mailbox/:mailId?token=xxx`
-
-Update per-user mailbox state.
-
-**Request body (partial):**
-```json
-{
-  "isRead": true,
-  "isStarred": true,
-  "isArchived": false,
-  "isTrashed": false,
-  "folder": "INBOX"
-}
-```
-
-**Response 200:** `{ "mailbox": { ...updated } }`
-
----
-
-### `DELETE /api/projects/:id/mailbox/:mailId?token=xxx`
-
-- **Leader:** permanently delete mail
-- **Member:** soft-delete (move to TRASH)
-
-**Response 200:** `{ "success": true }`
-
----
-
-### `POST /api/projects/:id/mailbox/ai-rewrite?token=xxx`
-
-AI rewrite email draft qua OpenRouter. Leader only.
-
-**Request body:**
-```json
-{
-  "subject": "Lời mời tham gia dự án",
-  "body": "<p>Chào bạn,</p><p>...</p>",
-  "toEmails": ["a@example.com"],
-  "mode": "professional",
-  "projectTopic": "Hệ thống quản lý nhân sự"
-}
-```
-
-**Mode values:** `improve` | `professional` | `friendly` | `concise` | `expand`
-
-**Response 200:**
-```json
-{
-  "rewritten": "<p>...</p>",
-  "original": "<p>...</p>",
-  "mode": "professional"
-}
-```
-
----
-
-### `POST /api/projects/:id/mailbox/attachments?token=xxx`
-
-Upload attachments cho draft email. Leader only. `multipart/form-data`.
-
-**Form fields:**
-- `files`: File[] (1 hoặc nhiều, max 5MB/file)
-- `emailId`: string (optional — nếu draft đã có Email row)
-
-**Response 200:**
-```json
-{
-  "attachments": [
-    { "id": "cmr3att1", "filename": "doc.pdf", "size": 102400, "mimeType": "application/pdf" }
-  ]
-}
-```
-
----
-
-### `GET /api/projects/:id/mailbox/attachments/:attId?token=xxx`
-
-Download attachment (trả về binary stream với đúng Content-Type).
-
-**Response 200:** Binary file với header `Content-Disposition: attachment; filename="..."`
-
----
-
-### `DELETE /api/projects/:id/mailbox/attachments/:attId?token=xxx`
-
-Delete attachment (leader only).
-
-**Response 200:** `{ "success": true }`
-
----
-
-## 📊 Dashboard
-
-### `GET /api/dashboard/activity?token=xxx`
-
-Recent ActivityLog entries across ALL projects user owns.
-
-**Query params:**
-| Param | Default | Mô tả |
-|---|---|---|
-| `limit` | `20` | Max 100 |
-| `projectId` | (all) | Filter theo 1 project |
-
-**Response 200:**
-```json
-{
-  "activities": [
-    {
-      "id": "cmr3act1",
-      "type": "TASK_COMPLETED",
-      "status": "SUCCESS",
-      "title": "Task hoàn thành",
-      "details": "...",
-      "actorName": "Nguyen Van A",
-      "actorEmail": "a@example.com",
-      "actorRole": "Frontend Developer",
-      "actorAvatar": "",
-      "projectId": "cmr3abc123",
-      "projectTopic": "Hệ thống quản lý nhân sự",
-      "relatedTaskId": "cmr3task1",
-      "relatedTaskTitle": "Thiết kế layout",
-      "relatedMailId": null,
-      "actionUrl": "/?p=...&tab=tasks",
-      "actionLabel": "Mở Task",
-      "icon": "CheckSquare",
-      "createdAt": "..."
-    }
-  ]
-}
-```
-
----
-
-### `GET /api/dashboard/status?token=xxx`
-
-Real system status cho NEXUS AI Status widget.
-
-**Response 200:**
-```json
-{
-  "agents": {
-    "total": 10,
-    "online": 8,
-    "offline": 0,
-    "busy": 1,
-    "idle": 1,
-    "error": 0,
-    "list": [{ "id": "01", "name": "Requirement Analyst", "role": "Business Analyst", "status": "idle", "currentTask": "", "lastActiveAt": null }]
-  },
-  "apiKeys": {
-    "total": 3,
-    "active": 3,
-    "expired": 0,
-    "nearQuota": 0,
-    "provider": "openrouter"
-  },
-  "pipeline": {
-    "status": "ready",
-    "currentAgent": "",
-    "progress": 0,
-    "stage": ""
-  },
-  "database": { "status": "connected", "details": "SQLite @ /db/custom.db" },
-  "redis": { "status": "connected", "details": "Mock (in-memory)" },
-  "vectorDB": { "status": "connected", "details": "Mock (in-memory)" },
-  "storage": { "status": "connected", "details": "12.4 MB used" }
-}
-```
-
----
-
-### `GET /api/dashboard/tasks?token=xxx`
-
-Tasks relevant to user across all projects.
-
-**Query param:** `?filter=in_progress|overdue|due_soon|assigned|all` (default: `all`)
-
-**Response 200:**
-```json
-{
-  "tasks": [
-    {
-      "id": "cmr3task1",
-      "projectId": "cmr3abc123",
-      "projectTopic": "Hệ thống quản lý nhân sự",
-      "title": "Thiết kế layout chính",
-      "status": "in_progress",
-      "priority": "P0",
-      "deadline": "...",
-      "assigneeName": "Nguyen Van A",
-      "sprintName": "Sprint 1"
-    }
-  ],
-  "counts": {
-    "inProgress": 5,
-    "overdue": 2,
-    "dueSoon": 3,
-    "assigned": 8
-  }
-}
-```
-
----
-
-### `GET /api/dashboard/statistics?token=xxx`
-
-Aggregate statistics across all projects user owns.
-
-**Response 200:**
-```json
-{
-  "totalProjects": 5,
-  "activeProjects": 3,
-  "completedProjects": 1,
-  "totalMembers": 12,
-  "totalTasks": 48,
-  "completedTasks": 20,
-  "overallCompletionRate": 41.7,
-  "perProject": [
-    {
-      "projectId": "cmr3abc123",
-      "topic": "Hệ thống quản lý nhân sự",
-      "totalTasks": 12,
-      "doneTasks": 8,
-      "completionRate": 66.7,
-      "status": "WORKSPACE"
-    }
-  ],
-  "recentActivityCount": 15
-}
-```
-
----
-
-## 📋 Activity Logs
-
-### `GET /api/projects/:id/history?token=xxx`
-
-All activity logs cho 1 project (pipeline, init, refine, task, mail, etc.).
-
-**Response 200:**
-```json
-{
-  "logs": [
-    {
-      "id": "cmr3log1",
-      "type": "PIPELINE",
-      "status": "SUCCESS",
-      "title": "Pipeline hoàn tất",
-      "details": "...",
-      "agentId": null,
-      "model": null,
-      "duration": 45000,
-      "logCount": 142,
-      "createdAt": "..."
-    }
-  ]
-}
-```
-
-> Trả về max 200 entries gần nhất.
-
----
-
-### `GET /api/activity/logs?token=xxx`
-
-ActivityLog entries — global (all user's projects) hoặc filter theo 1 project.
-
-**Query params:** `?projectId=ID&limit=50` (max 200)
-
-**Response 200:**
-```json
-{
-  "logs": [
-    {
-      "id": "...",
-      "type": "TASK_COMPLETED",
-      "status": "SUCCESS",
-      "title": "...",
-      "details": "...",
-      "actorName": "...",
-      "actorEmail": "...",
-      "actorRole": "...",
-      "projectId": "...",
-      "projectTopic": "...",
-      "createdAt": "..."
-    }
-  ]
-}
-```
-
----
-
-## 🤖 Agents
-
-### `GET /api/agents`
-
-Default 10 AI agent configurations (static from code).
-
-**Response 200:**
-```json
-{
-  "agents": [
-    {
-      "id": "01",
-      "name": "Requirement Analyst",
-      "role": "Business Analyst",
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "provider": "openrouter",
-      "temperature": 0.20,
-      "status": "online",
-      "description": "Phân tích yêu cầu, tech stack, features, actors, modules",
-      "skills": ["Analysis", "Planning", "Documentation"]
-    }
-    // ... 02-10
-  ],
-  "stats": { "total": 10, "online": 10, "working": 0, "idle": 10, "error": 0 }
-}
-```
-
----
-
-## 🐙 GitHub
-
-### `GET /api/github/auth?projectId=xxx&token=xxx`
-
-Redirect to GitHub OAuth.
-
-**Response 302:** Redirect to `https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...`
-
----
-
-### `GET /api/github/callback?code=xxx&state=xxx`
-
-OAuth callback — exchange code for access token, save to Project.
-
-**Response 302:** Redirect to `/?p=PROJECT_ID&token=LEADER_TOKEN`
-
----
-
-### `GET /api/github/status?projectId=xxx&token=xxx`
-
-Check OAuth status.
-
-**Response 200:**
-```json
-{
-  "connected": true,
-  "username": "vanhoi04082006",
-  "repoName": "nexus-hrm"
-}
-```
-
----
-
-### `POST /api/github/push`
-
-Push project files to GitHub + create Pull Request.
-
-**Request body:**
-```json
-{
-  "projectId": "cmr3abc123",
-  "token": "cmr3xyz456",
-  "repoName": "nexus-hrm"
-}
-```
-
-**Response 200:**
-```json
-{
-  "success": true,
-  "repoUrl": "https://github.com/vanhoi04082006/nexus-hrm",
-  "prUrl": "https://github.com/vanhoi04082006/nexus-hrm/pull/1",
-  "filesPushed": 17
-}
-```
-
-**Files pushed (17+):**
-```
-README.md
-.gitignore
-PROJECT_SUMMARY.md
-FOLDER_STRUCTURE.txt
-docs/CODING_CONVENTION.md
-docs/API_STANDARD.md
-docs/ARCHITECTURE.md
-docs/DATABASE.md
-docs/API_ENDPOINTS.md
-docs/SPRINT_PLAN.md
-docs/TEAM.md
-docs/TASKS.md
-docs/UML/use-case.mmd
-docs/UML/class-diagram.mmd
-docs/UML/erd.mmd
-docs/UML/sequence.mmd
-.github/ISSUE_TEMPLATE/task.md
-```
-
----
-
-## 💬 Chat
-
-### `GET /api/projects/:id/chat?token=xxx`
-
-List chat messages.
-
-**Response 200:**
-```json
-{
-  "messages": [
-    {
-      "id": "cmr3msg1",
-      "authorName": "Bùi Văn Hội",
-      "authorRole": "leader",
-      "message": "Mình bắt đầu làm nhé",
-      "createdAt": "2024-07-01T10:00:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-### `POST /api/projects/:id/chat?token=xxx`
-
-Post a chat message (broadcast qua Socket.io nếu chat-service đang chạy).
-
-**Request body:**
-```json
-{
-  "message": "Mình bắt đầu làm nhé",
-  "authorName": "Bùi Văn Hội",
-  "authorRole": "leader"
-}
-```
-
-**Response 200:** `{ "message": { ...created } }`
-
----
-
-### `POST /api/projects/:id/chat/ai?token=xxx`
-
-Trigger AI Assistant reply trong chat.
-
-**Request body:**
-```json
-{
-  "recentMessages": "Leader: ...\nMember: ...\n..."
-}
-```
-
-**Response 200:**
-```json
-{
-  "message": {
-    "id": "cmr3msg2",
-    "authorName": "NEXUS AI",
-    "authorRole": "ai",
-    "message": "Tôi đề xuất chia task theo module...",
-    "createdAt": "2024-07-01T10:00:05.000Z"
-  }
-}
-```
-
----
-
-## 📝 Edit Proposals
-
-### `GET /api/projects/:id/edit-proposals?token=xxx`
-
-List edit proposals.
-
-**Response 200:**
-```json
-{
-  "proposals": [
-    {
-      "id": "cmr3prop1",
-      "section": "analysis",
-      "requestedChange": "Thêm feature export Excel",
-      "status": "PENDING",
-      "memberName": "Nguyen Van A",
-      "createdAt": "..."
-    }
-  ]
-}
-```
-
-**Status values:** `PENDING` | `APPROVED` | `REJECTED` | `APPLIED`
-
----
-
-### `POST /api/projects/:id/edit-proposals?token=xxx`
-
-Tạo edit proposal (member đề xuất, leader approve sau).
-
-**Request body:**
-```json
-{
-  "section": "analysis",
-  "requestedChange": "Thêm feature export Excel"
-}
-```
-
-**Response 200:** `{ "proposal": { ...created } }`
-
----
-
-### `PUT /api/projects/:id/edit-proposals/:proposalId?token=xxx`
-
-Leader approve / reject proposal.
-
-**Request body:** `{ "status": "APPROVED" }` (valid: `APPROVED` | `REJECTED`)
-
-**Response 200:** `{ "proposal": { ...updated } }`
-
----
-
-## 📄 Sections
-
-### `PUT /api/projects/:id/section?token=xxx`
-
-Leader edit section content trực tiếp (không qua AI Refine).
-
-**Request body:**
-```json
-{
-  "section": "analysis",
-  "content": { "desc": "...", "techStack": {...}, ... }
-}
-```
-
-**Response 200:**
-```json
-{
-  "section": {
-    "type": "analysis",
-    "content": "...",
-    "version": 2
-  }
-}
-```
-
-> Version tự động bumped mỗi lần update. Tạo `ActivityLog` (`SECTION_EDIT`).
-
----
-
-## 👥 Members
-
-### `GET /api/projects/:id/members?token=xxx`
-
-List members (chỉ leader thấy `inviteToken`).
-
-**Response 200:**
-```json
-{
-  "members": [
-    {
-      "id": "cmr3member1",
-      "name": "Nguyen Van A",
-      "email": "a@example.com",
-      "strengths": "Backend, Database",
-      "weaknesses": "Weak CSS",
-      "role": "Backend Developer",
-      "inviteToken": "cmr3token1",
-      "joinedAt": null,
-      "createdAt": "..."
-    }
-  ]
-}
-```
-
----
-
-### `POST /api/projects/:id/members?token=xxx`
-
-Add member (leader only).
-
-**Request body:**
-```json
-{
-  "name": "Nguyen Van B",
-  "email": "b@example.com",
-  "strengths": "Frontend, UI/UX",
-  "weaknesses": "Weak DB"
-}
-```
-
-**Response 200:** `{ "member": { ...created } }`
-
----
-
-## 🧠 Context (Long-term Memory)
-
-### `GET /api/projects/:id/context?token=xxx`
-
-Get long-term memory (ProjectContext).
-
-**Response 200:**
-```json
-{
-  "context": {
-    "projectId": "cmr3abc123",
-    "summary": "{\"topic\":\"...\",\"modules\":[...],\"techStack\":{...},...}",
-    "fullResults": "{...}",
-    "tokensUsed": 15000,
-    "runCount": 2,
-    "createdAt": "...",
-    "updatedAt": "..."
-  }
-}
-```
-
-**Response 404:** No context yet (pipeline chưa chạy)
-
----
-
-## 🪙 Tokens (Usage Logs)
-
-### `GET /api/projects/:id/tokens?token=xxx`
-
-List token usage logs (cost tracking).
-
-**Response 200:**
-```json
-{
-  "logs": [
-    {
-      "id": "cmr3token1",
-      "agentId": "01",
-      "agentName": "Requirement Analyst",
-      "model": "openai/gpt-oss-120b:free",
-      "apiKeyId": 1,
-      "promptTokens": 1500,
-      "completionTokens": 2000,
-      "totalTokens": 3500,
-      "success": true,
-      "duration": 4500,
-      "createdAt": "..."
-    }
-  ],
-  "total": {
-    "promptTokens": 15000,
-    "completionTokens": 20000,
-    "totalTokens": 35000
-  }
-}
-```
-
----
-
-## 🔧 Fix Mermaid
-
-### `POST /api/projects/[id]/fix-mermaid?token=xxx`
-
-AI-powered Mermaid diagram fixer — gửi code bị lỗi + error message → AI sửa syntax. Dùng bởi `MermaidRenderer` khi regex-based fixes (`fixMermaid` + `aggressiveFix`) thất bại.
-
-**Request body:**
-```json
-{
-  "code": "graph TD\n    A[Bệnh nhân] --> B[Dược sĩ]",
-  "error": "Parse error on line 2...",
-  "diagramType": "useCase"
-}
-```
-
-**Response 200:**
-```json
-{
-  "fixed": "graph TD\n    BenhNhan[\"Bệnh nhân\"] --> DuocSi[\"Dược sĩ\"]",
-  "model": "openai/gpt-oss-120b:free"
-}
-```
-
-> Models dùng để fix: `openai/gpt-oss-120b:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`, `google/gemma-4-31b-it:free`, `qwen/qwen3-coder:free`.
+- **Side effects:** —
 
 ---
 
@@ -1317,131 +87,1063 @@ AI-powered Mermaid diagram fixer — gửi code bị lỗi + error message → A
 
 ### `GET /api/config`
 
-Get public URL config (cho email links).
+Trả về cấu hình public cho frontend (APP_URL, publicUrl, số lượng API key đã cấu hình).
 
-**Response 200:**
+- **Auth:** ❌ không
+- **Query:** —
+- **Body:** —
+- **Response:**
 ```json
 {
-  "publicUrl": "https://xxx.trycloudflare.com"
+  "APP_URL": "http://localhost:3000",
+  "publicUrl": "https://nexus.example.com",
+  "apiKeyCount": 3
 }
 ```
-
-> Nếu không có `.public-url` file → fallback `http://localhost:3000` (hoặc `NEXT_PUBLIC_APP_URL`).
-
----
+- **Side effects:** —
 
 ### `GET /api/templates`
 
-List project templates (blueprints cho quick create).
+Liệt kê project templates (preset cấu hình dự án dùng để khởi tạo nhanh).
 
-**Response 200:**
+- **Auth:** ❌ không
+- **Query:** —
+- **Body:** —
+- **Response:**
 ```json
 {
   "templates": [
     {
-      "id": "cmr3tpl1",
-      "name": "Web App",
-      "description": "Web application cơ bản",
-      "category": "WEB",
-      "icon": "Code2",
-      "color": "from-cyan-500/20 to-blue-600/5",
-      "topic": "...",
-      "purpose": "Đồ án tốt nghiệp",
-      "techPrefs": "...",
-      "langPrefs": "...",
-      "isBuiltIn": true
+      "id": "saas-mvp",
+      "name": "SaaS MVP",
+      "description": "Khởi động SaaS trong 1 tuần",
+      "icon": "🚀",
+      "defaultStack": ["next", "prisma", "postgres"]
     }
   ]
 }
 ```
+- **Side effects:** —
 
-**Categories:** `WEB`, `ECOMMERCE`, `MANAGEMENT`, `MOBILE`, `LMS`, `HOTEL`, `HOSPITAL`, `WAREHOUSE`, `BANKING`, `AI_SAAS`, `CHAT`, `MICROSERVICES`, `K8S`, `DASHBOARD`, `CUSTOM`.
+---
+
+## 🤖 Agents
+
+### `GET /api/agents`
+
+Liệt kê cấu hình các AI agent có trong pipeline (researcher, planner, architect, coder, reviewer, ...).
+
+- **Auth:** ❌ không
+- **Query:** —
+- **Body:** —
+- **Response:**
+```json
+{
+  "agents": [
+    {
+      "id": "researcher",
+      "name": "Researcher",
+      "role": "Nghiên cứu yêu cầu & đối thủ",
+      "model": "gpt-4o-mini",
+      "enabled": true
+    }
+  ]
+}
+```
+- **Side effects:** —
+
+---
+
+## 📜 Activity Logs
+
+### `GET /api/activity/logs`
+
+Liệt kê activity log (toàn hệ thống hoặc lọc theo project).
+
+- **Auth:** ✅ `?token=` (leader token)
+- **Query:**
+  | Param | Bắt buộc | Mặc định | Mô tả |
+  |---|---|---|---|
+  | `token` | ✅ | — | Leader token |
+  | `projectId` | ❌ | — | Lọc theo project |
+  | `limit` | ❌ | `100` | Số dòng tối đa |
+- **Body:** —
+- **Response:**
+```json
+{
+  "logs": [
+    {
+      "id": "log_01H...",
+      "projectId": "prj_abc",
+      "type": "pipeline.start",
+      "message": "Pipeline started",
+      "meta": { "topic": "Xây SaaS ERP" },
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+- **Side effects:** —
+
+---
+
+## 🔔 Notifications (Global)
+
+### `GET /api/notifications`
+
+Liệt kê notification toàn cục của user (leader) — không gắn project cụ thể.
+
+- **Auth:** ✅ `?token=`
+- **Query:** `token` (bắt buộc)
+- **Body:** —
+- **Response:**
+```json
+{
+  "notifications": [
+    {
+      "id": "ntf_01H...",
+      "title": "Pipeline hoàn tất",
+      "body": "Dự án X đã xong giai đoạn research",
+      "read": false,
+      "type": "pipeline",
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+- **Side effects:** —
+
+### `PATCH /api/notifications/[id]`
+
+Đánh dấu đã đọc / chưa đọc một notification.
+
+- **Auth:** ✅ `?token=`
+- **Query:** `token`
+- **Body:**
+```json
+{ "read": true }
+```
+- **Response:**
+```json
+{ "id": "ntf_01H...", "read": true }
+```
+- **Side effects:** —
+
+---
+
+## 🐙 GitHub OAuth
+
+### `GET /api/github/auth`
+
+Khởi động luồng OAuth — redirect user tới GitHub authorize URL.
+
+- **Auth:** ❌ không (chính nó là auth)
+- **Query:** —
+- **Body:** —
+- **Response:** HTTP 302 redirect tới `https://github.com/login/oauth/authorize?...`
+- **Side effects:** — (state được lưu session/cookie)
+
+### `GET /api/github/callback`
+
+OAuth callback — GitHub redirect về đây kèm `?code=&state=`. Sau khi đổi code lấy access token, lưu vào user/leader record và redirect về frontend.
+
+- **Auth:** ❌ không
+- **Query:** `code`, `state` (do GitHub trả về)
+- **Body:** —
+- **Response:** HTTP 302 về `${APP_URL}/settings/github?connected=true`
+- **Side effects:** Lưu `githubAccessToken` (encrypted) vào DB.
+
+### `POST /api/github/push`
+
+Push project lên GitHub repo (tạo repo mới nếu cần).
+
+- **Auth:** ✅ `?token=`
+- **Query:**
+  | Param | Bắt buộc | Mô tả |
+  |---|---|---|
+  | `token` | ✅ | Leader token |
+  | `projectId` | ✅ | Project cần push |
+- **Body:**
+```json
+{ "repoName": "nexus-project-abc", "private": true }
+```
+- **Response:**
+```json
+{
+  "ok": true,
+  "repoUrl": "https://github.com/user/nexus-project-abc",
+  "commitSha": "a1b2c3d"
+}
+```
+- **Side effects:** `logActivity({ type: "github.push", ... })`; broadcast notification.
+
+### `GET /api/github/status`
+
+Kiểm tra xem leader đã kết nối GitHub chưa (và có quyền repo hay không).
+
+- **Auth:** ✅ `?token=`
+- **Query:** `token`, `projectId`
+- **Body:** —
+- **Response:**
+```json
+{
+  "connected": true,
+  "username": "octocat",
+  "scopes": ["repo", "user:email"]
+}
+```
+- **Side effects:** —
+
+---
+
+## 📊 Dashboard
+
+### `GET /api/dashboard/activity`
+
+Activity feed gần nhất của leader (đa project).
+
+- **Auth:** ✅ `?token=`
+- **Query:**
+  | Param | Bắt buộc | Mặc định |
+  |---|---|---|
+  | `token` | ✅ | — |
+  | `limit` | ❌ | `20` |
+- **Body:** —
+- **Response:**
+```json
+{
+  "activity": [
+    { "id": "log_01H", "projectId": "prj_abc", "type": "task.done", "message": "Task #12 done", "createdAt": "..." }
+  ]
+}
+```
+- **Side effects:** —
+
+### `GET /api/dashboard/statistics`
+
+Thống kê tổng hợp: số project, task, token dùng, v.v.
+
+- **Auth:** ✅ `?token=`
+- **Query:** `token`
+- **Body:** —
+- **Response:**
+```json
+{
+  "projects": 12,
+  "tasksDone": 87,
+  "tasksPending": 14,
+  "tokensUsed": 234560,
+  "emailsSent": 23,
+  "activeAgents": 6
+}
+```
+- **Side effects:** —
+
+### `GET /api/dashboard/status`
+
+Trạng thái hệ thống: DB, pipeline, agents, mini-services.
+
+- **Auth:** ✅ `?token=`
+- **Query:** `token`
+- **Body:** —
+- **Response:**
+```json
+{
+  "db": "ok",
+  "pipeline": { "running": 2, "queued": 0 },
+  "agents": [{ "id": "researcher", "status": "idle" }],
+  "services": {
+    "chat": "up",
+    "notification": "up"
+  }
+}
+```
+- **Side effects:** —
+
+### `GET /api/dashboard/tasks`
+
+Danh sách task của leader (có filter).
+
+- **Auth:** ✅ `?token=`
+- **Query:**
+  | Param | Bắt buộc | Mặc định | Mô tả |
+  |---|---|---|---|
+  | `token` | ✅ | — | |
+  | `filter` | ❌ | `all` | `all` \| `pending` \| `in_progress` \| `done` \| `overdue` |
+- **Body:** —
+- **Response:**
+```json
+{
+  "tasks": [
+    { "id": "tsk_01", "projectId": "prj_abc", "title": "Viết spec", "status": "pending", "assignee": "leader", "deadline": "..." }
+  ]
+}
+```
+- **Side effects:** —
+
+---
+
+## 🗂 Projects Collection
+
+### `GET /api/projects`
+
+Liệt kê toàn bộ project với aggregate count.
+
+- **Auth:** ❌ không (public list — hoặc có thể check token tuỳ deployment)
+- **Query:** —
+- **Body:** —
+- **Response:**
+```json
+{
+  "projects": [
+    {
+      "id": "prj_abc",
+      "topic": "Xây SaaS ERP",
+      "description": "...",
+      "status": "in_progress",
+      "priority": "high",
+      "deadline": "2025-02-01",
+      "techStack": ["next", "prisma"],
+      "tags": ["saas"],
+      "coverColor": "#3b82f6",
+      "isFavorite": false,
+      "isArchived": false,
+      "_count": { "members": 4, "tasks": 12, "analyses": 2 },
+      "createdAt": "..."
+    }
+  ]
+}
+```
+- **Side effects:** —
+
+### `POST /api/projects`
+
+Tạo project mới + khởi động pipeline AI bất đồng bộ (research → plan → architect → code).
+
+- **Auth:** ❌ không (tự sinh leaderToken)
+- **Query:** —
+- **Body:**
+```json
+{
+  "topic": "Xây SaaS ERP cho SME",
+  "description": "ERP đa module: kế toán, kho, HR",
+  "purpose": "MVP trong 4 tuần",
+  "extraInfo": {
+    "requirements": ["multi-tenant", "i18n"],
+    "specialReqs": "Tuân thủ hoá đơn điện tử VN",
+    "techPrefs": ["Next.js", "Prisma", "PostgreSQL"],
+    "langPrefs": ["vi", "en"]
+  },
+  "members": [
+    { "name": "An", "email": "an@x.vn", "strengths": ["backend"], "weaknesses": ["ui"] },
+    { "name": "Bình", "email": "binh@x.vn", "strengths": ["frontend"], "weaknesses": ["devops"] }
+  ],
+  "leaderName": "Leader Name",
+  "leaderEmail": "leader@x.vn",
+  "leaderSmtpPassword": "smtp-app-password",
+  "parallel": true
+}
+```
+- **Response (201):**
+```json
+{
+  "projectId": "prj_abc",
+  "leaderToken": "tok_..."
+}
+```
+- **Side effects:**
+  - Tạo `Project` + `Member` (leader + members).
+  - Gọi `updatePipelineStatus({ status: "running" })`.
+  - Chạy pipeline nền (researcher → planner → architect → coder → reviewer).
+  - `logActivity({ type: "project.created" })`, `logActivity({ type: "pipeline.start" })`.
+  - Broadcast notification qua `notification-service`.
+
+---
+
+## 🧩 Project `[id]` — Workspace
+
+Tất cả endpoint dưới đây có prefix `/api/projects/[id]` và yêu cầu `?token=<leaderToken>` (trừ `GET /progress` có thể public cho polling).
+
+### Metadata (GET / PATCH / DELETE)
+
+#### `GET /api/projects/[id]?token=`
+
+Lấy toàn bộ workspace data: project, pipeline result, members, access, tasks, chat messages (gần đây), edit proposals.
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "project": { /* full project */ },
+  "result": { "research": "...", "plan": "...", "architecture": "...", "code": "..." },
+  "members": [ /* ... */ ],
+  "access": [ /* leader + members */ ],
+  "tasks": [ /* ... */ ],
+  "chatMessages": [ /* 50 gần đây */ ],
+  "editProposals": [ /* ... */ ]
+}
+```
+- **Side effects:** —
+
+#### `PATCH /api/projects/[id]?token=`
+
+Cập nhật metadata project.
+
+- **Auth:** ✅ `token`
+- **Body (mọi field tuỳ chọn):**
+```json
+{
+  "topic": "Tên mới",
+  "description": "...",
+  "isFavorite": true,
+  "isArchived": false,
+  "priority": "high",
+  "deadline": "2025-03-01",
+  "techStack": ["next", "prisma"],
+  "tags": ["saas", "erp"],
+  "coverColor": "#10b981",
+  "status": "in_progress"
+}
+```
+- **Response:**
+```json
+{ "project": { /* updated */ } }
+```
+- **Side effects:** `logActivity({ type: "project.updated" })`.
+
+#### `DELETE /api/projects/[id]?token=`
+
+Xoá project + cascade (tasks, members, chat, mailbox, notifications, edit proposals, activity logs).
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{ "ok": true, "deleted": "prj_abc" }
+```
+- **Side effects:** `logActivity({ type: "project.deleted" })` (trước khi cascade).
+
+---
+
+### Pipeline Progress
+
+#### `GET /api/projects/[id]/progress`
+
+Trạng thái pipeline (public, dùng cho SSE/polling).
+
+- **Auth:** ❌ không (hoặc `token` tuỳ config)
+- **Response:**
+```json
+{
+  "status": "running",
+  "agents": [
+    { "id": "researcher", "status": "done", "startedAt": "...", "endedAt": "..." },
+    { "id": "planner",    "status": "running" }
+  ],
+  "logs": [
+    { "ts": "...", "level": "info", "agent": "researcher", "message": "..." }
+  ],
+  "error": null
+}
+```
+- **Side effects:** —
+
+---
+
+### Initialize (todolist)
+
+#### `POST /api/projects/[id]/initialize?token=`
+
+Sinh todolist ban đầu bằng AI (chạy nền). Trả về ngay `started: true`, frontend poll `/initialize/progress`.
+
+- **Auth:** ✅ `token`
+- **Body:** — (hoặc `{ "force": true }` để regenerate)
+- **Response:**
+```json
+{ "started": true }
+```
+- **Side effects:** `logActivity({ type: "initialize.start" })`.
+
+#### `GET /api/projects/[id]/initialize/progress`
+
+- **Auth:** ❌ (poll-friendly)
+- **Response:**
+```json
+{
+  "status": "running",
+  "logs": [{ "ts": "...", "message": "Generating 12 tasks..." }],
+  "taskCount": 12,
+  "error": null
+}
+```
+- **Side effects:** —
+
+---
+
+### Refine (AI)
+
+#### `POST /api/projects/[id]/refine?token=`
+
+Yêu cầu AI tinh chỉnh lại các section (research/plan/architecture/code) — chạy nền.
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{
+  "sections": ["plan", "architecture"],
+  "instructions": "Làm gọn phần plan, thêm sơ đồ kiến trúc"
+}
+```
+- **Response:** `{ "started": true }`
+- **Side effects:** `logActivity({ type: "refine.start" })`.
+
+#### `GET /api/projects/[id]/refine/progress`
+
+- **Auth:** ❌ (poll)
+- **Response:**
+```json
+{
+  "status": "running",
+  "section": "plan",
+  "logs": [ /* ... */ ],
+  "error": null
+}
+```
+- **Side effects:** —
+
+---
+
+### Section (single edit)
+
+#### `PUT /api/projects/[id]/section?token=`
+
+Edit trực tiếp một section (không qua AI). Dùng cho inline editor.
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "section": "plan", "content": "# Plan\n## Milestone 1\n..." }
+```
+- **Response:**
+```json
+{ "ok": true, "section": "plan", "updatedAt": "..." }
+```
+- **Side effects:** `logActivity({ type: "section.updated", meta: { section: "plan" } })`.
+
+---
+
+### Context (Long-term Memory)
+
+#### `GET /api/projects/[id]/context?token=`
+
+Lấy `ProjectContext` — bộ nhớ dài hạn mà các agent dùng để giữ continuum giữa các lần refine.
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "context": {
+    "summary": "Project ERP SME, stack Next + Prisma...",
+    "decisions": ["Dùng multi-tenant qua schema", "RBAC đơn giản"],
+    "openQuestions": ["Mức giá plan?"],
+    "updatedAt": "..."
+  }
+}
+```
+- **Side effects:** —
+
+---
+
+### History & Tokens
+
+#### `GET /api/projects/[id]/history?token=`
+
+Activity log của project (tối đa 200 dòng gần nhất).
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "logs": [ /* ActivityLog[] */ ]
+}
+```
+- **Side effects:** —
+
+#### `GET /api/projects/[id]/tokens?token=`
+
+Log usage token (input/output/cost) theo từng call AI trong project.
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "usage": [
+    { "id": "tok_01", "agent": "researcher", "model": "gpt-4o-mini",
+      "inputTokens": 1200, "outputTokens": 800, "costUsd": 0.0021, "createdAt": "..." }
+  ],
+  "total": { "inputTokens": 12000, "outputTokens": 8400, "costUsd": 0.021 }
+}
+```
+- **Side effects:** —
+
+---
+
+### Tasks
+
+#### `GET /api/projects/[id]/tasks?token=`
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{ "tasks": [ { "id": "tsk_01", "title": "...", "status": "pending", "assignee": "leader", "deadline": "..." } ] }
+```
+
+#### `POST /api/projects/[id]/tasks?token=`
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "title": "Viết spec API", "description": "...", "assignee": "an@x.vn", "status": "pending", "priority": "high", "deadline": "2025-02-10" }
+```
+- **Response:** `{ "task": { /* created */ } }`
+- **Side effects:** `logActivity({ type: "task.created" })`; broadcast notification tới assignee.
+
+#### `PATCH /api/projects/[id]/tasks/[taskId]?token=`
+
+- **Auth:** ✅ `token`
+- **Body (tuỳ chọn):**
+```json
+{ "status": "done", "title": "Đổi tên", "assignee": "binh@x.vn" }
+```
+- **Response:** `{ "task": { /* updated */ } }`
+- **Side effects:** `logActivity({ type: "task.updated" })`; nếu `status=done` → broadcast notification cho leader.
+
+---
+
+### Members
+
+#### `GET /api/projects/[id]/members?token=`
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "members": [
+    { "id": "mem_01", "name": "An", "email": "an@x.vn", "role": "member",
+      "strengths": ["backend"], "weaknesses": ["ui"], "userId": "..." }
+  ]
+}
+```
+
+> **Lưu ý:** Các thao tác `POST / PATCH / DELETE` member có thể được expose qua UI settings, nhưng route file `members/route.ts` hiện chỉ export `GET`. Để thêm/sửa/xoá member, dùng `PATCH /api/projects/[id]` cập nhật mảng `members`, hoặc endpoints admin (nếu có).
+
+---
+
+### Chat
+
+#### `GET /api/projects/[id]/chat?token=`
+
+50 tin nhắn gần nhất (realtime đi qua Socket.io — endpoint này chỉ để hydrate).
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "messages": [
+    { "id": "msg_01", "userId": "...", "author": "An", "content": "Hello", "createdAt": "..." }
+  ]
+}
+```
+
+#### `POST /api/projects/[id]/chat?token=`
+
+Persist một tin nhắn (realtime broadcast do `chat-service` Socket.io xử lý).
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "content": "Có ai review PR #12 chưa?" }
+```
+- **Response:** `{ "message": { /* saved */ } }`
+- **Side effects:** `logActivity({ type: "chat.message" })`. **Không** gọi HTTP tới `chat-service` (realtime tách rời).
+
+#### `POST /api/projects/[id]/chat/ai?token=`
+
+Yêu cầu AI assistant trả lời trong chat (context-aware với ProjectContext + tin nhắn gần đây).
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "prompt": "Tóm tắt progress hiện tại", "history": [ /* optional */ ] }
+```
+- **Response:**
+```json
+{ "reply": "Dự án đang ở giai đoạn planner, 12 task đã sinh...", "model": "gpt-4o-mini" }
+```
+- **Side effects:** Ghi token usage; `logActivity({ type: "chat.ai" })`.
+
+---
+
+### Mailbox
+
+#### `GET /api/projects/[id]/mailbox?token=`
+
+List email trong mailbox của project (inbox/sent/drafts theo `?folder=`).
+
+- **Auth:** ✅ `token`
+- **Query (tuỳ chọn):** `folder=inbox|sent|drafts|trash`, `limit`, `unreadOnly`
+- **Response:**
+```json
+{
+  "mails": [
+    { "id": "mail_01", "from": "leader@x.vn", "to": ["an@x.vn"], "subject": "Kickoff",
+      "preview": "Chào cả nhà...", "read": false, "starred": false, "folder": "inbox", "createdAt": "..." }
+  ]
+}
+```
+
+#### `POST /api/projects/[id]/mailbox?token=`
+
+Soạn + gửi email (qua SMTP của leader). Tạo mailbox entry cho từng recipient in-project.
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{
+  "to": ["an@x.vn", "binh@x.vn"],
+  "cc": [],
+  "subject": "Kickoff meeting",
+  "body": "Hẹn cả team 9h sáng mai...",
+  "attachments": ["att_01"]
+}
+```
+- **Response:** `{ "mail": { /* saved */ }, "sent": true }`
+- **Side effects:**
+  - Gửi SMTP.
+  - Tạo `Mail` row cho từng recipient.
+  - `logActivity({ type: "mail.sent" })`.
+  - Broadcast realtime qua `notification-service` `/broadcast-mail`.
+
+#### `GET /api/projects/[id]/mailbox/[mailId]?token=`
+
+Chi tiết một email.
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{ "mail": { "id": "mail_01", "body": "<full html/text>", "attachments": [ /* ref */ ] } }
+```
+
+#### `PATCH /api/projects/[id]/mailbox/[mailId]?token=`
+
+Cập nhật trạng thái email.
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "read": true, "starred": true, "folder": "inbox" }
+```
+- **Response:** `{ "mail": { /* updated */ } }`
+
+#### `POST /api/projects/[id]/mailbox/ai-rewrite?token=`
+
+AI viết lại email theo 1 trong 5 mode: `professional`, `friendly`, `concise`, `persuasive`, `apologetic`.
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{ "content": "Gửi sếp, em nghỉ mai.", "mode": "professional", "tone": "polite" }
+```
+- **Response:**
+```json
+{ "rewritten": "Kính gửi Anh/Chị,\n\nTôi xin phép báo cáo ngày mai tôi sẽ nghỉ...", "mode": "professional", "model": "gpt-4o-mini" }
+```
+- **Side effects:** Ghi token usage.
+
+#### `GET /api/projects/[id]/mailbox/attachments?token=`
+
+Liệt kê attachment của project.
+
+- **Response:**
+```json
+{ "attachments": [ { "id": "att_01", "filename": "spec.pdf", "size": 123456, "mimeType": "application/pdf", "uploadedAt": "..." } ] }
+```
+
+#### `POST /api/projects/[id]/mailbox/attachments?token=`
+
+Upload attachment (`multipart/form-data`).
+
+- **Body (form):** `file=<binary>`
+- **Response:** `{ "attachment": { "id": "att_01", "filename": "...", "size": 123456 } }`
+- **Side effects:** Lưu file vào storage (local/OSS), `logActivity({ type: "mail.attachment" })`.
+
+#### `GET /api/projects/[id]/mailbox/attachments/[attId]?token=`
+
+Download attachment (stream file).
+
+- **Response:** `Content-Type: <mime>`, `Content-Disposition: attachment; filename="..."`, binary stream.
+
+---
+
+### Notifications (Project-scoped)
+
+#### `GET /api/projects/[id]/notifications?token=`
+
+List notification thuộc project (khác với global `GET /api/notifications`).
+
+- **Auth:** ✅ `token`
+- **Response:**
+```json
+{
+  "notifications": [
+    { "id": "ntf_01", "projectId": "prj_abc", "title": "Task done", "body": "...", "read": false, "createdAt": "..." }
+  ]
+}
+```
+
+#### `PATCH /api/projects/[id]/notifications/[notifId]?token=`
+
+Toggle read/unread.
+
+- **Body:** `{ "read": true }`
+- **Response:** `{ "id": "ntf_01", "read": true }`
+
+---
+
+### Fix Mermaid
+
+#### `POST /api/projects/[id]/fix-mermaid?token=`
+
+Gửi code Mermaid bị lỗi + error message → AI trả về code đã sửa (hoặc fallback nếu AI không fix được).
+
+- **Auth:** ✅ `token`
+- **Body:**
+```json
+{
+  "code": "graph TD\n  A-->B\n  B-→C",
+  "error": "Syntax error at line 3",
+  "diagramType": "flowchart"
+}
+```
+- **Response (thành công):**
+```json
+{ "fixedCode": "graph TD\n  A-->B\n  B-->C", "model": "gpt-4o-mini" }
+```
+- **Response (fallback):**
+```json
+{ "fixedCode": "graph TD\n  A[Error rendering diagram]", "fallback": true, "reason": "AI unable to parse" }
+```
+- **Side effects:** Ghi token usage.
+
+---
+
+### Edit Proposals
+
+Cho phép member đề xuất sửa section; leader approve/reject.
+
+#### `GET /api/projects/[id]/edit-proposals?token=`
+
+- **Response:**
+```json
+{
+  "proposals": [
+    { "id": "prop_01", "section": "plan", "proposedBy": "an@x.vn", "oldContent": "...", "newContent": "...",
+      "status": "pending", "createdAt": "..." }
+  ]
+}
+```
+
+#### `POST /api/projects/[id]/edit-proposals?token=`
+
+Tạo proposal mới.
+
+- **Body:**
+```json
+{ "section": "plan", "oldContent": "...", "newContent": "...", "comment": "Thêm milestone 0" }
+```
+- **Response:** `{ "proposal": { /* created */ } }`
+- **Side effects:** `logActivity({ type: "proposal.created" })`; tạo + broadcast notification cho leader.
+
+#### `PATCH /api/projects/[id]/edit-proposals/[proposalId]?token=`
+
+Approve (apply vào section) hoặc reject proposal.
+
+- **Body:**
+```json
+{ "action": "approve", "comment": "OK, apply" }
+```
+- **Response:** `{ "proposal": { "id": "prop_01", "status": "approved", "appliedAt": "..." } }`
+- **Side effects:**
+  - Nếu approve: cập nhật section content + `logActivity({ type: "proposal.applied" })`.
+  - Tạo + broadcast notification cho member đề xuất.
+
+---
+
+### Duplicate
+
+#### `POST /api/projects/[id]/duplicate?token=`
+
+Nhân bản project (không copy tasks done / mailbox đã gửi).
+
+- **Body (tuỳ chọn):**
+```json
+{ "newTopic": "ERP v2", "copyTasks": true, "copyMembers": true }
+```
+- **Response:**
+```json
+{ "projectId": "prj_xyz", "leaderToken": "tok_..." }
+```
+- **Side effects:** `logActivity({ type: "project.duplicated", meta: { from: "prj_abc" } })`.
+
+---
+
+## 🛰 Mini-services (Socket.io)
+
+NEXUS AI tách realtime ra 2 mini-service chạy port riêng (Caddy gateway forward qua `XTransformPort`).
+
+### `chat-service` — port 3001
+
+Socket.io namespace `/`. Client connect: `io("/?XTransformPort=3001")`.
+
+| Event | Hướng | Payload | Mô tả |
+|---|---|---|---|
+| `join` | client → server | `{ projectId, userId, token }` | Tham gia room `project:<id>` |
+| `send_message` | client → server | `{ projectId, content }` | Broadcast tới room |
+| `typing` | client → server | `{ projectId, userId, isTyping }` | Indicator |
+| `message` | server → client | `{ id, userId, author, content, createdAt }` | Tin nhắn mới |
+| `user_joined` | server → client | `{ userId, projectId }` | Có người vào room |
+| `user_left` | server → client | `{ userId, projectId }` | Có người rời room |
+
+### `notification-service` — port 3002
+
+Socket.io namespace `/`. Client connect: `io("/?XTransformPort=3002")`.
+
+| Event | Hướng | Payload | Mô tả |
+|---|---|---|---|
+| `subscribe` | client → server | `{ userId, token }` | Đăng ký nhận noti realtime |
+| `notification` | server → client | `{ id, title, body, type, projectId, createdAt }` | Push noti mới |
+
+Ngoài Socket.io, `notification-service` cũng expose endpoint HTTP nội bộ `/broadcast-mail` (gọi bởi `POST /api/projects/[id]/mailbox`).
+
+---
+
+## 🌐 Gateway Note
+
+Tất cả request đi qua **Caddy gateway** với relative path (không prefix port).
+
+- **HTTP qua cổng khác 3000:** thêm query `?XTransformPort=PORT`.
+  - Ví dụ mini-service chat: `GET /api/chat?XTransformPort=3001`.
+- **WebSocket qua mini-service:** khởi tạo `io("/?XTransformPort=3001")` (Socket.io client sẽ gửi handshake qua Caddy → forward tới port 3001).
+- **Default port (không có `XTransformPort`):** 3000 — gateway forward tới Next.js API.
+- Caddy rule mẫu:
+  ```caddy
+  @chat query XTransformPort=3001
+  reverse_proxy @chat localhost:3001
+
+  @notif query XTransformPort=3002
+  reverse_proxy @notif localhost:3002
+
+  reverse_proxy localhost:3000   # fallback
+  ```
 
 ---
 
 ## ❌ Error Responses
 
-Tất cả endpoints trả về error theo format:
+Mọi endpoint lỗi trả về JSON thống nhất:
 
 ```json
 {
-  "error": "Short error message",
-  "details": "Longer details (optional)"
+  "error": "ERROR_CODE",
+  "message": "Mô tả chi tiết",
+  "details": { /* optional */ }
 }
 ```
 
-### Common status codes
+### Bảng mã lỗi phổ biến
 
-| Status | Meaning | When |
+| HTTP | `error` | Nguyên nhân |
 |---|---|---|
-| `200` | OK | Success |
-| `400` | Bad Request | Invalid body / missing required field |
-| `401` | Unauthorized | Missing token |
-| `403` | Forbidden | Invalid token / leader access required |
-| `404` | Not Found | Project / task / proposal / mail not found |
-| `500` | Internal Server Error | Unexpected error |
-| `504` | Gateway Timeout | (rare — fixed by background+polling) |
+| 400 | `BAD_REQUEST` | Body / query param thiếu hoặc sai format |
+| 401 | `UNAUTHORIZED` | Thiếu `token` hoặc token không hợp lệ |
+| 403 | `FORBIDDEN` | Token hợp lệ nhưng không có quyền trên project |
+| 404 | `NOT_FOUND` | Project / task / mail / proposal không tồn tại |
+| 409 | `CONFLICT` | Trạng thái không cho phép thao tác (vd. approve proposal đã reject) |
+| 422 | `VALIDATION_ERROR` | Prisma/Zod validation fail |
+| 429 | `RATE_LIMITED` | Vượt giới hạn gọi AI / SMTP |
+| 500 | `INTERNAL_ERROR` | Lỗi server — check `logs[]` trong `/progress` để debug pipeline |
+| 502 | `UPSTREAM_ERROR` | Mini-service (chat/notification) hoặc LLM provider lỗi |
 
-### Common errors
+### Ví dụ 401
 
-| Error | Cause | Fix |
-|---|---|---|
-| `Access denied` | Invalid token | Check `?token=` param |
-| `Leader access required` | Member trying leader-only action | Use `leaderToken` |
-| `Project not found` | Wrong project ID | Check `projectId` |
-| `You can only update your own tasks` | Member updating other's task | Use member's own task |
-| `Invalid status` | Wrong status value | Check valid statuses |
-| `Not addressed to you` | Notification not visible to user | Check `recipientEmail` |
-| `Chỉ leader được upload attachment` | Member uploading attachment | Use `leaderToken` |
-| `OPENROUTER_API_KEY khong hop le` | Invalid API key | Check `.env` |
-| `GitHub not connected` | No OAuth token | Connect GitHub first |
-| `code and error required` | Fix-mermaid missing fields | Include `code` + `error` |
-| `No files provided` | Mailbox attachments empty | Include `files` in form-data |
+```http
+GET /api/projects/prj_abc/tasks?token=invalid
+```
+```json
+{ "error": "UNAUTHORIZED", "message": "Invalid or expired leader token" }
+```
+
+### Ví dụ 500 (pipeline)
+
+```json
+{
+  "error": "INTERNAL_ERROR",
+  "message": "Pipeline failed at agent 'architect'",
+  "details": { "agent": "architect", "lastLog": "Token limit exceeded" }
+}
+```
 
 ---
 
-## 🔌 Mini-service HTTP endpoints (internal)
+## 📌 Appendix — Route inventory (42 files)
 
-NEXUS AI main app gọi các HTTP endpoint này trên mini-services (không public):
+```
+src/app/api/route.ts                                    GET  /api
+src/app/api/activity/logs/route.ts                      GET  /api/activity/logs
+src/app/api/agents/route.ts                             GET  /api/agents
+src/app/api/config/route.ts                             GET  /api/config
+src/app/api/dashboard/activity/route.ts                 GET  /api/dashboard/activity
+src/app/api/dashboard/statistics/route.ts               GET  /api/dashboard/statistics
+src/app/api/dashboard/status/route.ts                   GET  /api/dashboard/status
+src/app/api/dashboard/tasks/route.ts                    GET  /api/dashboard/tasks
+src/app/api/github/auth/route.ts                        GET  /api/github/auth
+src/app/api/github/callback/route.ts                    GET  /api/github/callback
+src/app/api/github/push/route.ts                        POST /api/github/push
+src/app/api/github/status/route.ts                      GET  /api/github/status
+src/app/api/notifications/route.ts                      GET  /api/notifications
+src/app/api/notifications/[id]/route.ts                 PATCH /api/notifications/[id]
+src/app/api/projects/route.ts                           GET  /api/projects
+                                                        POST /api/projects
+src/app/api/templates/route.ts                          GET  /api/templates
+src/app/api/projects/[id]/route.ts                      GET | PATCH | DELETE /api/projects/[id]
+src/app/api/projects/[id]/progress/route.ts             GET  /api/projects/[id]/progress
+src/app/api/projects/[id]/initialize/route.ts           POST /api/projects/[id]/initialize
+src/app/api/projects/[id]/initialize/progress/route.ts  GET  /api/projects/[id]/initialize/progress
+src/app/api/projects/[id]/refine/route.ts               POST /api/projects/[id]/refine
+src/app/api/projects/[id]/refine/progress/route.ts      GET  /api/projects/[id]/refine/progress
+src/app/api/projects/[id]/section/route.ts              PUT  /api/projects/[id]/section
+src/app/api/projects/[id]/context/route.ts              GET  /api/projects/[id]/context
+src/app/api/projects/[id]/history/route.ts              GET  /api/projects/[id]/history
+src/app/api/projects/[id]/tokens/route.ts               GET  /api/projects/[id]/tokens
+src/app/api/projects/[id]/tasks/route.ts                GET | POST /api/projects/[id]/tasks
+src/app/api/projects/[id]/tasks/[taskId]/route.ts       PATCH /api/projects/[id]/tasks/[taskId]
+src/app/api/projects/[id]/members/route.ts              GET  /api/projects/[id]/members
+src/app/api/projects/[id]/chat/route.ts                 GET | POST /api/projects/[id]/chat
+src/app/api/projects/[id]/chat/ai/route.ts              POST /api/projects/[id]/chat/ai
+src/app/api/projects/[id]/mailbox/route.ts              GET | POST /api/projects/[id]/mailbox
+src/app/api/projects/[id]/mailbox/[mailId]/route.ts     GET | PATCH /api/projects/[id]/mailbox/[mailId]
+src/app/api/projects/[id]/mailbox/ai-rewrite/route.ts   POST /api/projects/[id]/mailbox/ai-rewrite
+src/app/api/projects/[id]/mailbox/attachments/route.ts  GET | POST /api/projects/[id]/mailbox/attachments
+src/app/api/projects/[id]/mailbox/attachments/[attId]/route.ts
+                                                        GET  /api/projects/[id]/mailbox/attachments/[attId]
+src/app/api/projects/[id]/notifications/route.ts        GET  /api/projects/[id]/notifications
+src/app/api/projects/[id]/notifications/[notifId]/route.ts
+                                                        PATCH /api/projects/[id]/notifications/[notifId]
+src/app/api/projects/[id]/fix-mermaid/route.ts          POST /api/projects/[id]/fix-mermaid
+src/app/api/projects/[id]/edit-proposals/route.ts       GET | POST /api/projects/[id]/edit-proposals
+src/app/api/projects/[id]/edit-proposals/[proposalId]/route.ts
+                                                        PATCH /api/projects/[id]/edit-proposals/[proposalId]
+src/app/api/projects/[id]/duplicate/route.ts            POST /api/projects/[id]/duplicate
+```
 
-### Notification service (port 3002)
-
-| Method | Path | Mô tả |
-|---|---|---|
-| `POST` | `/broadcast` | Broadcast notification → Socket.io room `project:ID` + user channel |
-| `POST` | `/broadcast-mail` | Broadcast mail-received event |
-| `POST` | `/broadcast-activity` | Broadcast new activity-log entry → `dashboard` + `project:ID` rooms |
-| `POST` | `/broadcast-task` | Broadcast task update → `dashboard` + `project:ID` rooms |
-| `POST` | `/broadcast-status` | Broadcast system-status update → `dashboard` room |
-| `GET` | `/health` | Health check |
-
-### Socket.io events (notification-service, port 3002)
-
-| Direction | Event | Mô tả |
-|---|---|---|
-| Client → Server | `join` | `{ projectId, userEmail, token, dashboard? }` |
-| Client → Server | `request_unread` | `{ projectId }` → triggers `unread_refresh` |
-| Client → Server | `notification_read` | `{ projectId, notificationId, userEmail }` |
-| Client → Server | `mail_read` | `{ projectId, mailId, userEmail }` |
-| Server → Client | `notification:new` | `{ projectId, recipientEmail, notification, timestamp }` |
-| Server → Client | `mail:new` | `{ projectId, recipientEmails, mail, timestamp }` |
-| Server → Client | `activity:new` | `{ projectId, activity, timestamp }` |
-| Server → Client | `task:update` | `{ projectId, taskId, action, task, timestamp }` |
-| Server → Client | `status:update` | `{ subsystem, status, details, timestamp }` |
-| Server → Client | `unread_refresh` | `{ projectId, timestamp }` |
-| Server → Client | `notification_read` | Echo to other tabs |
-| Server → Client | `mail_read` | Echo to other tabs |
-
-### Chat service (port 3001)
-
-| Direction | Event | Mô tả |
-|---|---|---|
-| Client → Server | `join` | `{ projectId, token }` |
-| Client → Server | `chat_message` | `{ message, authorName, authorRole }` |
-| Server → Client | `chat_message` | `{ id, message, authorName, authorRole, createdAt }` |
-
----
-
-<p align="center">
-  <strong>NEXUS AI API</strong> — 50+ REST endpoints + 2 Socket.io mini-services
-</p>
+> **Tổng:** 42 file route ≈ 60 HTTP endpoint + 2 mini-service Socket.io (chat-service:3001, notification-service:3002).
+> **Phiên bản tài liệu:** `API.md` v0.2.0 — đồng bộ với `package.json` version.

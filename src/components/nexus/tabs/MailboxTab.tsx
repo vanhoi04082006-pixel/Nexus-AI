@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";
@@ -37,13 +38,13 @@ import {
   CheckCheck,
   MailOpen,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 interface MailItem {
   id: string;
@@ -158,7 +159,7 @@ export function MailboxTab() {
         setUnreadInbox(data.unreadInbox || 0);
       }
     } catch {
-      toast.error("Không tải được mailbox");
+      notify.error("Không tải được mailbox");
     } finally {
       setLoading(false);
     }
@@ -220,7 +221,7 @@ export function MailboxTab() {
         loadMails();
       }
     } catch {
-      toast.error("Không mở được mail");
+      notify.error("Không mở được mail");
     }
   }
 
@@ -237,7 +238,7 @@ export function MailboxTab() {
         setSelected((prev) => prev ? { ...prev, ...patch } as MailDetail : prev);
       }
     } catch {
-      toast.error("Thao tác thất bại");
+      notify.error("Thao tác thất bại");
     }
   }
 
@@ -249,10 +250,10 @@ export function MailboxTab() {
         method: "DELETE",
       });
       if (selected?.id === mailId) setSelected(null);
-      toast.success("Đã xóa");
+      notify.success("Đã xóa");
       loadMails();
     } catch {
-      toast.error("Xóa thất bại");
+      notify.error("Xóa thất bại");
     }
   }
 
@@ -460,7 +461,7 @@ export function MailboxTab() {
                   {/* Body */}
                   <div
                     className="text-xs text-foreground/90 leading-relaxed prose prose-invert prose-sm max-w-none mb-3 max-h-[300px] overflow-y-auto nexus-scroll"
-                    dangerouslySetInnerHTML={{ __html: selected.bodyHtml || `<pre>${selected.bodyText}</pre>` }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(selected.bodyHtml || `<pre>${selected.bodyText}</pre>`) }}
                   />
 
                   {/* Attachments */}
@@ -618,7 +619,7 @@ function ComposeDialog({
       setShowCcBcc(false);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}</blockquote>`;
+          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}</blockquote>`;
         }
       }, 100);
     } else if (mode === "replyAll" && parent) {
@@ -629,7 +630,7 @@ function ComposeDialog({
       setShowCcBcc(parent.ccEmails.length > 0);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}</blockquote>`;
+          bodyRef.current.innerHTML = `<br><br><br><blockquote style="border-left:2px solid #1a2a40;padding-left:10px;margin-left:0;color:#94a3b8;">Vào ${fmtDate(parent.sentAt || parent.createdAt)}, ${parent.fromName} &lt;${parent.fromEmail}&gt; đã viết:<br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}</blockquote>`;
         }
       }, 100);
     } else if (mode === "forward" && parent) {
@@ -639,7 +640,7 @@ function ComposeDialog({
       setSubject(parent.subject.startsWith("Fwd:") ? parent.subject : `Fwd: ${parent.subject}`);
       setTimeout(() => {
         if (bodyRef.current) {
-          bodyRef.current.innerHTML = `<br><br>---------- Forwarded message ----------<br>From: ${parent.fromName} &lt;${parent.fromEmail}&gt;<br>Date: ${fmtDate(parent.sentAt || parent.createdAt)}<br>Subject: ${parent.subject}<br><br>${parent.bodyHtml || `<pre>${parent.bodyText}</pre>`}`;
+          bodyRef.current.innerHTML = `<br><br>---------- Forwarded message ----------<br>From: ${parent.fromName} &lt;${parent.fromEmail}&gt;<br>Date: ${fmtDate(parent.sentAt || parent.createdAt)}<br>Subject: ${parent.subject}<br><br>${sanitizeHtml(parent.bodyHtml || `<pre>${parent.bodyText}</pre>`)}`;
         }
       }, 100);
     } else {
@@ -673,17 +674,17 @@ function ComposeDialog({
   async function handleSend(asDraft = false) {
     if (!projectId || !token) return;
     if (!asDraft && toEmails.length === 0) {
-      toast.error("Chọn ít nhất 1 người nhận");
+      notify.error("Chọn ít nhất 1 người nhận");
       return;
     }
     if (!subject.trim()) {
-      toast.error("Nhập chủ đề");
+      notify.error("Nhập chủ đề");
       return;
     }
     const bodyHtml = bodyRef.current?.innerHTML || "";
     const bodyText = bodyRef.current?.innerText || "";
     if (!bodyHtml.trim() && !asDraft) {
-      toast.error("Nhập nội dung mail");
+      notify.error("Nhập nội dung mail");
       return;
     }
 
@@ -705,13 +706,13 @@ function ComposeDialog({
       });
       const data = await resp.json();
       if (resp.ok && data.success) {
-        toast.success(asDraft ? "Đã lưu nháp" : `Mail đã gửi! SMTP: ${data.smtpStatus}`);
+        notify.success(asDraft ? "Đã lưu nháp" : `Mail đã gửi! SMTP: ${data.smtpStatus}`);
         onSent();
       } else {
-        toast.error(data.error || "Gửi thất bại");
+        notify.error(data.error || "Gửi thất bại");
       }
     } catch {
-      toast.error("Lỗi kết nối");
+      notify.error("Lỗi kết nối");
     } finally {
       setSending(false);
     }
@@ -721,7 +722,7 @@ function ComposeDialog({
     if (!projectId || !token) return;
     const bodyHtml = bodyRef.current?.innerHTML || "";
     if (!bodyHtml.trim()) {
-      toast.error("Viết nội dung trước khi dùng AI");
+      notify.error("Viết nội dung trước khi dùng AI");
       return;
     }
     setAiRewriting(true);
@@ -739,13 +740,13 @@ function ComposeDialog({
       });
       const data = await resp.json();
       if (resp.ok && data.rewritten) {
-        if (bodyRef.current) bodyRef.current.innerHTML = data.rewritten;
-        toast.success(`AI đã viết lại (chế độ: ${AI_MODES.find((m) => m.id === aiMode)?.label})`);
+        if (bodyRef.current) bodyRef.current.innerHTML = sanitizeHtml(data.rewritten);
+        notify.success(`AI đã viết lại (chế độ: ${AI_MODES.find((m) => m.id === aiMode)?.label})`);
       } else {
-        toast.error(data.error || "AI rewrite thất bại");
+        notify.error(data.error || "AI rewrite thất bại");
       }
     } catch {
-      toast.error("Lỗi kết nối AI");
+      notify.error("Lỗi kết nối AI");
     } finally {
       setAiRewriting(false);
     }

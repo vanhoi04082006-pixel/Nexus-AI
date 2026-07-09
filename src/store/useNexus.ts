@@ -356,8 +356,10 @@ export const useNexus = create<NexusState>()(
     {
       name: "nexus-storage",
       // Only persist input form + route info (not transient state like pipelineRunning)
+      // FIX: Strip leaderSmtpPassword from persisted input — was leaking SMTP password
+      // to localStorage in plain text (visible in DevTools, survives logout).
       partialize: (s) => ({
-        input: s.input,
+        input: { ...s.input, leaderSmtpPassword: "" },
         projectId: s.projectId,
         token: s.token,
         activeTab: s.activeTab,

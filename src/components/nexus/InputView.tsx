@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { notify } from "@/lib/notify";
+import { useState, useEffect, useRef } from "react";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Rocket,
   Plus,
@@ -71,6 +71,9 @@ export function InputView() {
   const [showOptional, setShowOptional] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [parallel, setParallel] = useState(true); // default: parallel (fast)
+  // FIX: Polling cleanup guard — prevent state updates after unmount
+  const activeRef = useRef(true);
+  useEffect(() => () => { activeRef.current = false; }, []);
 
   // Warm up the /api/projects route on page load so Turbopack compiles it
   // before the user submits. Without this, the first POST can crash the server
@@ -82,41 +85,65 @@ export function InputView() {
   }, []);
 
   function validate(): boolean {
+    // FIX: Topic max length (was unlimited → expensive AI prompt)
     if (!input.topic.trim()) {
-      toast.error("Vui long nhap ten chu de / du an");
+      notify.error("Vui lòng nhập tên chủ đề / dự án");
+      return false;
+    }
+    if (input.topic.trim().length > 200) {
+      notify.error("Tên chủ đề quá dài (tối đa 200 ký tự)");
+      return false;
+    }
+    if (input.description.length > 5000) {
+      notify.error("Mô tả quá dài (tối đa 5000 ký tự)");
       return false;
     }
     if (!input.leaderName.trim()) {
-      toast.error("Vui long nhap ten nhom truong");
+      notify.error("Vui lòng nhập tên nhóm trưởng");
       return false;
     }
     const validMembers = input.members.filter((m) => m.name.trim());
     if (validMembers.length < 1) {
-      toast.error("Can it nhat 1 thanh vien co ten");
+      notify.error("Cần ít nhất 1 thành viên có tên");
       return false;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // FIX: Stricter email regex (was accepting invalid emails)
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+    // FIX: Check member with email but no name (or vice versa)
+    for (const m of input.members) {
+      const hasName = !!m.name.trim();
+      const hasEmail = !!m.email.trim();
+      if (hasName !== hasEmail) {
+        notify.error(`Thành viên "${hasName ? m.name : "(chưa tên)"}" ${hasName ? "thiếu email" : "có email nhưng thiếu tên"}`);
+        return false;
+      }
+    }
     for (const m of validMembers) {
       if (!m.email.trim()) {
-        toast.error(`Thanh vien "${m.name}" thieu email de gui loi moi`);
+        notify.error(`Thành viên "${m.name}" thiếu email để gửi lời mời`);
         return false;
       }
       if (!emailRegex.test(m.email.trim())) {
-        toast.error(`Email cua "${m.name}" khong hop le: ${m.email}`);
+        notify.error(`Email của "${m.name}" không hợp lệ: ${m.email}`);
         return false;
       }
     }
     if (!input.leaderEmail.trim()) {
-      toast.error("Vui long nhap email nhom truong (de gui mail SMTP)");
+      notify.error("Vui lòng nhập email nhóm trưởng (để gửi mail SMTP)");
       return false;
     }
     if (!emailRegex.test(input.leaderEmail.trim())) {
-      toast.error("Email nhom truong khong hop le");
+      notify.error("Email nhóm trưởng không hợp lệ");
       return false;
     }
     if (!input.leaderSmtpPassword.trim()) {
-      toast.error("Vui long nhap App Password SMTP de gui email loi moi");
+      notify.error("Vui lòng nhập App Password SMTP để gửi email lời mời");
       return false;
+    }
+    // FIX: Gmail App Password format hint (16 lowercase alphanumeric)
+    const smtpPwd = input.leaderSmtpPassword.trim();
+    if (smtpPwd.length < 16) {
+      notify.warning("Gmail App Password thường có 16 ký tự — kiểm tra lại tại myaccount.google.com/apppasswords");
     }
     return true;
   }
@@ -186,8 +213,11 @@ export function InputView() {
       // ===== Poll for pipeline progress every 2.5 seconds =====
       await new Promise<void>((resolve, reject) => {
         const poll = async () => {
+          // FIX: Stop polling if component unmounted
+          if (!activeRef.current) return;
           try {
             const pr = await fetch(`/api/projects/${resultProjectId}/progress`);
+            if (!activeRef.current) return; // check again after await
             if (!pr.ok) {
               // 404 = progress expired or not found — check if project is ready
               if (pr.status === 404) {
@@ -210,6 +240,7 @@ export function InputView() {
                 if (a.status === "running") setAgentStatus(a.id, "running");
                 else if (a.status === "done") setAgentStatus(a.id, "done");
                 else if (a.status === "failed") setAgentStatus(a.id, "failed", a.error);
+                // pending/undefined → leave as-is (will be resolved on pipeline done)
               }
             }
 
@@ -219,12 +250,28 @@ export function InputView() {
             }
 
             if (prog.status === "done") {
+              // CRITICAL FIX: Force-complete ALL agents to "done" before resolving.
+              // Without this, agents stuck in "running"/"pending" (UI sync bug)
+              // would appear as "Đang xử lý..." forever even though data is saved.
+              // Backend may have emitted agent_done events between polls that we missed.
+              if (prog.agents) {
+                for (const a of prog.agents) {
+                  if (a.status !== "failed") {
+                    setAgentStatus(a.id, "done");
+                  }
+                }
+              }
               resolve();
             } else if (prog.status === "error") {
               reject(new Error(prog.error || "Pipeline that bai"));
             } else {
-              // still running — poll again
-              setTimeout(poll, 2500);
+              // still running — poll again.
+              // Use shorter interval (1.5s) when most agents are done (last-mile speedup)
+              // to catch the final "done" state faster + reduce stale UI window.
+              const doneCount = prog.agents?.filter(a => a.status === "done" || a.status === "failed").length || 0;
+              const totalAgents = prog.agents?.length || 10;
+              const interval = doneCount >= totalAgents - 2 ? 1500 : 2500; // speed up near the end
+              setTimeout(poll, interval);
             }
           } catch (err) {
             reject(err instanceof Error ? err : new Error("Loi poll"));
@@ -235,12 +282,12 @@ export function InputView() {
 
       // Pipeline done — redirect to workspace
       localStorage.setItem(`nexus_leader_${resultProjectId}`, resultToken);
-      toast.success("8 AI Agents hoan thanh! Email loi moi da gui thanh vien.");
+      notify.success("8 AI Agents hoan thanh! Email loi moi da gui thanh vien.");
       window.location.href = `/?p=${resultProjectId}&token=${resultToken}`;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Loi khong xac dinh";
       setPipelineError(msg);
-      toast.error(msg);
+      notify.error(msg);
       setSubmitting(false);
     }
   }

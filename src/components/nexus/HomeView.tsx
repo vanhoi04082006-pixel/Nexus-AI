@@ -1,11 +1,11 @@
 "use client";
 
+import { notify } from "@/lib/notify";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { useNexus } from "@/store/useNexus";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Cpu,
   Plus,
@@ -208,13 +208,17 @@ export function HomeView() {
   const [taskCounts, setTaskCounts] = useState({ total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
   const socketRef = useRef<Socket | null>(null);
 
-  // Resolve the current user's token (leader token from access)
-  const userToken = access?.email ? projects[0]?.leaderToken || "" : "";
+  // FIX: Removed dead variable `userToken` (was declared but never used)
+
+  // FIX: Use ref for projects to avoid infinite re-render loops.
+  // Previous code had `useCallback(..., [projects])` + `useEffect(..., [projects, callbacks])`
+  // → setProjects → projects change → callbacks recreated → effect re-runs → loadProjects → loop.
+  const projectsRef = useRef<ProjectHistoryItem[]>([]);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
 
   const loadActivities = useCallback(async () => {
-    // Find the leader token from the first project (the Home view lists all user's projects)
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/activity?token=${encodeURIComponent(token)}&limit=15`);
       if (resp.ok) {
@@ -222,11 +226,11 @@ export function HomeView() {
         setActivities(data.activities || []);
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
   const loadSystemStatus = useCallback(async () => {
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/status?token=${encodeURIComponent(token)}`);
       if (resp.ok) {
@@ -234,11 +238,11 @@ export function HomeView() {
         setSystemStatus(data);
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
   const loadDashboardTasks = useCallback(async () => {
     try {
-      const token = projects[0]?.leaderToken;
+      const token = projectsRef.current[0]?.leaderToken;
       if (!token) return;
       const resp = await fetch(`/api/dashboard/tasks?token=${encodeURIComponent(token)}&filter=all`);
       if (resp.ok) {
@@ -247,19 +251,26 @@ export function HomeView() {
         setTaskCounts(data.counts || { total: 0, inProgress: 0, overdue: 0, dueSoon: 0, assignedToMe: 0 });
       }
     } catch { /* ignore */ }
-  }, [projects]);
+  }, []); // stable — reads projectsRef
 
+  // FIX: Load projects ONCE on mount (was [projects] → infinite loop)
   useEffect(() => {
     loadProjects();
+  }, []); // empty deps — run once
+
+  // FIX: Poll notifications every 30s — separate effect, stable deps
+  useEffect(() => {
     loadNotifications();
-    // Poll notifications every 30s
     const notifInterval = setInterval(loadNotifications, 30000);
     return () => clearInterval(notifInterval);
-  }, []);
+  }, []); // empty deps — loadNotifications reads projectsRef
 
-  // Load dashboard widgets once projects are available
+  // Load dashboard widgets ONCE when projects first become available
+  // FIX: Use a ref flag to run only once, not on every projects change
+  const widgetsLoadedRef = useRef(false);
   useEffect(() => {
-    if (projects.length > 0) {
+    if (projects.length > 0 && !widgetsLoadedRef.current) {
+      widgetsLoadedRef.current = true;
       loadActivities();
       loadSystemStatus();
       loadDashboardTasks();
@@ -267,8 +278,9 @@ export function HomeView() {
   }, [projects, loadActivities, loadSystemStatus, loadDashboardTasks]);
 
   // Realtime WebSocket for dashboard widgets (activity:new, task:update, status:update)
+  // FIX: Use token from projectsRef (stable callbacks) — was reconnecting on every projects change
   useEffect(() => {
-    const token = projects[0]?.leaderToken;
+    const token = projectsRef.current[0]?.leaderToken;
     if (!token) return;
     const socket = io("/?XTransformPort=3002", { transports: ["websocket", "polling"] });
     socketRef.current = socket;
@@ -295,7 +307,7 @@ export function HomeView() {
       socketRef.current = null;
       clearInterval(interval);
     };
-  }, [projects, loadActivities, loadDashboardTasks, loadSystemStatus]);
+  }, [loadActivities, loadDashboardTasks, loadSystemStatus]); // stable callbacks
 
   async function loadNotifications() {
     try {
@@ -333,7 +345,7 @@ export function HomeView() {
       setProjects(data.projects || []);
     } catch {
       setLoadError(true);
-      toast.error("Không tải được danh sách dự án — kiểm tra kết nối DB");
+      notify.error("Không tải được danh sách dự án — kiểm tra kết nối DB");
     } finally {
       setLoading(false);
     }
@@ -371,7 +383,7 @@ export function HomeView() {
     setRoute(null, null);
     setView("input");
     window.history.pushState({}, "", `/`);
-    toast.success(`Đã áp dụng template "${template.name}" — điền thông tin còn lại rồi bấm Khởi tạo`);
+    notify.success(`Đã áp dụng template "${template.name}" — điền thông tin còn lại rồi bấm Khởi tạo`);
   }
 
   const heroProject = projects[heroIndex] || projects[0];
@@ -379,7 +391,7 @@ export function HomeView() {
   const filteredProjects = searchQuery.trim()
     ? projects.filter(p => p.topic.toLowerCase().includes(searchQuery.toLowerCase()) || p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
     : projects;
-  const recentProjects = filteredProjects.slice(0, 10);
+  const recentProjects = filteredProjects.slice(0, 6);
 
   function fmtDate(iso: string): string {
     return new Date(iso).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });

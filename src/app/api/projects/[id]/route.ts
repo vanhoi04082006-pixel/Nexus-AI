@@ -251,12 +251,22 @@ export async function PATCH(
     if (typeof body.description === "string") data.description = body.description;
     if (typeof body.isFavorite === "boolean") data.isFavorite = body.isFavorite;
     if (typeof body.isArchived === "boolean") data.isArchived = body.isArchived;
-    if (typeof body.priority === "string") data.priority = body.priority;
+    // FIX: Validate enum values (was accepting arbitrary strings → UI break)
+    const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
+    if (typeof body.priority === "string" && VALID_PRIORITIES.includes(body.priority)) {
+      data.priority = body.priority;
+    }
     if (body.deadline !== undefined) data.deadline = body.deadline ? new Date(body.deadline) : null;
     if (Array.isArray(body.techStack)) data.techStack = JSON.stringify(body.techStack);
     if (Array.isArray(body.tags)) data.tags = JSON.stringify(body.tags);
-    if (typeof body.coverColor === "string") data.coverColor = body.coverColor;
-    if (typeof body.status === "string") data.status = body.status;
+    const VALID_COLORS = ["cyan", "emerald", "purple", "amber", "rose", "blue"];
+    if (typeof body.coverColor === "string" && VALID_COLORS.includes(body.coverColor)) {
+      data.coverColor = body.coverColor;
+    }
+    const VALID_STATUSES = ["DRAFT", "ANALYZING", "ANALYZED", "WORKSPACE", "INITIALIZED", "REFINED"];
+    if (typeof body.status === "string" && VALID_STATUSES.includes(body.status)) {
+      data.status = body.status;
+    }
 
     const updated = await db.project.update({
       where: { id },

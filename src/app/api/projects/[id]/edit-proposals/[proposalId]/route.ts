@@ -59,7 +59,7 @@ export async function PUT(
         actorName: access!.name,
         actorEmail: access!.email,
         actorRole: "Leader",
-        actionUrl: `/?p=${id}&token=${token}&tab=history`,
+        actionUrl: `/?p=${id}&tab=history`,
         actionLabel: "Xem Proposal",
       });
     } catch { /* non-fatal */ }
