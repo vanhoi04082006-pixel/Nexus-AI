@@ -148,8 +148,8 @@ export function DesignTab() {
             <div className="flex justify-between items-center px-4 py-2 bg-nexus-surface-2 border-b border-border">
               <span className="text-xs text-muted-foreground font-mono">📁 project-structure</span>
             </div>
-            <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed whitespace-pre" style={{ color: "var(--foreground)" }}>
-              {esc((r.folderStructure || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n"))}
+            <pre className="px-4 py-3 overflow-x-auto nexus-scroll font-mono text-xs leading-relaxed whitespace-pre-wrap" style={{ color: "var(--foreground)" }}>
+              {esc((r.folderStructure || "").replace(/\\n/g, "\n").replace(/\\\\n/g, "\n").replace(/\s+(root|src|app|api|components|lib|prisma|public|hooks|store|types|styles)\//g, "\n$1/").trim())}
             </pre>
           </div>
         </div>

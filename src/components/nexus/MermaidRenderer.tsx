@@ -10,11 +10,49 @@ function fixMermaid(code: string): string {
   // CRITICAL: AI often returns literal \n (backslash-n) instead of real newlines.
   s = s.replace(/\\\\n/g, "\n");
   s = s.replace(/\\n/g, "\n");
-  // FIX: Only insert newlines for the specific pattern where AI puts multiple
-  // edge statements on one line: Actor0["X"] --> UC0["Y"] Actor0["X"] --> UC1["Z"]
-  // Pattern: ]<space> followed by a node ID (uppercase letter + digits) → insert newline
-  // This is SAFE because Mermaid never has "] Actor0" on the same line legitimately.
-  s = s.replace(/(\])\s+(Actor\d+\[|UC\d+\[|F\d+\[|node\d+\[|N\d+\[)/g, "$1\n    $2");
+
+  // ===== MULTI-STATEMENT FIX: AI puts all statements on ONE line =====
+  // Mermaid requires NEWLINE between statements. Insert \n at safe boundaries.
+
+  // 1. useCase: ]<space><UppercaseWord> → newline (e.g., "] Customer[" or "] UC1[")
+  //    Safe: after "]" only uppercase letter follows (not "-" which is edge arrow)
+  s = s.replace(/(\])\s+([A-Z][A-Za-z0-9_]*)/g, "$1\n    $2");
+
+  // 2. classDiagram: "classDiagram class" → "classDiagram\nclass"
+  s = s.replace(/(classDiagram)\s+(class\s)/g, "$1\n$2");
+
+  // 3. Between class definitions: "}<space>class" → "}\n\nclass"
+  s = s.replace(/(\})\s+(class\s)/g, "$1\n\n$2");
+
+  // 4. Class body attributes: "+type name<space>+type" → newline before second +
+  //    Matches: +int id +string email → +int id\n    +string email
+  s = s.replace(/(\+\w+(?:\s+\w+)?)\s+(\+\w)/g, "$1\n    $2");
+
+  // 5. After method closing paren: ")<space>+word" → newline
+  //    Matches: +login(email, password) +logout() → +login(...)\n    +logout()
+  s = s.replace(/(\))\s+(\+\w)/g, "$1\n    $2");
+
+  // 6. ERD: "}<space><lowercase_word>{" → newline (table separation)
+  s = s.replace(/(\})\s+([a-z_]+\s*\{)/g, "$1\n\n    $2");
+
+  // 7. ERD columns: "PK<space><lowercase>" or "FK<space><lowercase>" → newline
+  s = s.replace(/\b(PK|FK)\s+([a-z_])/g, "$1\n        $2");
+
+  // 8. Sequence: "-->><space><UppercaseWord>" → newline
+  s = s.replace(/(-->>)\s+([A-Z])/g, "$1\n    $2");
+
+  // 9. Sequence: "participant<space>" already has space, but ensure newline between participants
+  s = s.replace(/(participant\s+\w+\s+as\s+[^\n]+?)\s+(participant\s)/g, "$1\n    $2");
+
+  // 10. Edge statements: after relationship label ": text" + space + UppercaseWord → newline
+  //     e.g., : "has" User "1" --> → newline before User
+  s = s.replace(/(:\s*"[^"]*")\s+([A-Z][A-Za-z0-9_]*\s+")/g, "$1\n$2");
+
+  // 11. Clean up: remove leading spaces from first line, normalize indentation
+  s = s.replace(/^\s+/m, "");
+  // Clean up multiple blank lines
+  s = s.replace(/\n\s*\n\s*\n+/g, "\n\n");
+
   // Fix [("text")] → ["text"] (common AI mistake in node labels)
   s = s.replace(/\[\("([^"]*?)"\)\]/g, '["$1"]');
   s = s.replace(/\[\(("[^"]*?")\)\]/g, "[$1]");
