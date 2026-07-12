@@ -109,7 +109,8 @@ export const sprintSchema = z.object({
    04 - System Architect
 =========================================================== */
 export const designSchema = z.object({
-  architectureDesc: z.string().min(5),
+  // FIX: Stricter min lengths for richer output
+  architectureDesc: z.string().min(10, "Architecture description qua ngan"),
   dbTables: z.array(z.object({
     name: toString,
     columns: toStringArray,
@@ -120,36 +121,48 @@ export const designSchema = z.object({
     path: toString,
     desc: toString,
   })).min(1),
-  folderStructure: z.string().min(5),
+  folderStructure: z.string().min(10, "Folder structure qua ngan"),
 });
 
 /* ===========================================================
    05 - UML Generator
 =========================================================== */
 export const umlSchema = z.object({
-  useCase: toString,
-  classDiagram: toString,
-  erd: toString,
-  sequence: toString,
+  // FIX: Validate Mermaid syntax with .refine() — reject plain text
+  useCase: z.string().refine((val) => {
+    const t = val.trim().toLowerCase();
+    return t.startsWith("graph") || t.startsWith("flowchart");
+  }, { message: "UseCase phai bat dau bang 'graph TD' hoac 'flowchart TD' cua Mermaid" }).or(toString),
+  classDiagram: z.string().refine((val) => val.trim().toLowerCase().startsWith("classdiagram"), {
+    message: "Class Diagram phai bat dau bang 'classDiagram' cua Mermaid"
+  }).or(toString),
+  erd: z.string().refine((val) => val.trim().toLowerCase().startsWith("erdiagram"), {
+    message: "ERD phai bat dau bang 'erDiagram' cua Mermaid"
+  }).or(toString),
+  sequence: z.string().refine((val) => val.trim().toLowerCase().startsWith("sequencediagram"), {
+    message: "Sequence phai bat dau bang 'sequenceDiagram' cua Mermaid"
+  }).or(toString),
 });
 
 /* ===========================================================
    06 - Technical Writer
 =========================================================== */
 export const docsSchema = z.object({
-  readme: z.string().min(10),
-  convention: z.string().min(10),
-  apiStandard: z.string().min(10),
+  // FIX: Min length increased to prevent empty/short docs (was min(10) — too lenient)
+  readme: z.string().min(50, "README qua ngan — can it nhat 50 ky tu"),
+  convention: z.string().min(50, "Convention qua ngan — can it nhat 50 ky tu"),
+  apiStandard: z.string().min(50, "API Standard qua ngan — can it nhat 50 ky tu"),
 });
 
 /* ===========================================================
    07 - Git / DevOps
 =========================================================== */
 export const gitSchema = z.object({
-  gitCommands: toString,
-  branchStrategy: toString,
-  issueTemplate: toString,
-  repoUrl: toString,
+  // FIX: Stricter validation (was all toString — accepted empty strings)
+  gitCommands: z.string().min(20, "Git commands qua ngan"),
+  branchStrategy: z.string().min(20, "Branch strategy qua ngan"),
+  issueTemplate: toString.default(""),
+  repoUrl: toString.default(""),
 });
 
 /* ===========================================================
@@ -198,7 +211,7 @@ export const securitySchema = z.object({
     severity: toString,
     mitigation: toString,
   })).min(1),
-  authFlow: z.string().min(5),
+  authFlow: z.string().min(20, "Auth flow qua ngan — can mo ta chi tiet"),
   authzModel: toString.default(""),
   dataProtection: toString.default(""),
   owaspChecklist: z.array(z.object({
