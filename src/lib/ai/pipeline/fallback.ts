@@ -405,22 +405,154 @@ ${modules.map((m) => `### ${m}\n- \`GET /api/${m.toLowerCase().replace(/[^a-z0-9
 
       return { readme, convention, apiStandard };
     }
-    case "git":
-      return { gitCommands: "", branchStrategy: "", issueTemplate: "", repoUrl: "https://github.com/your-org/project" };
-    case "test":
+    case "git": {
+      const slug = input.topic.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      const techFe = results.analysis?.techStack?.frontend?.name || "Next.js";
       return {
-        testStrategy: "Test pyramid: unit > integration > E2E.",
-        unitTests: (results.analysis?.modules || ["Core"]).slice(0, 5).map((mod) => ({
+        gitCommands: `# Khởi tạo repository
+git init
+git remote add origin https://github.com/your-org/${slug}.git
+
+# Tạo nhánh develop
+git checkout -b develop
+git push -u origin develop
+
+# Tạo feature branch
+git checkout -b feature/auth-module
+
+# Commit thay đổi
+git add .
+git commit -m "feat: implement auth module with JWT"
+
+# Merge vào develop
+git checkout develop
+git merge feature/auth-module
+git push origin develop
+
+# Tạo release
+git checkout -b release/v1.0.0
+git checkout main
+git merge release/v1.0.0
+git tag v1.0.0
+git push origin main --tags`,
+        branchStrategy: `Git Flow với 2 nhánh chính: main (production) và develop (integration).
+
+Workflow:
+1. Feature branches (feature/*) tách từ develop, merge qua Pull Request
+2. Release branches (release/*) cho chuẩn bị phát hành
+3. Hotfix branches (hotfix/*) tách từ main cho sửa lỗi khẩn cấp
+4. Tag versions trên main: v1.0.0, v1.1.0, v2.0.0
+
+Quy tắc:
+- Không push trực tiếp lên main
+- PR require ít nhất 1 review
+- Commit message theo Conventional Commits (feat:, fix:, docs:, refactor:)`,
+        issueTemplate: `## Mô tả
+[Mô tả ngắn gọn vấn đề hoặc tính năng]
+
+## Loại
+- [ ] Bug
+- [ ] Feature
+- [ ] Enhancement
+- [ ] Documentation
+
+## Steps to Reproduce (cho Bug)
+1.
+2.
+3.
+
+## Expected Behavior
+[Kết quả mong đợi]
+
+## Actual Behavior
+[Kết quả thực tế]
+
+## Environment
+- OS: [Windows/Mac/Linux]
+- Browser: [Chrome/Firefox/Safari]
+- ${techFe} version: [x.x.x]
+
+## Additional Context
+[Ảnh chụp màn hình, logs, hoặc thông tin bổ sung]`,
+        repoUrl: `https://github.com/your-org/${slug}`,
+      };
+    }
+    case "test": {
+      const testModules = (results.analysis?.modules || ["Auth", "Core", "Dashboard"]).slice(0, 5);
+      return {
+        testStrategy: `Chiến lược kiểm thử theo hình kim tự tháp (Test Pyramid):
+
+1. Unit Tests (70%): Kiểm tra từng function/method độc lập
+   - Sử dụng Vitest/Jest
+   - Mock dependencies (DB, API, external services)
+   - Mục tiêu: 80% code coverage
+
+2. Integration Tests (20%): Kiểm tra tương tác giữa modules
+   - Test API endpoints với real database (test DB)
+   - Test authentication flow end-to-end
+   - Sử dụng Supertest + Prisma test client
+
+3. E2E Tests (10%): Kiểm tra luồng người dùng hoàn chỉnh
+   - Sử dụng Playwright
+   - Test critical user journeys (login, create, edit, delete)
+   - Chạy trên CI/CD trước deploy
+
+4. Performance Tests: Kiểm tra tải (load testing)
+   - Sử dụng k6 hoặc Artillery
+   - Test 100 concurrent users
+   - Response time < 200ms cho 95% requests`,
+        unitTests: testModules.map((mod) => ({
           module: mod,
           cases: [
-            { name: `test_${mod}_create`, desc: "Test create", input: "valid", expected: "201" },
-            { name: `test_${mod}_validation`, desc: "Test validation", input: "invalid", expected: "400" },
+            { name: `test_${mod.toLowerCase().replace(/[^a-z0-9]/g, "_")}_create`, desc: `Test tạo ${mod} hợp lệ`, input: "valid data", expected: "201 Created" },
+            { name: `test_${mod.toLowerCase().replace(/[^a-z0-9]/g, "_")}_validation`, desc: `Test validation ${mod} dữ liệu sai`, input: "invalid data", expected: "400 Bad Request" },
+            { name: `test_${mod.toLowerCase().replace(/[^a-z0-9]/g, "_")}_not_found`, desc: `Test tìm ${mod} không tồn tại`, input: "non-existent ID", expected: "404 Not Found" },
+            { name: `test_${mod.toLowerCase().replace(/[^a-z0-9]/g, "_")}_update`, desc: `Test cập nhật ${mod}`, input: "valid update data", expected: "200 OK" },
           ],
         })),
-        integrationTests: [{ name: "auth_flow", desc: "Test auth", flow: "POST /api/auth/login" }],
-        e2eTests: [{ name: "signup_to_dashboard", desc: "Signup flow", steps: ["1. Visit /signup", "2. Submit"] }],
-        apiTests: [], performanceTests: [], bugReportTemplate: "",
+        integrationTests: [
+          { name: "auth_flow_integration", desc: "Test luồng đăng nhập hoàn chỉnh", flow: "POST /api/auth/login → GET /api/profile → POST /api/logout" },
+          { name: "crud_integration", desc: "Test CRUD operations cho tất cả modules", flow: "POST → GET → PATCH → DELETE cho mỗi module" },
+          { name: "permission_integration", desc: "Test phân quyền RBAC", flow: "Login as user → try admin endpoint → expect 403" },
+        ],
+        e2eTests: [
+          { name: "user_signup_to_dashboard", desc: "Người dùng đăng ký → đăng nhập → xem dashboard", steps: ["1. Visit /signup", "2. Fill form + submit", "3. Verify redirect to /login", "4. Login with new credentials", "5. Verify redirect to /dashboard", "6. Verify dashboard content"] },
+          { name: "admin_manage_users", desc: "Admin quản lý người dùng", steps: ["1. Login as admin", "2. Visit /admin/users", "3. Create new user", "4. Edit user", "5. Delete user", "6. Verify user removed"] },
+        ],
+        apiTests: (results.design?.apiEndpoints || []).slice(0, 5).map((ep) => ({
+          endpoint: ep.path,
+          method: ep.method,
+          cases: `Test ${ep.method} ${ep.path}: valid input → ${ep.method === "POST" ? "201" : "200"}; invalid input → 400; unauthorized → 401`,
+        })),
+        performanceTests: [
+          { scenario: "Load test 100 concurrent users", metric: "Response time p95", target: "< 200ms" },
+          { scenario: "Stress test 500 concurrent users", metric: "Error rate", target: "< 1%" },
+          { scenario: "Database query performance", metric: "Query time", target: "< 50ms" },
+        ],
+        bugReportTemplate: `## Bug Report Template
+
+**Tiêu đề:** [Mô tả ngắn gọn]
+**Mức độ nghiêm trọng:** Critical / High / Medium / Low
+**Môi trường:** Dev / Staging / Production
+
+**Mô tả:**
+[Chi tiết vấn đề]
+
+**Steps to Reproduce:**
+1. [Bước 1]
+2. [Bước 2]
+3. [Bước 3]
+
+**Kết quả mong đợi:**
+[What should happen]
+
+**Kết quả thực tế:**
+[What actually happened]
+
+**Logs/Screenshots:**
+[Attach nếu có]`,
       };
+    }
     case "security":
       return {
         threats: [
