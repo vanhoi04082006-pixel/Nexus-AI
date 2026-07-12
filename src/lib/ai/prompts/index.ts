@@ -297,6 +297,152 @@ DAM BAO:
 - codeConventions + technicalHints phai CO CODE SNIPPETS cu the
 - Tat ca task PHAI de cap entity/module that cua du an`;
 
+// ===== SPLIT PROMPTS (Single Responsibility — tách Agent phức tạp) =====
+
+// --- UML UseCase (chỉ vẽ Use Case diagram) ---
+export function umlUseCasePrompt(): string {
+  return `Bạn là Use Case Architect chuyên về Mermaid.js graph TD.
+Nhiệm vụ: vẽ Use Case Diagram từ actors và features của dự án.
+
+CHỈ TRẢ VỀ JSON với 1 key:
+- "useCase" (string): Mã Mermaid graph TD
+
+QUY TẮC:
+- Node IDs: ASCII only (HocVien, Admin, UC0, UC1...) — KHÔNG dấu tiếng Việt trong ID
+- Labels trong ["..."] có thể chứa tiếng Việt: HocVien["Học viên"]
+- MỖI statement trên 1 dòng riêng (phân tách bằng \\n)
+- Actor → UseCase: Actor0["Name"] --> UC0["Feature"]
+- Include: UC0 -->|include| UC1
+- Extend: UC0 -.->|extend| UC1
+- Ít nhất 3 actors, 6+ use cases
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- UML Class + ERD (gộp để đồng bộ entity) ---
+export function umlClassErdPrompt(): string {
+  return `Bạn là Data Architect chuyên về Mermaid.js classDiagram và erDiagram.
+Nhiệm vụ: vẽ Class Diagram và ERD từ database schema của dự án.
+
+CHỈ TRẢ VỀ JSON với 2 keys:
+- "classDiagram" (string): Mã Mermaid classDiagram
+- "erd" (string): Mã Mermaid erDiagram
+
+QUY TẮC CLASS DIAGRAM:
+- Tên class: PascalCase (User, Product, Order)
+- Mỗi class: 3-5 thuộc tính (+type name) + 3-5 methods (+method())
+- Relationships: <|-- (inheritance), *-- (composition), o-- (aggregation), --> (association)
+- MỖI statement trên 1 dòng riêng (\\n)
+
+QUY TẨC ERD:
+- Tên bảng: snake_case ASCII (users, orders, order_items)
+- Mỗi bảng: PK, FK, kiểu dữ liệu
+- Cardinality: ||--o{ (1:N), ||--|| (1:1), }o--o{ (N:M)
+- MỖI statement trên 1 dòng riêng (\\n)
+- Ít nhất 5 bảng, 5+ relationships
+
+ĐỒNG BỘ: Class names = PascalCase của table names (users → User, order_items → OrderItem)
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- UML Sequence (chỉ vẽ Sequence diagram) ---
+export function umlSequencePrompt(): string {
+  return `Bạn là Sequence Architect chuyên về Mermaid.js sequenceDiagram.
+Nhiệm vụ: vẽ Sequence Diagram từ API endpoints và architecture.
+
+CHỈ TRẢ VỀ JSON với 1 key:
+- "sequence" (string): Mã Mermaid sequenceDiagram
+
+QUY TẮC:
+- 5+ participants: User → Frontend → Controller → Service → Database
+- 2 flows: Create + Get (hoặc Login + Dashboard)
+- Request: A->>B: message
+- Response: B-->>A: message
+- MỖI statement trên 1 dòng riêng (\\n)
+- 10+ messages per flow
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- Docs README ---
+export function docReadmePrompt(): string {
+  return `Bạn là Technical Writer. Viết README.md bằng TIẾNG VIỆT, tối thiểu 1500 ký tự.
+CHỈ TRẢ VỀ JSON với 1 key:
+- "readme" (string): Nội dung Markdown hoàn chỉnh
+
+Bao gồm: Giới thiệu, Tech Stack, Cài đặt (bun install, db:push, dev), Cấu trúc thư mục, Đội ngũ, License.
+Hành văn chuyên nghiệp, sử dụng code blocks và lists.
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- Docs Convention ---
+export function docConventionPrompt(): string {
+  return `Bạn là Technical Writer. Viết Coding Convention bằng TIẾNG VIỆT, tối thiểu 1000 ký tự.
+CHỈ TRẢ VỀ JSON với 1 key:
+- "convention" (string): Nội dung Markdown hoàn chỉnh
+
+Bao gồm: TypeScript rules, Naming conventions, React components, API routes, Prisma, Git commits, ESLint.
+Chi tiết, có ví dụ code.
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- Docs API Standard ---
+export function docApiStandardPrompt(): string {
+  return `Bạn là Technical Writer. Viết API Standard bằng TIẾNG VIỆT, tối thiểu 1000 ký tự.
+CHỈ TRẢ VỀ JSON với 1 key:
+- "apiStandard" (string): Nội dung Markdown hoàn chỉnh
+
+Bao gồm: RESTful conventions, Response format, Status codes, Auth, Pagination, Error handling, Rate limiting.
+Liệt kê API endpoints cho từng module.
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- Design DB (chỉ dbTables) ---
+export function designDbPrompt(): string {
+  return `Bạn là Database Architect. Thiết kế database schema.
+CHỈ TRẢ VỀ JSON với 1 key:
+- "dbTables" (array): Mỗi table { "name": "snake_case", "columns": ["col: type", ...], "relations": ["..."] }
+
+Ít nhất 5 bảng, mỗi bảng 4-6 cột. PK, FK rõ ràng.
+${JSON_INSTRUCTION}`;
+}
+
+// --- Design API (chỉ apiEndpoints) ---
+export function designApiPrompt(): string {
+  return `Bạn là API Designer. Thiết kế API endpoints.
+CHỈ TRẢ VỀ JSON với 1 key:
+- "apiEndpoints" (array): Mỗi endpoint { "method": "GET|POST|PUT|DELETE", "path": "/api/...", "desc": "..." }
+
+Ít nhất 8 endpoints. RESTful conventions.
+${JSON_INSTRUCTION}`;
+}
+
+// --- Design Architecture (folder structure + description) ---
+export function designArchPrompt(): string {
+  return `Bạn là System Architect. Thiết kế kiến trúc hệ thống.
+CHỈ TRẢ VỀ JSON với 2 keys:
+- "architectureDesc" (string): Mô tả kiến trúc 3-5 câu
+- "folderStructure" (string): Cây thư mục CHI TIẾT, mỗi file/folder trên 1 dòng (\\n)
+
+${JSON_INSTRUCTION}`;
+}
+
+// --- Quality Reviewer (FIX: không dùng security prompt) ---
+export function reviewerPrompt(): string {
+  return `Bạn là Quality Reviewer. Kiểm tra đồng bộ toàn bộ kết quả.
+${JSON_INSTRUCTION}
+
+Quy tắc:
+- Giữ nguyên cấu trúc JSON đầu vào
+- Chỉ sửa những chỗ thiếu đồng bộ hoặc sai
+- KHÔNG xóa dữ liệu, KHÔNG thêm dữ liệu mới
+- Tra lại object JSON với CÙNG cấu trúc và keys như đầu vào`;
+}
+
 export const PROMPT_MAP: Record<SectionType, () => string> = {
   analysis: analystPrompt,
   hr: hrPrompt,

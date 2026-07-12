@@ -9,7 +9,13 @@ import {
   JSON_INSTRUCTION, FEW_SHOT_NOTE, compressContext, wait,
 } from "../config/constants";
 import { AGENTS, REVIEWER_MODELS, type AgentDef } from "../agents/definitions";
-import { PROMPT_MAP } from "../prompts";
+import {
+  PROMPT_MAP,
+  umlUseCasePrompt, umlClassErdPrompt, umlSequencePrompt,
+  docReadmePrompt, docConventionPrompt, docApiStandardPrompt,
+  designDbPrompt, designApiPrompt, designArchPrompt,
+  reviewerPrompt,
+} from "../prompts";
 import { buildCtx, buildReviewSummary, isValidSchema, VALID_SECTION_KEYS } from "../utils/helpers";
 import { callAndParse } from "./runner";
 import { fallback } from "./fallback";
@@ -65,6 +71,19 @@ export async function runPipeline(
     appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `[AGENT-${ag.id}] ${ag.name} → start (${modeLabel})` });
 
     const ctx = buildCtx(ag.key, results, input);
+
+    // ===== SPLIT AGENTS: design, uml, docs — tách thành nhiều call nhỏ (Single Responsibility) =====
+    if (ag.key === "design") {
+      return runSplitDesign(ag, ctx, i);
+    }
+    if (ag.key === "uml") {
+      return runSplitUML(ag, ctx, i);
+    }
+    if (ag.key === "docs") {
+      return runSplitDocs(ag, ctx, i);
+    }
+
+    // ===== NORMAL AGENTS =====
     const res = await callAndParse(ag.models, PROMPT_MAP[ag.key](), ctx, ag.temp, ag.key);
 
     if (res && isValidSchema(res.data, ag.key)) {
@@ -80,6 +99,95 @@ export async function runPipeline(
     } else {
       onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
       appendLog({ level: "error", agentId: ag.id, provider: "pipeline", message: `✗ [AGENT-${ag.id}] ${ag.name} → ALL MODELS FAILED` });
+      return { ag, res: null, failed: true };
+    }
+  }
+
+  // ===== SPLIT DESIGN: 3 calls → merge into { architectureDesc, dbTables, apiEndpoints, folderStructure } =====
+  async function runSplitDesign(ag: AgentDef, ctx: string, i: number) {
+    appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting Design into 3 sub-tasks (DB, API, Architecture)` });
+    try {
+      const [dbRes, apiRes, archRes] = await Promise.all([
+        callAndParse(ag.models, designDbPrompt(), ctx, ag.temp, "design"),
+        callAndParse(ag.models, designApiPrompt(), ctx, ag.temp, "design"),
+        callAndParse(ag.models, designArchPrompt(), ctx, ag.temp, "design"),
+      ]);
+      const merged: Record<string, unknown> = {};
+      if (dbRes?.data) Object.assign(merged, dbRes.data);
+      if (apiRes?.data) Object.assign(merged, apiRes.data);
+      if (archRes?.data) Object.assign(merged, archRes.data);
+      // Ensure all required fields exist
+      if (!merged.dbTables) merged.dbTables = [];
+      if (!merged.apiEndpoints) merged.apiEndpoints = [];
+      if (!merged.folderStructure) merged.folderStructure = "";
+      if (!merged.architectureDesc) merged.architectureDesc = "";
+      (results as Record<string, unknown>)["design"] = merged;
+      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      const model = dbRes?.model || apiRes?.model || archRes?.model || "unknown";
+      appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model, message: `✓ [AGENT-${ag.id}] Design → done (3 sub-tasks merged, ${model})` });
+      return { ag, res: { data: merged, model }, failed: false };
+    } catch (err) {
+      appendLog({ level: "error", agentId: ag.id, provider: "pipeline", message: `✗ [AGENT-${ag.id}] Design split failed: ${(err as Error).message}` });
+      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
+      return { ag, res: null, failed: true };
+    }
+  }
+
+  // ===== SPLIT UML: 3 calls → merge into { useCase, classDiagram, erd, sequence } =====
+  async function runSplitUML(ag: AgentDef, ctx: string, i: number) {
+    appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting UML into 3 sub-tasks (UseCase, Class+ERD, Sequence)` });
+    try {
+      const [ucRes, ceRes, seqRes] = await Promise.all([
+        callAndParse(ag.models, umlUseCasePrompt(), ctx, ag.temp, "uml"),
+        callAndParse(ag.models, umlClassErdPrompt(), ctx, ag.temp, "uml"),
+        callAndParse(ag.models, umlSequencePrompt(), ctx, ag.temp, "uml"),
+      ]);
+      const merged: Record<string, unknown> = {};
+      if (ucRes?.data) Object.assign(merged, ucRes.data);
+      if (ceRes?.data) Object.assign(merged, ceRes.data);
+      if (seqRes?.data) Object.assign(merged, seqRes.data);
+      // Ensure all 4 diagrams exist
+      if (!merged.useCase) merged.useCase = "";
+      if (!merged.classDiagram) merged.classDiagram = "";
+      if (!merged.erd) merged.erd = "";
+      if (!merged.sequence) merged.sequence = "";
+      (results as Record<string, unknown>)["uml"] = merged;
+      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      const model = ucRes?.model || ceRes?.model || seqRes?.model || "unknown";
+      appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model, message: `✓ [AGENT-${ag.id}] UML → done (3 sub-tasks merged, ${model})` });
+      return { ag, res: { data: merged, model }, failed: false };
+    } catch (err) {
+      appendLog({ level: "error", agentId: ag.id, provider: "pipeline", message: `✗ [AGENT-${ag.id}] UML split failed: ${(err as Error).message}` });
+      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
+      return { ag, res: null, failed: true };
+    }
+  }
+
+  // ===== SPLIT DOCS: 3 calls → merge into { readme, convention, apiStandard } =====
+  async function runSplitDocs(ag: AgentDef, ctx: string, i: number) {
+    appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting Docs into 3 sub-tasks (README, Convention, API Standard)` });
+    try {
+      const [readmeRes, convRes, apiRes] = await Promise.all([
+        callAndParse(ag.models, docReadmePrompt(), ctx, ag.temp, "docs"),
+        callAndParse(ag.models, docConventionPrompt(), ctx, ag.temp, "docs"),
+        callAndParse(ag.models, docApiStandardPrompt(), ctx, ag.temp, "docs"),
+      ]);
+      const merged: Record<string, unknown> = {};
+      if (readmeRes?.data) Object.assign(merged, readmeRes.data);
+      if (convRes?.data) Object.assign(merged, convRes.data);
+      if (apiRes?.data) Object.assign(merged, apiRes.data);
+      // Ensure all 3 docs exist
+      if (!merged.readme) merged.readme = "";
+      if (!merged.convention) merged.convention = "";
+      if (!merged.apiStandard) merged.apiStandard = "";
+      (results as Record<string, unknown>)["docs"] = merged;
+      onProgress?.({ type: "agent_done", id: ag.id, name: ag.name, index: i, total });
+      const model = readmeRes?.model || convRes?.model || apiRes?.model || "unknown";
+      appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model, message: `✓ [AGENT-${ag.id}] Docs → done (3 sub-tasks merged, ${model})` });
+      return { ag, res: { data: merged, model }, failed: false };
+    } catch (err) {
+      appendLog({ level: "error", agentId: ag.id, provider: "pipeline", message: `✗ [AGENT-${ag.id}] Docs split failed: ${(err as Error).message}` });
+      onProgress?.({ type: "agent_fail", id: ag.id, name: ag.name, index: i, total });
       return { ag, res: null, failed: true };
     }
   }
@@ -193,7 +301,7 @@ export async function runPipeline(
     const fullResultsStr = compressContext(JSON.stringify(results), 10000);
     const res = await callAndParse(
       REVIEWER_MODELS,
-      PROMPT_MAP.security() + `\n\nBan la Quality Reviewer. Kiem tra dong bo toan bo ket qua.\n${JSON_INSTRUCTION}\n\nIMPORTANT: Tra lai object JSON voi 9 keys: analysis, hr, sprint, design, uml, docs, git, test, security. Moi key phai co day du noi dung nhu input. Chi sua nhung gi can sua, giu nguyen phan con lai.`,
+      reviewerPrompt() + `\n\nIMPORTANT: Tra lai object JSON voi 9 keys: analysis, hr, sprint, design, uml, docs, git, test, security. Moi key phai co day du noi dung nhu input. Chi sua nhung gi can sua, giu nguyen phan con lai.`,
       `Du an: ${input.topic}\n\nKET QA DAY DU CUA 9 AGENT (JSON):\n${fullResultsStr}\n\nTra lai object JSON day du voi 9 keys.`,
       0.1, undefined
     );
