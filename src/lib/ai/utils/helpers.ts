@@ -86,18 +86,28 @@ export function buildCtx(
       c += `\nTeam: ${JSON.stringify(results.hr?.assignments?.map((a) => ({ name: a.name, role: a.role, modules: a.modules })) || [])}`;
       break;
     case "uml":
+      // SMART CONTEXT: UML split agents need full data for accurate diagrams
       c += `\n\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
       c += `\nFeatures: ${JSON.stringify((results.analysis?.features || []).map((f) => f.name))}`;
-      c += `\nActors: ${JSON.stringify((results.analysis?.actors || []).map((a) => a.name))}`;
-      c += `\nDB: ${JSON.stringify((results.design?.dbTables || []).map((t) => t.name))}`;
+      c += `\nActors: ${JSON.stringify(results.analysis?.actors || [])}`;
+      c += `\nDB Tables (full): ${JSON.stringify(results.design?.dbTables || [])}`;
+      c += `\nAPI endpoints: ${JSON.stringify(results.design?.apiEndpoints || [])}`;
+      c += `\nTech Stack: ${JSON.stringify(results.analysis?.techStack)}`;
       break;
     case "docs":
+      // SMART CONTEXT: Docs need full context for rich content
       c += `\n\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
       c += `\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
-      c += `\nFolder: ${results.design?.folderStructure?.substring(0, 800) || "N/A"}`;
+      c += `\nFeatures: ${JSON.stringify((results.analysis?.features || []).map((f) => f.name))}`;
+      c += `\nActors: ${JSON.stringify((results.analysis?.actors || []).map((a) => a.name))}`;
+      c += `\nFolder Structure: ${results.design?.folderStructure || "N/A"}`;
+      c += `\nAPI endpoints: ${JSON.stringify((results.design?.apiEndpoints || []).slice(0, 10))}`;
+      c += `\nDB Tables: ${JSON.stringify((results.design?.dbTables || []).slice(0, 5).map((t) => t.name))}`;
+      c += `\nTeam: ${JSON.stringify(results.hr?.assignments?.map((a) => ({ name: a.name, role: a.role })) || [])}`;
       break;
     case "git":
       c += `\n\nSlug: ${input.topic.toLowerCase().replace(/\s+/g, "-")}`;
+      c += `\nTech: ${JSON.stringify(results.analysis?.techStack)}`;
       c += `\nModules: ${JSON.stringify(results.analysis?.modules || [])}`;
       break;
     case "test":

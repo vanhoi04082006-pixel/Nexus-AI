@@ -69,6 +69,46 @@ function detectRepetition(dataStr: string): boolean {
   return false;
 }
 
+/**
+ * Self-Healing Mermaid — clean common syntax errors before validation.
+ * Strip code fences, fix |use| syntax, ensure newlines between statements.
+ */
+function cleanMermaidSyntax(rawStr: string): string {
+  if (!rawStr || typeof rawStr !== "string") return rawStr;
+  let clean = rawStr.trim();
+  // Strip code fences (```mermaid ... ```)
+  if (clean.startsWith("```")) {
+    clean = clean.replace(/^```[a-zA-Z]*\n?/, "").replace(/```\s*$/, "").trim();
+  }
+  // Fix |use| → plain edge (classDiagram doesn't support |label| syntax)
+  clean = clean.replace(/-->\s*\|use\|/g, "-->");
+  clean = clean.replace(/-->\s*\|include\|/g, "-->|include|");
+  clean = clean.replace(/-.->\s*\|extend\|/g, "-.->|extend|");
+  // Fix literal \n → real newlines
+  clean = clean.replace(/\\n/g, "\n");
+  return clean;
+}
+
+/**
+ * Apply Self-Healing to UML section data (all string fields that contain Mermaid).
+ */
+function healUMLData(data: unknown): { data: unknown; healed: boolean } {
+  if (!data || typeof data !== "object") return { data, healed: false };
+  const obj = data as Record<string, unknown>;
+  let healed = false;
+  for (const key of Object.keys(obj)) {
+    if (typeof obj[key] === "string") {
+      const original = obj[key] as string;
+      const cleaned = cleanMermaidSyntax(original);
+      if (original !== cleaned) {
+        obj[key] = cleaned;
+        healed = true;
+      }
+    }
+  }
+  return { data: obj, healed };
+}
+
 export interface ParseResult {
   data: unknown;
   model: string;
@@ -169,9 +209,19 @@ export async function callAndParse(
               console.log(`      [${a}] Self-critic: UML fields not valid Mermaid syntax, retrying`);
               appendLog({ level: "warn", model, message: `  ⚠ ${model} UML fields contain plain text instead of Mermaid syntax — retrying (attempt ${a})` });
             } else {
+              // SELF-HEALING: Apply Mermaid syntax cleanup for UML sections
+              let finalData = zodResult.data;
+              if (sectionKey === "uml") {
+                const { data: healedData, healed } = healUMLData(zodResult.data);
+                if (healed) {
+                  finalData = healedData;
+                  console.log(`      [${a}] Self-healing: cleaned Mermaid syntax`);
+                  appendLog({ level: "info", model, message: `  🔧 ${model} self-healing: cleaned Mermaid syntax (code fences, |use|, \\n)` });
+                }
+              }
               console.log(`      ✓ ${model} (lan ${a}) [Zod validated + self-critic OK]`);
               appendLog({ level: "success", model, message: `  ✓ ${model} parsed + Zod validated + self-critic OK (attempt ${a})` });
-              return { data: zodResult.data, model };
+              return { data: finalData, model };
             }
           } else {
             console.log(`      [${a}] Zod validation failed: ${zodResult.error.substring(0, 80)}`);
