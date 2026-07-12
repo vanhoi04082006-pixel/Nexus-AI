@@ -10,6 +10,10 @@ import { WorkspaceView } from "@/components/nexus/WorkspaceView";
 import { HomeView } from "@/components/nexus/HomeView";
 import { AllProjectsView } from "@/components/nexus/AllProjectsView";
 import { AgentHubView } from "@/components/nexus/AgentHubView";
+import { KnowledgeBaseView } from "@/components/nexus/KnowledgeBaseView";
+import { WorkflowView } from "@/components/nexus/WorkflowView";
+import { SettingsView } from "@/components/nexus/SettingsView";
+import { IntegrationsView } from "@/components/nexus/IntegrationsView";
 
 function NexusApp() {
   const params = useSearchParams();
@@ -71,6 +75,10 @@ function NexusApp() {
       {view === "workspace" && <WorkspaceView />}
       {view === "all-projects" && <AllProjectsView />}
       {view === "agent-hub" && <AgentHubView />}
+      {view === "knowledge-base" && <KnowledgeBaseView />}
+      {view === "workflow" && <WorkflowView />}
+      {view === "settings" && <SettingsView />}
+      {view === "integrations" && <IntegrationsView />}
       {pipelineRunning && <ProcessingOverlay />}
     </div>
   );

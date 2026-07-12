@@ -23,7 +23,11 @@ export type AppView =
   | "home"
   | "all-projects"
   | "agent-hub"
-  | "templates";
+  | "templates"
+  | "knowledge-base"
+  | "workflow"
+  | "settings"
+  | "integrations";
 
 interface NavItemDef {
   id: AppView;
@@ -38,10 +42,10 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "input", label: "Tạo dự án mới", icon: Plus, group: "Dự án" },
   { id: "templates", label: "Templates", icon: Sparkles, group: "Dự án" },
   { id: "agent-hub", label: "Agent Hub", icon: Brain, group: "Công cụ" },
-  { id: "workspace", label: "Knowledge Base", icon: Terminal, group: "Công cụ" },
-  { id: "workspace", label: "Workflow", icon: Zap, group: "Công cụ" },
-  { id: "workspace", label: "Cài đặt chung", icon: Settings, group: "Cài đặt" },
-  { id: "workspace", label: "Tích hợp", icon: Cpu, group: "Cài đặt" },
+  { id: "knowledge-base", label: "Knowledge Base", icon: Terminal, group: "Công cụ" },
+  { id: "workflow", label: "Workflow", icon: Zap, group: "Công cụ" },
+  { id: "settings", label: "Cài đặt chung", icon: Settings, group: "Cài đặt" },
+  { id: "integrations", label: "Tích hợp", icon: Cpu, group: "Cài đặt" },
 ];
 
 const NAV_GROUPS: NavItemDef["group"][] = ["Tổng quan", "Dự án", "Công cụ", "Cài đặt"];
@@ -88,12 +92,7 @@ export function AppSidebar({ active }: { active: AppView }) {
       newProject();
       return;
     }
-    if (view === "workspace") {
-      // Tools that aren't implemented yet -> just notify
-      toast.info("Tính năng đang phát triển.");
-      return;
-    }
-    setView(view as "home" | "all-projects" | "agent-hub");
+    setView(view as "home" | "all-projects" | "agent-hub" | "knowledge-base" | "workflow" | "settings" | "integrations");
     window.history.pushState({}, "", "/");
   }
 

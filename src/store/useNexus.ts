@@ -93,7 +93,7 @@ export interface LogEntry {
 =========================================================== */
 interface NexusState {
   // routing
-  view: "input" | "workspace" | "home" | "all-projects" | "agent-hub";
+  view: "input" | "workspace" | "home" | "all-projects" | "agent-hub" | "knowledge-base" | "workflow" | "settings" | "integrations";
   projectId: string | null;
   token: string | null;
   access: AccessInfo | null;
@@ -147,7 +147,7 @@ interface NexusState {
   refineSectionDone: Record<string, boolean>;
 
   // actions
-  setView: (v: "input" | "workspace" | "home" | "all-projects" | "agent-hub") => void;
+  setView: (v: "input" | "workspace" | "home" | "all-projects" | "agent-hub" | "knowledge-base" | "workflow" | "settings" | "integrations") => void;
   setRoute: (projectId: string | null, token: string | null) => void;
   setInput: (patch: Partial<NexusState["input"]>) => void;
   setMember: (index: number, patch: Partial<MemberInput>) => void;
