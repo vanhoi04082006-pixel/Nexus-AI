@@ -431,17 +431,8 @@ CHỈ TRẢ VỀ JSON với 2 keys:
 ${JSON_INSTRUCTION}`;
 }
 
-// --- Quality Reviewer (FIX: không dùng security prompt) ---
-export function reviewerPrompt(): string {
-  return `Bạn là Quality Reviewer. Kiểm tra đồng bộ toàn bộ kết quả.
-${JSON_INSTRUCTION}
-
-Quy tắc:
-- Giữ nguyên cấu trúc JSON đầu vào
-- Chỉ sửa những chỗ thiếu đồng bộ hoặc sai
-- KHÔNG xóa dữ liệu, KHÔNG thêm dữ liệu mới
-- Tra lại object JSON với CÙNG cấu trúc và keys như đầu vào`;
-}
+// NOTE: reviewerPrompt() already defined at line 239 — kept that version (more detailed, 5 validation rules).
+// Removed duplicate definition here to fix 'reviewerPrompt is defined multiple times' build error.
 
 export const PROMPT_MAP: Record<SectionType, () => string> = {
   analysis: analystPrompt,
