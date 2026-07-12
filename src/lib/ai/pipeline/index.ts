@@ -113,10 +113,26 @@ export async function runPipeline(
         callAndParse(ag.models, designArchPrompt(), ctx, ag.temp, "design"),
       ]);
       const merged: Record<string, unknown> = {};
-      if (dbRes?.data) Object.assign(merged, dbRes.data);
-      if (apiRes?.data) Object.assign(merged, apiRes.data);
-      if (archRes?.data) Object.assign(merged, archRes.data);
-      // Ensure all required fields exist
+      // Sub-task validation: check each result has expected key before merge
+      if (dbRes?.data && (dbRes.data as Record<string, unknown>).dbTables) {
+        Object.assign(merged, dbRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: dbRes.model, message: `  ✓ Design DB: ${((dbRes.data as Record<string, unknown>).dbTables as unknown[])?.length || 0} tables` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Design DB sub-task failed — using fallback` });
+      }
+      if (apiRes?.data && (apiRes.data as Record<string, unknown>).apiEndpoints) {
+        Object.assign(merged, apiRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: apiRes.model, message: `  ✓ Design API: ${((apiRes.data as Record<string, unknown>).apiEndpoints as unknown[])?.length || 0} endpoints` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Design API sub-task failed — using fallback` });
+      }
+      if (archRes?.data && ((archRes.data as Record<string, unknown>).folderStructure || (archRes.data as Record<string, unknown>).architectureDesc)) {
+        Object.assign(merged, archRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: archRes.model, message: `  ✓ Design Architecture: ${((archRes.data as Record<string, unknown>).folderStructure as string)?.length || 0} chars` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Design Architecture sub-task failed — using fallback` });
+      }
+      // Ensure all required fields exist (fallback for failed sub-tasks)
       if (!merged.dbTables) merged.dbTables = [];
       if (!merged.apiEndpoints) merged.apiEndpoints = [];
       if (!merged.folderStructure) merged.folderStructure = "";
@@ -143,10 +159,43 @@ export async function runPipeline(
         callAndParse(ag.models, umlSequencePrompt(), ctx, ag.temp, "uml"),
       ]);
       const merged: Record<string, unknown> = {};
-      if (ucRes?.data) Object.assign(merged, ucRes.data);
-      if (ceRes?.data) Object.assign(merged, ceRes.data);
-      if (seqRes?.data) Object.assign(merged, seqRes.data);
-      // Ensure all 4 diagrams exist
+      // Sub-task validation + logging
+      if (ucRes?.data && (ucRes.data as Record<string, unknown>).useCase) {
+        const uc = (ucRes.data as Record<string, unknown>).useCase as string;
+        if (/^(graph|flowchart)\s/i.test(uc.trim())) {
+          Object.assign(merged, ucRes.data);
+          appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: ucRes.model, message: `  ✓ UML UseCase: valid graph TD (${uc.length} chars)` });
+        } else {
+          appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML UseCase: invalid syntax — using fallback` });
+        }
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML UseCase sub-task failed` });
+      }
+      if (ceRes?.data) {
+        const ce = ceRes.data as Record<string, unknown>;
+        const validErd = typeof ce.erd === "string" && /^erDiagram\b/i.test(ce.erd.trim());
+        const validClass = typeof ce.classDiagram === "string" && /^classDiagram\b/i.test(ce.classDiagram.trim());
+        if (validErd && validClass) {
+          Object.assign(merged, ceRes.data);
+          appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: ceRes.model, message: `  ✓ UML Class+ERD: valid (${(ce.erd as string).length} + ${(ce.classDiagram as string).length} chars)` });
+        } else {
+          appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML Class+ERD: invalid syntax (erd:${validErd}, class:${validClass}) — using fallback` });
+        }
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML Class+ERD sub-task failed` });
+      }
+      if (seqRes?.data && (seqRes.data as Record<string, unknown>).sequence) {
+        const seq = (seqRes.data as Record<string, unknown>).sequence as string;
+        if (/^sequenceDiagram\b/i.test(seq.trim())) {
+          Object.assign(merged, seqRes.data);
+          appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: seqRes.model, message: `  ✓ UML Sequence: valid (${seq.length} chars)` });
+        } else {
+          appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML Sequence: invalid syntax — using fallback` });
+        }
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ UML Sequence sub-task failed` });
+      }
+      // Ensure all 4 diagrams exist (fallback for failed sub-tasks)
       if (!merged.useCase) merged.useCase = "";
       if (!merged.classDiagram) merged.classDiagram = "";
       if (!merged.erd) merged.erd = "";
@@ -173,10 +222,29 @@ export async function runPipeline(
         callAndParse(ag.models, docApiStandardPrompt(), ctx, ag.temp, "docs"),
       ]);
       const merged: Record<string, unknown> = {};
-      if (readmeRes?.data) Object.assign(merged, readmeRes.data);
-      if (convRes?.data) Object.assign(merged, convRes.data);
-      if (apiRes?.data) Object.assign(merged, apiRes.data);
-      // Ensure all 3 docs exist
+      // Sub-task validation + logging
+      if (readmeRes?.data && (readmeRes.data as Record<string, unknown>).readme) {
+        const readme = (readmeRes.data as Record<string, unknown>).readme as string;
+        Object.assign(merged, readmeRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: readmeRes.model, message: `  ✓ Docs README: ${readme.length} chars` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Docs README sub-task failed` });
+      }
+      if (convRes?.data && (convRes.data as Record<string, unknown>).convention) {
+        const conv = (convRes.data as Record<string, unknown>).convention as string;
+        Object.assign(merged, convRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: convRes.model, message: `  ✓ Docs Convention: ${conv.length} chars` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Docs Convention sub-task failed` });
+      }
+      if (apiRes?.data && (apiRes.data as Record<string, unknown>).apiStandard) {
+        const apiStd = (apiRes.data as Record<string, unknown>).apiStandard as string;
+        Object.assign(merged, apiRes.data);
+        appendLog({ level: "success", agentId: ag.id, provider: "pipeline", model: apiRes.model, message: `  ✓ Docs API Standard: ${apiStd.length} chars` });
+      } else {
+        appendLog({ level: "warn", agentId: ag.id, provider: "pipeline", message: `  ⚠ Docs API Standard sub-task failed` });
+      }
+      // Ensure all 3 docs exist (fallback for failed sub-tasks)
       if (!merged.readme) merged.readme = "";
       if (!merged.convention) merged.convention = "";
       if (!merged.apiStandard) merged.apiStandard = "";
