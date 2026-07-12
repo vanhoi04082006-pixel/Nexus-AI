@@ -203,7 +203,7 @@ export async function sendInvitationEmails(
 
 ${leaderName} da moi ban tham gia du an "${topic}" tren NEXUS AI - Multi-Agent Architect.
 
-8 AI Agent da phan tich va thiet ke du an. Ban duoc moi vao khong gian lam viec chung de:
+10 AI Agent đã phân tích va thiet ke du an. Ban duoc moi vao khong gian lam viec chung de:
 - Xem phan tich chu de, phan nhan su, sprint planning, thiet ke he thong, UML, tai lieu, git
 - Tham gia thao luan cung nhom
 - De xuat chinh sua (nhom truong se duyet)

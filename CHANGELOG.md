@@ -16,31 +16,43 @@
 
 ---
 
-## [0.2.0] — 2026-07-08
+## [0.3.0] — 2026-07-09
 
-### ✨ Added
-- **Lệnh `run` global (Windows)** — gõ `run` từ project root để chạy Next.js + tunnel
-- **Cross-platform run script** — `scripts/run.js` self-contained (đã xóa, dùng `run.cmd` → `run-local.bat`)
-- **ErrorBoundary** — React class error boundary với retry + home fallback
-- **Next.js error pages** — `error.tsx`, `global-error.tsx`, `loading.tsx`, `not-found.tsx`
-- **Reusable states** — `EmptyState`, `RetryState`, `LoadingState` (4 skeleton variants: cards/list/table/text)
-- **NotificationProvider** — Sonner toast với typed `notify` API (success/error/warning/info/loading/copy/update/dismiss/promise)
-- **Lazy-loaded tabs** — 13 tabs code splitting + Suspense fallback
-- **CSS optimizations** — smooth scroll, thin scrollbar, `prefers-reduced-motion`, content-visibility, GPU hints, skeleton shimmer, focus-visible ring
-- **Config files** — `.editorconfig`, `.nvmrc`, `.prettierrc.json`
-- **Docs rewrite** — README.md, docs/README.md, docs/ARCHITECTURE.md, docs/API.md, docs/CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG.md
+### ✨ Added — Split Architecture
+- **Split Prompt + Merge Output** — 3 agent phức tạp (`design`, `uml`, `docs`) tách thành **3 sub-task** riêng (Single Responsibility), chạy song song rồi merge kết quả
+  - `design` → DB schema + API endpoints + Architecture
+  - `uml` → Use Case + Class/ERD + Sequence
+  - `docs` → README + Coding Convention + API Standard
+- **Sub-task validation** — mỗi sub-task có Zod schema riêng, fail 1 sub-task chỉ fallback sub-task đó (không mất cả agent)
+- **Smart Context Retrieval** — `buildCtx()` cải thiện: include analysis + hr + sprint output làm context cho phase 2, giảm hallucination
+
+### ✨ Added — Self-Healing Mermaid
+- **`cleanMermaidSyntax()`** — strip markdown fence, fix case-sensitive keywords (`ClassDiagram` → `classDiagram`), normalize whitespace
+- **`healUMLData()`** — chạy tự động trong Phase 5.5, repair UML data sau khi Zod pass nhưng Mermaid syntax vẫn lỗi
+- **Zod schemas với Mermaid `.refine()`** — reject plain text, require prefix `classDiagram` / `erDiagram` / `sequenceDiagram` / `usecase`
+
+### ✨ Added — 4 New Views
+- **KnowledgeBaseView** — browse tất cả project output theo section, full-text search
+- **WorkflowView** — visualize pipeline 8 phase realtime (DAG nodes + progress)
+- **SettingsView** — config OpenRouter keys, model preference, theme, language
+- **IntegrationsView** — manage GitHub OAuth, SMTP, webhook integrations
+
+### ✨ Added — Security
+- **Rate limiting** — in-memory token bucket per IP + per route (`src/lib/rate-limit.ts`)
+- **OAuth nonce** — GitHub OAuth state nonce chống CSRF (`src/lib/github-oauth.ts`)
+- **AES-256-GCM encryption** — GitHub access token encrypt trước khi lưu DB, key từ `GITHUB_TOKEN_ENCRYPTION_KEY`
+- **XSS sanitization** — `src/lib/sanitize.ts` strip `<script>`, event handlers, javascript: URLs
 
 ### 🔧 Fixed
-- **`bun run run` trên Windows** — rewrite `scripts/run.js` cross-platform (sau đó đơn giản hóa: xóa script `"run"` khỏi package.json, dùng `run.cmd` → `run-local.bat`)
-- **Todolist duplicate tasks** — apply dedup cho ALL code paths (was missing cho non-`data.tasks` array keys), fuzzy normalize title
-- **DocsTab trống** — fallback `docs` giờ sinh đầy đủ README + Coding Convention + API Standard (was empty strings)
-- **UML "quá phức tạp" error** — `fix-mermaid` route return simple fallback diagram khi AI fix fail (429) thay vì 502
-- **HistoryTab 500 log limit** — tăng cap từ 500 → 2000, lưu full live logs vào `ActivityLog.details`
+- **MermaidLoader `removeChild` error** — convert sang Client Component (`"use client"`), load Mermaid.js từ CDN trong `useEffect`, cleanup proper trong unmount
+- **Fix all "8 AI Agents" → "10 AI Agents"** UI text — scan toàn bộ components/tabs, sidebar, landing page, docs
+- **Rich fallback cho Git + Test agents** — fallback không còn rỗng, sinh git commands + test templates thực dụng từ analysis data
+- **UML "quá phức tạp" error** — `cleanMermaidSyntax` + `healUMLData` auto-repair trước khi render, không còn 502
 
-### 🛡️ Anti-rate-limit (preserved from previous commits)
+### 🛡️ Anti-rate-limit (preserved)
 - Circuit Breaker (3 fails → skip 3 min)
 - Dead Model Recovery (cooldown 2 min, auto-recover)
-- Health Score (priority sort by success rate)
+- Health Score (priority sort by success rate — preserved across restarts)
 - Multi-key rotation (auto-switch on 429)
 - 60s wait cho 429 rate-limit
 - In-memory prompt cache (1h TTL)
@@ -49,14 +61,36 @@
 - Response healing plugin
 
 ### 🏗️ Architecture (preserved)
-- Modular AI: 24 module trong `src/lib/ai/` + hub 70 dòng `src/lib/ai.ts`
-- 10 AI Agents (Phase 0 Planner → Phase 6 Quality Reviewer)
+- Modular AI: 24 module trong `src/lib/ai/` + hub `src/lib/ai.ts`
+- **10 AI Agents** (Phase 0 Planner → Phase 6 Quality Reviewer)
 - 23 Prisma models (SQLite)
 - 42 API routes (~58 endpoints)
 - 2 mini-services (chat 3001, notification 3002)
 - DAG Workflow Engine, Multi-Reviewer Consensus, Reflection Agent
 - Semantic Cache (cosine similarity), Distributed Queue (in-memory)
 - Event Bus, Workflow DSL, Shared Memory
+
+---
+
+## [0.2.0] — 2026-07-08
+
+### ✨ Added
+- Lệnh `run` global (Windows) — gõ `run` từ project root để chạy Next.js + tunnel
+- **ErrorBoundary** — React class error boundary với retry + home fallback
+- **Next.js error pages** — `error.tsx`, `global-error.tsx`, `loading.tsx`, `not-found.tsx`
+- **Reusable states** — `EmptyState`, `RetryState`, `LoadingState` (4 skeleton variants)
+- **NotificationProvider** — Sonner toast với typed `notify` API
+- **Lazy-loaded tabs** — 13 tabs code splitting + Suspense fallback
+- **CSS optimizations** — smooth scroll, thin scrollbar, `prefers-reduced-motion`, content-visibility, GPU hints, skeleton shimmer, focus-visible ring
+- Config files — `.editorconfig`, `.nvmrc`, `.prettierrc.json`
+- Docs rewrite (README, ARCHITECTURE, API, CONTRIBUTING, CoC, CHANGELOG)
+
+### 🔧 Fixed
+- `bun run run` trên Windows — rewrite `scripts/run.js` cross-platform
+- Todolist duplicate tasks — apply dedup cho ALL code paths, fuzzy normalize title
+- DocsTab trống — fallback `docs` giờ sinh đầy đủ README + Coding Convention + API Standard
+- UML "quá phức tạp" error — `fix-mermaid` route return simple fallback diagram khi AI fix fail (429)
+- HistoryTab 500 log limit — tăng cap 500 → 2000, lưu full live logs vào `ActivityLog.details`
 
 ---
 
@@ -80,18 +114,11 @@
 - **Deployment** — Docker + Fly.io + Caddy + Cloudflare/ngrok tunnel
 
 ### 🛠️ Tech Stack
-- Next.js 16.1.3 (App Router, Turbopack)
-- React 19 + TypeScript 5
-- Tailwind CSS 4 + shadcn/ui (48 components)
-- Prisma 6 (SQLite)
-- Zustand + TanStack Query/Table
-- Framer Motion 12
-- mermaid 11 + reactflow
-- socket.io-client
-- next-auth + next-intl
-- nodemailer (SMTP)
-- zod 4 (lenient schemas)
-- z-ai-web-dev-sdk
+- Next.js 16.1.3 (App Router, Turbopack) · React 19 + TypeScript 5
+- Tailwind CSS 4 + shadcn/ui (48 components) · Prisma 6 (SQLite)
+- Zustand + TanStack Query/Table · Framer Motion 12
+- mermaid 11 + reactflow · socket.io-client · next-auth + next-intl
+- nodemailer (SMTP) · zod 4 (lenient schemas) · z-ai-web-dev-sdk
 
 ---
 

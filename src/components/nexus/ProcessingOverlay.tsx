@@ -103,7 +103,7 @@ export function ProcessingOverlay() {
               {hasError ? "Lỗi xảy ra" : "Đang chạy Multi-Agent Pipeline..."}
             </h3>
             <p className="text-xs text-muted-foreground truncate">
-              {hasError ? error : "8 AI Agent đang xử lý dự án — theo dõi real-time model / key / agent"}
+              {hasError ? error : "10 AI Agent đang xử lý dự án — theo dõi real-time model / key / agent"}
             </p>
           </div>
           <div className="hidden sm:flex items-center gap-2 text-xs font-mono">

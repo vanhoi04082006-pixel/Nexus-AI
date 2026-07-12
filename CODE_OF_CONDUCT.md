@@ -1,6 +1,6 @@
 # 🤝 NEXUS AI — Code of Conduct
 
-> Bằng cách tham gia dự án NEXUS AI, bạn đồng ý tuân thủ Code of Conduct này.
+> Bằng cách tham gia dự án **NEXUS AI v0.3.0**, bạn đồng ý tuân thủ Code of Conduct này.
 
 ---
 
@@ -20,7 +20,8 @@ NEXUS AI là dự án mã nguồn mở dành cho cộng đồng **tiếng Việt
 - ❌ **Plagiarism** — sao chép code không ghi nguồn
 - ❌ **AI hallucination trong docs** — khai báo sai tính năng/số liệu không có trong code
 - ❌ **Fake claims** — nói "đã xong" khi chưa xong, "đã test" khi chưa test
-- ❌ **Breaking changes không thông báo** — sửa API/schema mà không update docs
+- ❌ **Sai số liệu hệ thống** — ví dụ: claim "8 AI Agents" khi hệ thống thực tế có **10 AI Agents** (phải verify từ `src/lib/ai/agents/definitions.ts`)
+- ❌ **Breaking changes không thông báo** — sửa API/schema mà không update docs + CHANGELOG
 - ❌ **Bỏ `console.log` trong production code** — dùng `appendLog()` cho AI pipeline
 
 ## ✅ Trách nhiệm của Contributor
@@ -30,13 +31,15 @@ NEXUS AI là dự án mã nguồn mở dành cho cộng đồng **tiếng Việt
 - [ ] Không có TypeScript errors
 - [ ] Test trên mobile + desktop
 - [ ] Update docs nếu API/feature thay đổi
+- [ ] Update CHANGELOG.md theo format Keep a Changelog
 - [ ] Conventional commit message (`feat:`, `fix:`, `docs:`, `chore:`)
 
 ### Khi viết docs
-- **Chuẩn xác trước, đẹp sau** — số liệu phải verify từ source, không ước lượng
+- **Chuẩn xác trước, đẹp sau** — số liệu phải verify từ source code, không ước lượng
 - **Code example phải chạy được** — test trước khi paste vào docs
 - **Cập nhật khi refactor** — đổi tên file/hàm → update mọi reference
 - **Không claim "đã xong" khi chưa xong** — ghi "TODO", "Planned", "WIP" thay vì sai sự thật
+- **Verify count claims** — đếm lại số agent/endpoint/model trước khi viết vào docs (10 agents, 58 endpoints, 23 models)
 
 ### Khi review PR
 - **Constructive feedback** — góp ý cụ thể, không phán xét
@@ -54,9 +57,10 @@ NEXUS AI là dự án mã nguồn mở dành cho cộng đồng **tiếng Việt
 
 ## 🔒 Bảo mật
 
-- **Không commit `.env`** — file chứa API keys
+- **Không commit `.env`** — file chứa API keys + encryption keys
 - **Không commit `db/custom.db`** — file chứa data user
 - **Không hardcode secrets** — dùng env vars
+- **GitHub token phải được encrypt** — AES-256-GCM qua `GITHUB_TOKEN_ENCRYPTION_KEY`
 - **Report vulnerability** — email riêng, không public issue
 
 ## 🌍 Phạm vi áp dụng
@@ -77,9 +81,9 @@ Mọi báo cáo sẽ được xử lý kín đáo. Retaliation (trả đũa ngư
 
 | Mức độ | Hành vi | Hậu quả |
 |---|---|---|
-| Nhẹ | Spam, off-topic | Warning + xóa comment |
-| Vừa | Công kích cá nhân, harassment | Warning + temporary ban (7 ngày) |
-| Nặng | Threats, doxxing, plagiarism | Permanent ban |
+| Nhẹ | Spam, off-topic, docs sai số liệu nhỏ | Warning + xóa comment + yêu cầu fix |
+| Vừa | Công kích cá nhân, harassment, fake claims | Warning + temporary ban (7 ngày) |
+| Nặng | Threats, doxxing, plagiarism, breaking changes giấu | Permanent ban |
 
 ## 📜 Attribution
 
@@ -87,4 +91,4 @@ Code of Conduct này được điều chỉnh từ [Contributor Covenant 2.1](ht
 
 ---
 
-**License:** MIT · **Version:** 1.0 · **Cập nhật:** 2026-07-08
+**License:** MIT · **Version:** v0.3.0 · **Cập nhật:** 2026-07-09

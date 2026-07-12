@@ -282,7 +282,7 @@ export function InputView() {
 
       // Pipeline done — redirect to workspace
       localStorage.setItem(`nexus_leader_${resultProjectId}`, resultToken);
-      notify.success("8 AI Agents hoan thanh! Email loi moi da gui thanh vien.");
+      notify.success("10 AI Agents hoàn thành! Email loi moi da gui thanh vien.");
       window.location.href = `/?p=${resultProjectId}&token=${resultToken}`;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Loi khong xac dinh";
@@ -309,7 +309,7 @@ export function InputView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge className="bg-primary/10 text-primary border-primary/20">Bước 1/8 · Nhập dữ liệu</Badge>
+            <Badge className="bg-primary/10 text-primary border-primary/20">Bước 1/10 · Nhập dữ liệu</Badge>
             <Button
               variant="ghost"
               size="sm"
