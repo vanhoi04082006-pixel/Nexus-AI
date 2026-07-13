@@ -148,10 +148,10 @@ export const umlSchema = z.object({
    06 - Technical Writer
 =========================================================== */
 export const docsSchema = z.object({
-  // FIX: Min length increased to prevent empty/short docs (was min(10) — too lenient)
-  readme: z.string().min(50, "README qua ngan — can it nhat 50 ky tu"),
-  convention: z.string().min(50, "Convention qua ngan — can it nhat 50 ky tu"),
-  apiStandard: z.string().min(50, "API Standard qua ngan — can it nhat 50 ky tu"),
+  // FIX: Min length increased to force rich content (was min(50) — too lenient)
+  readme: z.string().min(100, "README qua ngan — can it nhat 100 ky tu"),
+  convention: z.string().min(100, "Convention qua ngan — can it nhat 100 ky tu"),
+  apiStandard: z.string().min(100, "API Standard qua ngan — can it nhat 100 ky tu"),
 });
 
 /* ===========================================================

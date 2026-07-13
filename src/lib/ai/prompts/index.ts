@@ -302,19 +302,28 @@ DAM BAO:
 // --- UML UseCase (chỉ vẽ Use Case diagram) ---
 export function umlUseCasePrompt(): string {
   return `Bạn là Use Case Architect chuyên về Mermaid.js graph TD.
-Nhiệm vụ: vẽ Use Case Diagram từ actors và features của dự án.
+Nhiệm vụ: vẽ Use Case Diagram CHI TIẾT từ actors và features của dự án.
 
 CHỈ TRẢ VỀ JSON với 1 key:
 - "useCase" (string): Mã Mermaid graph TD
 
-QUY TẮC:
-- Node IDs: ASCII only (HocVien, Admin, UC0, UC1...) — KHÔNG dấu tiếng Việt trong ID
-- Labels trong ["..."] có thể chứa tiếng Việt: HocVien["Học viên"]
-- MỖI statement trên 1 dòng riêng (phân tách bằng \\n)
-- Actor → UseCase: Actor0["Name"] --> UC0["Feature"]
-- Include: UC0 -->|include| UC1
-- Extend: UC0 -.->|extend| UC1
-- Ít nhất 3 actors, 6+ use cases
+QUY TẮC BẮT BUỘC:
+1. Node IDs: ASCII only (HocVien, Admin, UC0, UC1...) — KHÔNG dấu tiếng Việt trong ID
+2. Labels trong ["..."] có thể chứa tiếng Việt: HocVien["Học viên"]
+3. MỖI statement trên 1 dòng riêng (phân tách bằng \\n) — KHÔNG viết 2 statement trên 1 dòng
+4. Mỗi actor kết nối với ÍT NHẤT 3 use cases
+5. Thêm include/extend: UC0 -->|include| UC1, UC0 -.->|extend| UC2
+6. Ít nhất 3 actors, 10+ use cases, 3+ include/extend
+7. System boundary: subgraph System ["Hệ thống"]
+
+VÍ DỤ ĐÚNG (mỗi dòng 1 statement):
+graph TD
+    Actor0["Khách hàng"] --> UC0["Xem sản phẩm"]
+    Actor0["Khách hàng"] --> UC1["Thêm vào giỏ hàng"]
+    Actor0["Khách hàng"] --> UC2["Thanh toán"]
+    Actor1["Admin"] --> UC3["Quản lý sản phẩm"]
+    UC2 -->|include| UC4["Xác thực thanh toán"]
+    UC1 -.->|extend| UC5["Áp mã giảm giá"]
 
 ${JSON_INSTRUCTION}`;
 }
@@ -322,26 +331,70 @@ ${JSON_INSTRUCTION}`;
 // --- UML Class + ERD (gộp để đồng bộ entity) ---
 export function umlClassErdPrompt(): string {
   return `Bạn là Data Architect chuyên về Mermaid.js classDiagram và erDiagram.
-Nhiệm vụ: vẽ Class Diagram và ERD từ database schema của dự án.
+Nhiệm vụ: vẽ Class Diagram VÀ ERD CHI TIẾT từ database schema của dự án.
+PHẢI đồng bộ tên entity giữa 2 biểu đồ.
 
 CHỈ TRẢ VỀ JSON với 2 keys:
 - "classDiagram" (string): Mã Mermaid classDiagram
 - "erd" (string): Mã Mermaid erDiagram
 
-QUY TẮC CLASS DIAGRAM:
-- Tên class: PascalCase (User, Product, Order)
-- Mỗi class: 3-5 thuộc tính (+type name) + 3-5 methods (+method())
-- Relationships: <|-- (inheritance), *-- (composition), o-- (aggregation), --> (association)
-- MỖI statement trên 1 dòng riêng (\\n)
+QUY TẮC CLASS DIAGRAM (BẮT BUỘC):
+1. Tên class: PascalCase (User, Product, Order, OrderItem)
+2. Mỗi class PHẢI có: 5+ thuộc tính với kiểu dữ liệu (+int id, +string email, +DateTime createdAt)
+3. Mỗi class PHẢI có: 4+ methods (+findAll(), +findById(id), +create(data), +update(id, data), +delete(id))
+4. Access modifiers: + (public), - (private), # (protected)
+5. Ít nhất 6 class
+6. Ít nhất 8 relationships với cardinality:
+   - User "1" --> "*" Order : "places"
+   - Order "1" *-- "*" OrderItem : "contains"
+   - User <|-- Admin : "extends"
+7. MỖI statement trên 1 dòng riêng (\\n)
+8. KHÔNG dùng |label| syntax — dùng : label
 
-QUY TẨC ERD:
-- Tên bảng: snake_case ASCII (users, orders, order_items)
-- Mỗi bảng: PK, FK, kiểu dữ liệu
-- Cardinality: ||--o{ (1:N), ||--|| (1:1), }o--o{ (N:M)
-- MỖI statement trên 1 dòng riêng (\\n)
-- Ít nhất 5 bảng, 5+ relationships
+QUY TẮC ERD (BẮT BUỘC):
+1. Tên bảng: snake_case ASCII (users, orders, order_items)
+2. Mỗi bảng PHẢI có: PK (int id PK), FK (int user_id FK), kiểu dữ liệu
+3. Mỗi bảng PHẢI có 4+ cột
+4. Ít nhất 5 bảng
+5. Ít nhất 6 relationships với crow's foot notation:
+   - users ||--o{ orders : "has"
+   - orders ||--|| order_items : "contains"
+   - users ||--o{ reviews : "writes"
+6. MỖI statement trên 1 dòng riêng (\\n)
 
 ĐỒNG BỘ: Class names = PascalCase của table names (users → User, order_items → OrderItem)
+
+VÍ DỤ ERD ĐÚNG:
+erDiagram
+    users {
+        int id PK
+        string email
+        string password
+        string role
+        datetime created_at
+    }
+    orders {
+        int id PK
+        int user_id FK
+        decimal total
+        string status
+        datetime created_at
+    }
+    users ||--o{ orders : "has"
+
+VÍ DỤ CLASS DIAGRAM ĐÚNG:
+classDiagram
+    class User {
+        +int id
+        +string email
+        +string password
+        +string role
+        -DateTime createdAt
+        +login(email, password)
+        +logout()
+        +updateProfile(data)
+    }
+    User "1" --> "*" Order : "places"
 
 ${JSON_INSTRUCTION}`;
 }
@@ -349,54 +402,96 @@ ${JSON_INSTRUCTION}`;
 // --- UML Sequence (chỉ vẽ Sequence diagram) ---
 export function umlSequencePrompt(): string {
   return `Bạn là Sequence Architect chuyên về Mermaid.js sequenceDiagram.
-Nhiệm vụ: vẽ Sequence Diagram từ API endpoints và architecture.
+Nhiệm vụ: vẽ Sequence Diagram CHI TIẾT từ API endpoints và architecture.
 
 CHỈ TRẢ VỀ JSON với 1 key:
 - "sequence" (string): Mã Mermaid sequenceDiagram
 
-QUY TẮC:
-- 5+ participants: User → Frontend → Controller → Service → Database
-- 2 flows: Create + Get (hoặc Login + Dashboard)
-- Request: A->>B: message
-- Response: B-->>A: message
-- MỖI statement trên 1 dòng riêng (\\n)
-- 10+ messages per flow
+QUY TẮC BẮT BUỘC:
+1. 5+ participants: User → Frontend → Controller → Service → Database
+2. 2 flows hoàn chỉnh (vd: Create + Get, hoặc Login + Dashboard)
+3. Request: A->>B: message
+4. Response: B-->>A: message
+5. Mỗi flow 12+ messages
+6. Thêm alt/loop block cho logic điều kiện
+7. MỖI statement trên 1 dòng riêng (\\n)
+
+VÍ DỤ ĐÚNG:
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as API Controller
+    participant SVC as Service
+    participant DB as Database
+    U->>FE: Submit form
+    FE->>API: POST /api/resource
+    API->>SVC: validate(data)
+    SVC->>DB: INSERT
+    DB-->>SVC: record_id
+    SVC-->>API: success
+    API-->>FE: 201 Created
+    FE-->>U: Show success
 
 ${JSON_INSTRUCTION}`;
 }
 
 // --- Docs README ---
 export function docReadmePrompt(): string {
-  return `Bạn là Technical Writer. Viết README.md bằng TIẾNG VIỆT, tối thiểu 1500 ký tự.
+  return `Bạn là Technical Writer xuất sắc. Viết README.md bằng TIẾNG VIỆT, TỐI THIỂU 2000 KÝ TỰ.
 CHỈ TRẢ VỀ JSON với 1 key:
 - "readme" (string): Nội dung Markdown hoàn chỉnh
 
-Bao gồm: Giới thiệu, Tech Stack, Cài đặt (bun install, db:push, dev), Cấu trúc thư mục, Đội ngũ, License.
-Hành văn chuyên nghiệp, sử dụng code blocks và lists.
+Nội dung BẮT BUỘC có:
+1. ## Giới thiệu — mô tả dự án 3-5 câu
+2. ## Tech Stack — bảng công nghệ (Frontend, Backend, Database, Cache, Tools)
+3. ## Cài đặt — code block hướng dẫn: git clone, npm install, npx prisma db push, npm run dev
+4. ## Cấu trúc thư mục — tree structure chi tiết
+5. ## API Endpoints — bảng các endpoint chính (method, path, mô tả)
+6. ## Đội ngũ — bảng thành viên + vai trò
+7. ## License — MIT
+
+Hành văn chuyên nghiệp, sử dụng code blocks (\`\`\`), tables, lists. KHÔNG viết ngắn gọn — phải CHI TIẾT.
 
 ${JSON_INSTRUCTION}`;
 }
 
 // --- Docs Convention ---
 export function docConventionPrompt(): string {
-  return `Bạn là Technical Writer. Viết Coding Convention bằng TIẾNG VIỆT, tối thiểu 1000 ký tự.
+  return `Bạn là Technical Writer xuất sắc. Viết Coding Convention bằng TIẾNG VIỆT, TỐI THIỂU 1500 KÝ TỰ.
 CHỈ TRẢ VỀ JSON với 1 key:
 - "convention" (string): Nội dung Markdown hoàn chỉnh
 
-Bao gồm: TypeScript rules, Naming conventions, React components, API routes, Prisma, Git commits, ESLint.
-Chi tiết, có ví dụ code.
+Nội dung BẮT BUỘC có:
+1. ## TypeScript Rules — strict mode, no any, type mọi params
+2. ## Naming Conventions — bảng (Files: kebab-case, Components: PascalCase, Functions: camelCase, Constants: UPPER_SNAKE)
+3. ## React Components — functional + hooks, "use client" directive, memo/useMemo/useCallback
+4. ## API Routes — force-dynamic, nodejs runtime, Zod validation, try-catch
+5. ## Database (Prisma) — CUID, @@index, onDelete Cascade, migration
+6. ## Git — Conventional Commits (feat:, fix:, refactor:, docs:), branch strategy
+7. ## ESLint + Prettier — config, rules
+
+Mỗi section có VÍ DỤ CODE cụ thể trong code blocks. KHÔNG viết ngắn — phải CHI TIẾT.
 
 ${JSON_INSTRUCTION}`;
 }
 
 // --- Docs API Standard ---
 export function docApiStandardPrompt(): string {
-  return `Bạn là Technical Writer. Viết API Standard bằng TIẾNG VIỆT, tối thiểu 1000 ký tự.
+  return `Bạn là Technical Writer xuất sắc. Viết API Standard bằng TIẾNG VIỆT, TỐI THIỂU 1500 KÝ TỰ.
 CHỈ TRẢ VỀ JSON với 1 key:
 - "apiStandard" (string): Nội dung Markdown hoàn chỉnh
 
-Bao gồm: RESTful conventions, Response format, Status codes, Auth, Pagination, Error handling, Rate limiting.
-Liệt kê API endpoints cho từng module.
+Nội dung BẮT BUỘC có:
+1. ## RESTful Conventions — bảng (GET/POST/PATCH/DELETE + path + mô tả)
+2. ## Response Format — code block JSON (success + error envelope)
+3. ## Status Codes — bảng (200, 201, 400, 401, 403, 404, 429, 500)
+4. ## Authentication — JWT Bearer token, access + refresh
+5. ## Pagination — query params (page, limit, sort, order)
+6. ## Error Handling — try-catch, user-friendly messages, no stack trace
+7. ## Rate Limiting — 100 req/min per IP, 5 req/min login
+8. ## Modules API — liệt kê endpoints cho TỪNG module trong dự án
+
+Mỗi section có VÍ DỤ code block. KHÔNG viết ngắn — phải CHI TIẾT với endpoints cụ thể của dự án.
 
 ${JSON_INSTRUCTION}`;
 }

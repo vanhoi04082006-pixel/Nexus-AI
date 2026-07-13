@@ -151,33 +151,44 @@ export function fallback(
       }
       const classFallback = `classDiagram\n${classLines}${classRels.trim()}`;
 
-      // ===== ERD — detailed, diverse cardinality =====
+      // ===== ERD — DETAILED with PK/FK + cross-table relationships =====
       let erdTables = "";
       let erdRels = "";
       if (dbTables.length > 0) {
         dbTables.forEach((t) => {
-          const cols = (t.columns || ["id: int", "name: string"]).slice(0, 5);
+          const cols = (t.columns || ["id: int", "name: string", "created_at: datetime"]).slice(0, 6);
           const colLines = cols.map((c: string) => {
             const parts = c.split(":").map((s: string) => s.trim());
             const colName = parts[0] || "field";
             const colType = (parts[1] || "string").toLowerCase();
             const isPk = colName.toLowerCase() === "id";
-            const isFk = colName.toLowerCase().includes("id") && !isPk;
+            const isFk = colName.toLowerCase().includes("_id") || (colName.toLowerCase().includes("id") && !isPk);
             const modifier = isPk ? " PK" : isFk ? " FK" : "";
             return `        ${colType} ${ascii_(colName)}${modifier}`;
           }).join("\n");
-          erdTables += `    ${ascii_(t.name)} {\n${colLines}\n    }\n`;
+          // FIX: Ensure each table has at least 4 columns (add if missing)
+          let finalCols = colLines;
+          if (cols.length < 4) {
+            finalCols += "\n        datetime created_at\n        datetime updated_at";
+          }
+          erdTables += `    ${ascii_(t.name)} {\n${finalCols}\n    }\n`;
         });
-        // FIX: Generate diverse cardinality (1:N, 1:1, N:M, N:1)
+        // FIX: Generate MORE relationships — connect ALL tables + cross-references
+        // Connect consecutive tables
         for (let i = 0; i < dbTables.length - 1; i++) {
-          const relType = i % 3;
           const t1 = ascii_(dbTables[i].name);
           const t2 = ascii_(dbTables[i + 1].name);
-          switch (relType) {
-            case 0: erdRels += `    ${t1} ||--o{ ${t2} : "has"\n`; break; // 1:N
-            case 1: erdRels += `    ${t1} ||--|| ${t2} : "belongs to"\n`; break; // 1:1
-            case 2: erdRels += `    ${t1} }o--o{ ${t2} : "associates"\n`; break; // N:M
-          }
+          erdRels += `    ${t1} ||--o{ ${t2} : "has"\n`;
+        }
+        // Add cross-references (non-consecutive) for richer ERD
+        if (dbTables.length >= 3) {
+          erdRels += `    ${ascii_(dbTables[0].name)} ||--o{ ${ascii_(dbTables[2].name)} : "references"\n`;
+        }
+        if (dbTables.length >= 4) {
+          erdRels += `    ${ascii_(dbTables[1].name)} }o--|| ${ascii_(dbTables[3].name)} : "belongs_to"\n`;
+        }
+        if (dbTables.length >= 5) {
+          erdRels += `    ${ascii_(dbTables[0].name)} ||--|| ${ascii_(dbTables[4].name)} : "owns"\n`;
         }
       } else {
         // Fallback for no DB tables — use modules with realistic schema
