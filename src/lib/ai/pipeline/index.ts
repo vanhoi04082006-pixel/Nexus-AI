@@ -107,10 +107,11 @@ export async function runPipeline(
   async function runSplitDesign(ag: AgentDef, ctx: string, i: number) {
     appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting Design into 3 sub-tasks (DB, API, Architecture)` });
     try {
+      // FIX: sectionKey = undefined → skip Zod (sub-task returns partial, validation after merge)
       const [dbRes, apiRes, archRes] = await Promise.all([
-        callAndParse(ag.models, designDbPrompt(), ctx, ag.temp, "design"),
-        callAndParse(ag.models, designApiPrompt(), ctx, ag.temp, "design"),
-        callAndParse(ag.models, designArchPrompt(), ctx, ag.temp, "design"),
+        callAndParse(ag.models, designDbPrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, designApiPrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, designArchPrompt(), ctx, ag.temp, undefined),
       ]);
       const merged: Record<string, unknown> = {};
       // Sub-task validation: check each result has expected key before merge
@@ -153,10 +154,11 @@ export async function runPipeline(
   async function runSplitUML(ag: AgentDef, ctx: string, i: number) {
     appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting UML into 3 sub-tasks (UseCase, Class+ERD, Sequence)` });
     try {
+      // FIX: sectionKey = undefined → skip Zod (sub-task returns partial, validation after merge)
       const [ucRes, ceRes, seqRes] = await Promise.all([
-        callAndParse(ag.models, umlUseCasePrompt(), ctx, ag.temp, "uml"),
-        callAndParse(ag.models, umlClassErdPrompt(), ctx, ag.temp, "uml"),
-        callAndParse(ag.models, umlSequencePrompt(), ctx, ag.temp, "uml"),
+        callAndParse(ag.models, umlUseCasePrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, umlClassErdPrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, umlSequencePrompt(), ctx, ag.temp, undefined),
       ]);
       const merged: Record<string, unknown> = {};
       // Sub-task validation + logging
@@ -216,10 +218,11 @@ export async function runPipeline(
   async function runSplitDocs(ag: AgentDef, ctx: string, i: number) {
     appendLog({ level: "info", agentId: ag.id, provider: "pipeline", message: `📋 [AGENT-${ag.id}] Splitting Docs into 3 sub-tasks (README, Convention, API Standard)` });
     try {
+      // FIX: sectionKey = undefined → skip Zod (sub-task returns partial, validation after merge)
       const [readmeRes, convRes, apiRes] = await Promise.all([
-        callAndParse(ag.models, docReadmePrompt(), ctx, ag.temp, "docs"),
-        callAndParse(ag.models, docConventionPrompt(), ctx, ag.temp, "docs"),
-        callAndParse(ag.models, docApiStandardPrompt(), ctx, ag.temp, "docs"),
+        callAndParse(ag.models, docReadmePrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, docConventionPrompt(), ctx, ag.temp, undefined),
+        callAndParse(ag.models, docApiStandardPrompt(), ctx, ag.temp, undefined),
       ]);
       const merged: Record<string, unknown> = {};
       // Sub-task validation + logging
